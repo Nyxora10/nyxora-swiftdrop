@@ -68,6 +68,45 @@ nyxora-swiftdrop/
 └── README.md
 ```
 
+### 2.1 Microservice Internal Layered Architecture & Package Layout
+
+Every Spring Boot microservice across SwiftDrop (starting with `auth-service`) adheres to a strict **N-Tier Layered Architecture** with interface-driven service contracts and DTO boundary isolation:
+
+```text
+services/{service-name}/src/main/java/com/nyxora/swiftdrop/{service}/
+├── config/                 # SecurityConfig, JwtProperties, JpaConfig (Auditing)
+├── controller/             # REST API Controllers (@RestController)
+├── dto/
+│   ├── request/            # Incoming payloads (LoginRequest, CustomerRegisterRequest)
+│   └── response/           # Outgoing payloads (AuthResponse, ErrorResponse)
+├── entity/                 # Database tables (@Entity)
+│   └── enums/              # Java enums (RoleName, UserStatus, VehicleType)
+├── exception/              # Custom exceptions + @RestControllerAdvice
+├── repository/             # Spring Data JPA interfaces (@Repository)
+├── security/               # JwtTokenProvider, JwtAuthFilter, UserPrincipal
+└── service/                # Business logic interfaces (AuthService)
+    └── impl/               # Concrete implementations (AuthServiceImpl)
+```
+
+#### Layer Responsibilities & Architectural Rules:
+
+1. **Presentation Layer (`controller/` & `dto/`):**
+   - Endpoints accept validated Request DTOs (`@Valid`, `@NotNull`, `@Email`) and return standard `ResponseEntity<ResponseDTO>`.
+   - **Rule:** Controllers never contain business logic and never access repositories directly.
+2. **Business Logic Layer (`service/` & `service/impl/`):**
+   - Follows the **Dependency Inversion Principle (SOLID "D")**: Controllers inject the interface (`AuthService`), while business logic resides in `AuthServiceImpl`.
+   - Manages transactional boundaries (`@Transactional`) and emits RabbitMQ domain events.
+3. **Data Access Layer (`repository/`):**
+   - Spring Data JPA interfaces extending `JpaRepository<Entity, UUID>`.
+   - **Rule:** Repositories only return Domain Entities or Projections; no HTTP/DTO logic.
+4. **Domain Model Layer (`entity/` & `entity/enums/`):**
+   - JPA entities mapped to isolated databases with UUID primary keys and JPA auditing (`createdAt`, `updatedAt`).
+   - **Rule:** Database `@Entity` objects are internal to the service and must **never** be returned directly in API responses.
+5. **Cross-Cutting Concerns (`security/`, `exception/`, `config/`):**
+   - `security/`: Stateless JWT filters validating requests before they reach the controller.
+   - `exception/`: Global `@RestControllerAdvice` mapping domain exceptions to RFC 7807 Problem Details.
+   - `config/`: Type-safe configuration binding via `@ConfigurationProperties`.
+
 ---
 
 ## 3. Use Case Catalogue
