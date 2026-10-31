@@ -1,0 +1,21 @@
+# Environment variables
+.env
+.env*.local
+!.env.example
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts & dependencies
+node_modules/
+target/
+build/
+dist/
+*.log
