@@ -32,6 +32,8 @@ public record CourierRegisterRequest(
 
         @NotBlank(message = "Vehicle license plate number is required")
         @Size(max = 50, message = "License plate must not exceed 50 characters")
-        String licensePlate
+        String licensePlate,
+
+        Integer assignedZoneId
 ) {}
 

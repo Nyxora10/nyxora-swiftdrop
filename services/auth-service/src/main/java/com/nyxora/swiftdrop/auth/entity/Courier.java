@@ -41,5 +41,12 @@ public class Courier extends BaseAuditableEntity {
     @Column(name = "active_delivery_count", nullable = false)
     @Builder.Default
     private Integer activeDeliveryCount = 0;
+
+    /**
+     * Logical reference to parcel_db.delivery_zones.id.
+     * Determines geographic operational area for dispatcher filtering (UC18, UC19).
+     */
+    @Column(name = "assigned_zone_id")
+    private Integer assignedZoneId;
 }
 

@@ -179,6 +179,7 @@ public class AuthServiceImpl implements AuthService {
                 .user(savedUser)
                 .vehicleType(request.vehicleType())
                 .licensePlate(request.licensePlate().trim().toUpperCase())
+                .assignedZoneId(request.assignedZoneId())
                 .isAvailable(true)
                 .activeDeliveryCount(0)
                 .build();

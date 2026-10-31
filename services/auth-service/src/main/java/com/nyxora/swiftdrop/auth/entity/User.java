@@ -51,5 +51,11 @@ public class User extends BaseAuditableEntity {
     @Column(name = "auth_provider", nullable = false, length = 30)
     @Builder.Default
     private AuthProvider authProvider = AuthProvider.LOCAL;
+
+    /**
+     * Unique identifier provided by third-party identity provider (e.g. Google OAuth 2.0 'sub' claim).
+     */
+    @Column(name = "provider_id", unique = true, length = 100)
+    private String providerId;
 }
 

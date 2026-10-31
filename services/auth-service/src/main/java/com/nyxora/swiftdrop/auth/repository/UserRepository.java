@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.auth.repository;
 
 import com.nyxora.swiftdrop.auth.entity.User;
+import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
 import com.nyxora.swiftdrop.auth.entity.enums.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,4 +19,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findByStatus(UserStatus status);
 
     List<User> findByRoleNameAndStatus(RoleName roleName, UserStatus status);
+
+    Optional<User> findByAuthProviderAndProviderId(AuthProvider authProvider, String providerId);
 }
