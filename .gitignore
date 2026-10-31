@@ -19,3 +19,6 @@ target/
 build/
 dist/
 *.log
+
+# Assignment PDF (binary, not tracked in git)
+docs/Group Assignment.pdf

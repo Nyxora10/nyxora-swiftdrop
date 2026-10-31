@@ -13,3 +13,13 @@ An island-wide enterprise parcel delivery and courier management platform built 
 1. Copy the environment variables:
    ```bash
    cp .env.example .env
+   ```
+2. Start the infrastructure services (PostgreSQL & RabbitMQ):
+   ```bash
+   docker compose up -d
+   ```
+
+## Documentation
+For complete technical specifications, architecture diagrams, database schemas, and integration flows, refer to:
+* 📄 [**SwiftDrop Master Specification & Architecture Guide**](docs/master-specification.md)
+* 📁 [**Documentation Hub**](docs/README.md)
