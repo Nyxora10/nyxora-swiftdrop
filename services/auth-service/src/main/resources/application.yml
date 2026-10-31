@@ -1,0 +1,37 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/auth_db
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgrespassword}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# Custom Application Security & JWT Properties
+app:
+  jwt:
+    # 256-bit default secret key for development (override via JWT_SECRET in production)
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    access-token-expiration-ms: 900000       # 15 minutes (in milliseconds)
+    refresh-token-expiration-ms: 604800000   # 7 days (in milliseconds)
+
+logging:
+  level:
+    root: INFO
+    com.nyxora.swiftdrop: DEBUG
+    org.springframework.security: INFO
+
