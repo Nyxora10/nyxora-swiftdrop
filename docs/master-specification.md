@@ -68,6 +68,45 @@ nyxora-swiftdrop/
 └── README.md
 ```
 
+### 2.1 Microservice Internal Layered Architecture & Package Layout
+
+Every Spring Boot microservice across SwiftDrop (starting with `auth-service`) adheres to a strict **N-Tier Layered Architecture** with interface-driven service contracts and DTO boundary isolation:
+
+```text
+services/{service-name}/src/main/java/com/nyxora/swiftdrop/{service}/
+├── config/                 # SecurityConfig, JwtProperties, JpaConfig (Auditing)
+├── controller/             # REST API Controllers (@RestController)
+├── dto/
+│   ├── request/            # Incoming payloads (LoginRequest, CustomerRegisterRequest)
+│   └── response/           # Outgoing payloads (AuthResponse, ErrorResponse)
+├── entity/                 # Database tables (@Entity)
+│   └── enums/              # Java enums (RoleName, UserStatus, VehicleType)
+├── exception/              # Custom exceptions + @RestControllerAdvice
+├── repository/             # Spring Data JPA interfaces (@Repository)
+├── security/               # JwtTokenProvider, JwtAuthFilter, UserPrincipal
+└── service/                # Business logic interfaces (AuthService)
+    └── impl/               # Concrete implementations (AuthServiceImpl)
+```
+
+#### Layer Responsibilities & Architectural Rules:
+
+1. **Presentation Layer (`controller/` & `dto/`):**
+   - Endpoints accept validated Request DTOs (`@Valid`, `@NotNull`, `@Email`) and return standard `ResponseEntity<ResponseDTO>`.
+   - **Rule:** Controllers never contain business logic and never access repositories directly.
+2. **Business Logic Layer (`service/` & `service/impl/`):**
+   - Follows the **Dependency Inversion Principle (SOLID "D")**: Controllers inject the interface (`AuthService`), while business logic resides in `AuthServiceImpl`.
+   - Manages transactional boundaries (`@Transactional`) and emits RabbitMQ domain events.
+3. **Data Access Layer (`repository/`):**
+   - Spring Data JPA interfaces extending `JpaRepository<Entity, UUID>`.
+   - **Rule:** Repositories only return Domain Entities or Projections; no HTTP/DTO logic.
+4. **Domain Model Layer (`entity/` & `entity/enums/`):**
+   - JPA entities mapped to isolated databases with UUID primary keys and JPA auditing (`createdAt`, `updatedAt`).
+   - **Rule:** Database `@Entity` objects are internal to the service and must **never** be returned directly in API responses.
+5. **Cross-Cutting Concerns (`security/`, `exception/`, `config/`):**
+   - `security/`: Stateless JWT filters validating requests before they reach the controller.
+   - `exception/`: Global `@RestControllerAdvice` mapping domain exceptions to RFC 7807 Problem Details.
+   - `config/`: Type-safe configuration binding via `@ConfigurationProperties`.
+
 ---
 
 ## 3. Use Case Catalogue
@@ -109,11 +148,13 @@ erDiagram
     ROLES ||--o{ USERS : "has"
     USERS ||--o| MERCHANTS : "has"
     USERS ||--o| COURIERS : "has"
+    USERS ||--o{ REFRESH_TOKENS : "owns"
 
     ROLES { int id PK, string name UK }
-    USERS { uuid id PK, int role_id FK, string email UK, string password_hash, string auth_provider }
+    USERS { uuid id PK, int role_id FK, string email UK, string password_hash, string auth_provider, string provider_id UK }
     MERCHANTS { uuid id PK, uuid user_id FK, string oauth_client_id UK, string webhook_url, string webhook_secret }
-    COURIERS { uuid id PK, uuid user_id FK, string vehicle_type, string license_plate UK, int active_delivery_count }
+    COURIERS { uuid id PK, uuid user_id FK, int assigned_zone_id, string vehicle_type, string license_plate UK, int active_delivery_count }
+    REFRESH_TOKENS { uuid id PK, uuid user_id FK, string token_hash UK, timestamp expires_at, boolean revoked }
 
     %% parcel_db
     DELIVERY_ZONES ||--o{ PRICING_RULES : "origin/dest"
@@ -121,7 +162,7 @@ erDiagram
     PARCELS ||--o{ PARCEL_STATUS_HISTORY : "tracks"
 
     DELIVERY_ZONES { int id PK, string zone_code UK, string zone_name, decimal base_surcharge }
-    PRICING_RULES { int id PK, int origin_zone_id FK, int destination_zone_id FK, decimal base_fee, decimal rate_per_kg }
+    PRICING_RULES { int id PK, int origin_zone_id FK, int destination_zone_id FK, decimal base_fee, decimal rate_per_kg, string parcel_size }
     PARCELS { uuid id PK, string tracking_number UK, uuid assigned_courier_id, string current_status, decimal estimated_fee }
     PARCEL_STATUS_HISTORY { uuid id PK, uuid parcel_id FK, string status, string proof_photo_url, string failure_reason }
 
@@ -133,9 +174,14 @@ erDiagram
 
 | Database | Service | Core Tables | Key Responsibilities |
 | :--- | :--- | :--- | :--- |
-| **`auth_db`** | `auth-service` | `roles`, `users`, `merchants`, `couriers` | User accounts, BCrypt credentials, RBAC roles, OAuth2 client credentials, courier availability & workload counters. |
-| **`parcel_db`** | `parcel-service` | `delivery_zones`, `pricing_rules`, `parcels`, `parcel_status_history` | Zone matrices, pricing rules, parcel bookings, tracking codes (`SD-YYYYMMDD-XXXXXX`), immutable status history. |
+| **`auth_db`** | `auth-service` | `roles`, `users`, `merchants`, `couriers`, `refresh_tokens` | User accounts, BCrypt credentials, RBAC roles, Google OAuth provider IDs, courier assigned zones & workload counters, hashed refresh tokens. |
+| **`parcel_db`** | `parcel-service` | `delivery_zones`, `pricing_rules`, `parcels`, `parcel_status_history` | Zone matrices, pricing rules (with `uk_pricing_rule UNIQUE(origin, dest, size)`), parcel bookings, tracking codes (`SD-YYYYMMDD-XXXXXX`), immutable status history. |
 | **`notification_db`** | `notification-webhook-service` | `webhook_delivery_logs` | Merchant webhook dispatch logs, JSON payloads, retry counters (max 5), delivery status (`PENDING`, `DELIVERED`, `RETRYING`, `DEAD_LETTER`). |
+
+#### Production Performance Indexes:
+- **`auth_db`**: `idx_users_email` (unique), `idx_refresh_tokens_user` (`user_id`).
+- **`parcel_db`**: `idx_parcels_tracking` (unique), `idx_parcels_sender` (`sender_user_id`), `idx_parcels_merchant` (`merchant_id`), `idx_parcels_courier_status` (`assigned_courier_id, current_status`), `idx_status_history_parcel` (`parcel_id`).
+- **`notification_db`**: `idx_webhook_logs_retry` (`delivery_status, next_retry_at`).
 
 > **Rule:** No service directly queries another service's database. Cross-boundary updates happen strictly via REST or RabbitMQ events.
 
