@@ -3,8 +3,11 @@ package com.nyxora.swiftdrop.auth.service;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
+import com.nyxora.swiftdrop.auth.dto.SocialUserProfile;
+import com.nyxora.swiftdrop.auth.dto.request.AppleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.CourierRegisterRequest;
 import com.nyxora.swiftdrop.auth.dto.request.CustomerRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.FacebookAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.GoogleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.LoginRequest;
 import com.nyxora.swiftdrop.auth.dto.request.MerchantRegisterRequest;
@@ -28,6 +31,8 @@ import com.nyxora.swiftdrop.auth.repository.RoleRepository;
 import com.nyxora.swiftdrop.auth.repository.UserRepository;
 import com.nyxora.swiftdrop.auth.security.JwtTokenProvider;
 import com.nyxora.swiftdrop.auth.security.UserPrincipal;
+import com.nyxora.swiftdrop.auth.security.oauth.AppleIdTokenVerifier;
+import com.nyxora.swiftdrop.auth.security.oauth.FacebookClient;
 import com.nyxora.swiftdrop.auth.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -83,6 +88,12 @@ class AuthServiceTest {
 
     @Mock
     private GoogleIdTokenVerifier googleIdTokenVerifier;
+
+    @Mock
+    private AppleIdTokenVerifier appleIdTokenVerifier;
+
+    @Mock
+    private FacebookClient facebookClient;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -561,5 +572,224 @@ class AuthServiceTest {
 
         AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.authenticateGoogle(request));
         assertTrue(ex.getMessage().contains("Driving record does not satisfy safety criteria."));
+    }
+
+    @Test
+    @DisplayName("Apple Sign In auto-registers a brand-new Customer and returns tokens")
+    void authenticateApple_NewCustomer_AutoRegistersAndReturnsTokens() {
+        AppleAuthRequest request = new AppleAuthRequest("apple-id-token", "Steve Jobs");
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.APPLE, "apple-sub-999", "steve@apple.com", "Steve Jobs");
+
+        when(appleIdTokenVerifier.verify("apple-id-token", "Steve Jobs")).thenReturn(profile);
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.APPLE, "apple-sub-999")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("steve@apple.com")).thenReturn(Optional.empty());
+        when(roleRepository.findByName(RoleName.ROLE_CUSTOMER)).thenReturn(Optional.of(customerRole));
+
+        UUID generatedId = UUID.randomUUID();
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            return User.builder()
+                    .id(generatedId)
+                    .email(u.getEmail())
+                    .fullName(u.getFullName())
+                    .role(u.getRole())
+                    .status(u.getStatus())
+                    .authProvider(u.getAuthProvider())
+                    .providerId(u.getProviderId())
+                    .phoneNumber(u.getPhoneNumber())
+                    .passwordHash(u.getPasswordHash())
+                    .build();
+        });
+
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("apple-access-token");
+        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("apple-refresh-token");
+
+        AuthResponse response = authService.authenticateApple(request);
+
+        assertNotNull(response);
+        assertEquals("apple-access-token", response.accessToken());
+        assertEquals("apple-refresh-token", response.refreshToken());
+        assertEquals("steve@apple.com", response.email());
+        assertEquals("Steve Jobs", response.fullName());
+        assertEquals(RoleName.ROLE_CUSTOMER.name(), response.role());
+
+        verify(userRepository).save(argThat(u ->
+                u.getEmail().equals("steve@apple.com") &&
+                u.getFullName().equals("Steve Jobs") &&
+                u.getAuthProvider() == AuthProvider.APPLE &&
+                "apple-sub-999".equals(u.getProviderId()) &&
+                u.getPhoneNumber() == null &&
+                u.getPasswordHash() == null &&
+                u.getStatus() == UserStatus.ACTIVE
+        ));
+    }
+
+    @Test
+    @DisplayName("Apple Sign In logs in existing Apple user directly")
+    void authenticateApple_ExistingUser_LogsInDirectly() {
+        AppleAuthRequest request = new AppleAuthRequest("valid-apple-token", null);
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.APPLE, "apple-sub-111", "tim@apple.com", "Tim Cook");
+
+        when(appleIdTokenVerifier.verify("valid-apple-token", null)).thenReturn(profile);
+
+        User existingUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("tim@apple.com")
+                .fullName("Tim Cook")
+                .role(customerRole)
+                .status(UserStatus.ACTIVE)
+                .authProvider(AuthProvider.APPLE)
+                .providerId("apple-sub-111")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.APPLE, "apple-sub-111"))
+                .thenReturn(Optional.of(existingUser));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("apple-access-direct");
+        when(refreshTokenService.createRefreshToken(existingUser)).thenReturn("apple-refresh-direct");
+
+        AuthResponse response = authService.authenticateApple(request);
+
+        assertNotNull(response);
+        assertEquals("apple-access-direct", response.accessToken());
+        assertEquals("tim@apple.com", response.email());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Apple Sign In throws AccountSuspendedException when account is SUSPENDED")
+    void authenticateApple_SuspendedUser_ThrowsAccountSuspendedException() {
+        AppleAuthRequest request = new AppleAuthRequest("valid-token", null);
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.APPLE, "apple-sub-suspended", "banned@apple.com", "Banned User");
+
+        when(appleIdTokenVerifier.verify("valid-token", null)).thenReturn(profile);
+
+        User suspendedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("banned@apple.com")
+                .role(customerRole)
+                .status(UserStatus.SUSPENDED)
+                .authProvider(AuthProvider.APPLE)
+                .providerId("apple-sub-suspended")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.APPLE, "apple-sub-suspended"))
+                .thenReturn(Optional.of(suspendedUser));
+
+        assertThrows(AccountSuspendedException.class, () -> authService.authenticateApple(request));
+    }
+
+    @Test
+    @DisplayName("Facebook Login auto-registers a brand-new Customer and returns tokens")
+    void authenticateFacebook_NewCustomer_AutoRegistersAndReturnsTokens() {
+        FacebookAuthRequest request = new FacebookAuthRequest("valid-fb-token");
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.FACEBOOK, "fb-id-456", "mark@facebook.com", "Mark Zuckerberg");
+
+        when(facebookClient.verify("valid-fb-token")).thenReturn(profile);
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.FACEBOOK, "fb-id-456")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("mark@facebook.com")).thenReturn(Optional.empty());
+        when(roleRepository.findByName(RoleName.ROLE_CUSTOMER)).thenReturn(Optional.of(customerRole));
+
+        UUID generatedId = UUID.randomUUID();
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            return User.builder()
+                    .id(generatedId)
+                    .email(u.getEmail())
+                    .fullName(u.getFullName())
+                    .role(u.getRole())
+                    .status(u.getStatus())
+                    .authProvider(u.getAuthProvider())
+                    .providerId(u.getProviderId())
+                    .phoneNumber(u.getPhoneNumber())
+                    .passwordHash(u.getPasswordHash())
+                    .build();
+        });
+
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("fb-access-token");
+        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("fb-refresh-token");
+
+        AuthResponse response = authService.authenticateFacebook(request);
+
+        assertNotNull(response);
+        assertEquals("fb-access-token", response.accessToken());
+        assertEquals("fb-refresh-token", response.refreshToken());
+        assertEquals("mark@facebook.com", response.email());
+        assertEquals("Mark Zuckerberg", response.fullName());
+        assertEquals(RoleName.ROLE_CUSTOMER.name(), response.role());
+
+        verify(userRepository).save(argThat(u ->
+                u.getEmail().equals("mark@facebook.com") &&
+                u.getFullName().equals("Mark Zuckerberg") &&
+                u.getAuthProvider() == AuthProvider.FACEBOOK &&
+                "fb-id-456".equals(u.getProviderId()) &&
+                u.getPhoneNumber() == null &&
+                u.getPasswordHash() == null &&
+                u.getStatus() == UserStatus.ACTIVE
+        ));
+    }
+
+    @Test
+    @DisplayName("Facebook Login with matching verified email preserves existing provider link and does not overwrite")
+    void authenticateFacebook_MultiProviderLogin_PreservesOriginalProviderId() {
+        FacebookAuthRequest request = new FacebookAuthRequest("valid-fb-token");
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.FACEBOOK, "fb-id-789", "kamal@swiftdrop.lk", "Kamal FB");
+
+        when(facebookClient.verify("valid-fb-token")).thenReturn(profile);
+
+        // User previously logged in with Google
+        User existingGoogleUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("kamal@swiftdrop.lk")
+                .fullName("Kamal Original")
+                .role(customerRole)
+                .status(UserStatus.ACTIVE)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("google-sub-original")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.FACEBOOK, "fb-id-789")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("kamal@swiftdrop.lk")).thenReturn(Optional.of(existingGoogleUser));
+
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("multi-access");
+        when(refreshTokenService.createRefreshToken(existingGoogleUser)).thenReturn("multi-refresh");
+
+        AuthResponse response = authService.authenticateFacebook(request);
+
+        assertNotNull(response);
+        assertEquals("multi-access", response.accessToken());
+        assertEquals("kamal@swiftdrop.lk", response.email());
+        // Verify original Google providerId is PRESERVED and not overwritten!
+        assertEquals("google-sub-original", existingGoogleUser.getProviderId());
+        assertEquals(AuthProvider.GOOGLE, existingGoogleUser.getAuthProvider());
+        verify(userRepository, never()).save(existingGoogleUser);
+    }
+
+    @Test
+    @DisplayName("Facebook Login throws AccountRejectedException with statusReason when account is REJECTED")
+    void authenticateFacebook_RejectedUser_ThrowsAccountRejectedException() {
+        FacebookAuthRequest request = new FacebookAuthRequest("valid-token");
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.FACEBOOK, "fb-rejected-1", "rejected.fb@rider.lk", "Rejected Driver");
+
+        when(facebookClient.verify("valid-token")).thenReturn(profile);
+
+        User rejectedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("rejected.fb@rider.lk")
+                .role(courierRole)
+                .status(UserStatus.REJECTED)
+                .statusReason("Vehicle registration document expired.")
+                .authProvider(AuthProvider.FACEBOOK)
+                .providerId("fb-rejected-1")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.FACEBOOK, "fb-rejected-1"))
+                .thenReturn(Optional.of(rejectedUser));
+
+        AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.authenticateFacebook(request));
+        assertTrue(ex.getMessage().contains("Vehicle registration document expired."));
     }
 }

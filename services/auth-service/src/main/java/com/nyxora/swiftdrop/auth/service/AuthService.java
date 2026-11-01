@@ -41,6 +41,18 @@ public interface AuthService {
     AuthResponse authenticateGoogle(GoogleAuthRequest request);
 
     /**
+     * Authenticates a user via Apple Sign In OpenID Connect identity token.
+     * Auto-registers new customers or logs in existing linked accounts.
+     */
+    AuthResponse authenticateApple(AppleAuthRequest request);
+
+    /**
+     * Authenticates a user via Facebook Login OAuth 2.0 access token.
+     * Auto-registers new customers or logs in existing linked accounts.
+     */
+    AuthResponse authenticateFacebook(FacebookAuthRequest request);
+
+    /**
      * Exchanges a valid refresh token for a fresh access token and rotates the refresh token.
      */
     AuthResponse refreshToken(RefreshTokenRequest request);

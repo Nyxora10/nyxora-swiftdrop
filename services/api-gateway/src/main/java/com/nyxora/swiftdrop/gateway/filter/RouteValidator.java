@@ -21,6 +21,8 @@ public class RouteValidator {
             "/api/v1/auth/register",
             "/api/v1/auth/refresh",
             "/api/v1/auth/google",
+            "/api/v1/auth/apple",
+            "/api/v1/auth/facebook",
             "/api/v1/parcels/track",
             "/actuator/health",
             "/actuator/info"

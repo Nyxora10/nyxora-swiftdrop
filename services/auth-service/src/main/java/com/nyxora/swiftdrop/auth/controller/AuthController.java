@@ -56,6 +56,18 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/apple")
+    public ResponseEntity<AuthResponse> appleLogin(@Valid @RequestBody AppleAuthRequest request) {
+        AuthResponse response = authService.authenticateApple(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/facebook")
+    public ResponseEntity<AuthResponse> facebookLogin(@Valid @RequestBody FacebookAuthRequest request) {
+        AuthResponse response = authService.authenticateFacebook(request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         AuthResponse response = authService.refreshToken(request);

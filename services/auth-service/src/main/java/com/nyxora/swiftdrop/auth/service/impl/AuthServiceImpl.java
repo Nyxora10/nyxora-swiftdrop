@@ -3,6 +3,7 @@ package com.nyxora.swiftdrop.auth.service.impl;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
+import com.nyxora.swiftdrop.auth.dto.SocialUserProfile;
 import com.nyxora.swiftdrop.auth.dto.request.*;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
 import com.nyxora.swiftdrop.auth.dto.response.RegistrationResponse;
@@ -21,6 +22,8 @@ import com.nyxora.swiftdrop.auth.repository.RoleRepository;
 import com.nyxora.swiftdrop.auth.repository.UserRepository;
 import com.nyxora.swiftdrop.auth.security.JwtTokenProvider;
 import com.nyxora.swiftdrop.auth.security.UserPrincipal;
+import com.nyxora.swiftdrop.auth.security.oauth.AppleIdTokenVerifier;
+import com.nyxora.swiftdrop.auth.security.oauth.FacebookClient;
 import com.nyxora.swiftdrop.auth.service.AuthService;
 import com.nyxora.swiftdrop.auth.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +55,8 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenService refreshTokenService;
     private final JwtProperties jwtProperties;
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
+    private final AppleIdTokenVerifier appleIdTokenVerifier;
+    private final FacebookClient facebookClient;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -204,21 +209,34 @@ public class AuthServiceImpl implements AuthService {
     public AuthResponse login(LoginRequest request) {
         log.info("[AuthService] Attempting login for email: {}", request.email());
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email().toLowerCase().trim(), request.password())
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.email().toLowerCase().trim(),
+                            request.password()
+                    )
+            );
+        } catch (BadCredentialsException e) {
+            log.warn("[AuthService] Authentication failed for email: {}", request.email());
+            throw new BadCredentialsException("Invalid email or password.");
+        }
 
         User user = userRepository.findByEmail(request.email().toLowerCase().trim())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + request.email()));
+                .orElseThrow(() -> new BadCredentialsException("Invalid email or password."));
 
         if (user.getStatus() == UserStatus.PENDING_APPROVAL) {
             log.warn("[AuthService] Login denied - account pending approval for: {}", user.getEmail());
-            throw new AccountPendingApprovalException("Your account is currently awaiting administrator review and approval.");
+            throw new AccountPendingApprovalException(
+                    "Your account is currently awaiting administrator review and approval."
+            );
         }
 
         if (user.getStatus() == UserStatus.SUSPENDED) {
             log.warn("[AuthService] Login denied - account suspended for: {}", user.getEmail());
-            throw new AccountSuspendedException("Your account has been suspended by an administrator. Please contact support.");
+            throw new AccountSuspendedException(
+                    "Your account has been suspended by an administrator. Please contact support."
+            );
         }
 
         if (user.getStatus() == UserStatus.REJECTED) {
@@ -275,35 +293,63 @@ public class AuthServiceImpl implements AuthService {
         }
         final String resolvedFullName = name.trim();
 
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.GOOGLE, googleSub, email, resolvedFullName);
+        return processSocialAuthentication(profile);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse authenticateApple(AppleAuthRequest request) {
+        log.info("[AuthService] Processing Apple Sign In authentication");
+        SocialUserProfile profile = appleIdTokenVerifier.verify(request.identityToken(), request.fullName());
+        return processSocialAuthentication(profile);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse authenticateFacebook(FacebookAuthRequest request) {
+        log.info("[AuthService] Processing Facebook Login authentication");
+        SocialUserProfile profile = facebookClient.verify(request.accessToken());
+        return processSocialAuthentication(profile);
+    }
+
+    /**
+     * Unified 3-way user resolution, lifecycle state machine validation, and JWT token issuance
+     * for all third-party identity providers (Google, Apple, Facebook).
+     */
+    private AuthResponse processSocialAuthentication(SocialUserProfile profile) {
         // 3-way User Resolution:
-        // Scenario A: Existing user matched by authProvider=GOOGLE and providerId=sub
-        User user = userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, googleSub)
-                .orElseGet(() -> userRepository.findByEmail(email)
+        // Scenario A: Existing user matched by authProvider & providerId
+        User user = userRepository.findByAuthProviderAndProviderId(profile.provider(), profile.providerId())
+                .orElseGet(() -> userRepository.findByEmail(profile.email())
                         // Scenario B: Existing user with matching email -> Link providerId while preserving password login!
+                        // Multi-provider preservation: only link providerId if not already populated.
                         .map(existingUser -> {
                             if (existingUser.getProviderId() == null) {
-                                existingUser.setProviderId(googleSub);
-                                log.info("[AuthService] Linked Google providerId for existing user: {}", email);
+                                existingUser.setProviderId(profile.providerId());
+                                log.info("[AuthService] Linked {} providerId for existing user: {}", profile.provider(), profile.email());
                                 return userRepository.save(existingUser);
                             }
+                            log.info("[AuthService] Authenticated existing user {} via {} without overwriting primary link ({})",
+                                    profile.email(), profile.provider(), existingUser.getAuthProvider());
                             return existingUser;
                         })
                         // Scenario C: Brand new user -> Auto-register as Customer
-                        .orElseGet(() -> autoRegisterGoogleCustomer(email, resolvedFullName, googleSub)));
+                        .orElseGet(() -> autoRegisterSocialCustomer(profile)));
 
         // State Machine validation (checks REJECTED alongside SUSPENDED and PENDING)
         if (user.getStatus() == UserStatus.PENDING_APPROVAL) {
-            log.warn("[AuthService] Google login denied - account pending approval for: {}", user.getEmail());
+            log.warn("[AuthService] {} login denied - account pending approval for: {}", profile.provider(), user.getEmail());
             throw new AccountPendingApprovalException("Your account is currently awaiting administrator review and approval.");
         }
 
         if (user.getStatus() == UserStatus.SUSPENDED) {
-            log.warn("[AuthService] Google login denied - account suspended for: {}", user.getEmail());
+            log.warn("[AuthService] {} login denied - account suspended for: {}", profile.provider(), user.getEmail());
             throw new AccountSuspendedException("Your account has been suspended by an administrator. Please contact support.");
         }
 
         if (user.getStatus() == UserStatus.REJECTED) {
-            log.warn("[AuthService] Google login denied - account application rejected for: {}", user.getEmail());
+            log.warn("[AuthService] {} login denied - account application rejected for: {}", profile.provider(), user.getEmail());
             String reason = user.getStatusReason() != null ? user.getStatusReason() : "Application rejected by administrator.";
             throw new AccountRejectedException("Your account application was rejected. Reason: " + reason);
         }
@@ -312,7 +358,8 @@ public class AuthServiceImpl implements AuthService {
         String accessToken = jwtTokenProvider.generateAccessToken(principal);
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
-        log.info("[AuthService] Successfully authenticated Google user: {} with role: {}", user.getEmail(), user.getRole().getName());
+        log.info("[AuthService] Successfully authenticated {} user: {} with role: {}",
+                profile.provider(), user.getEmail(), user.getRole().getName());
 
         return AuthResponse.of(
                 accessToken,
@@ -325,21 +372,21 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
-    private User autoRegisterGoogleCustomer(String email, String fullName, String googleSub) {
-        log.info("[AuthService] Auto-registering new customer via Google OAuth: {}", email);
+    private User autoRegisterSocialCustomer(SocialUserProfile profile) {
+        log.info("[AuthService] Auto-registering new customer via {} OAuth: {}", profile.provider(), profile.email());
 
         Role customerRole = roleRepository.findByName(RoleName.ROLE_CUSTOMER)
                 .orElseThrow(() -> new ResourceNotFoundException("Role 'ROLE_CUSTOMER' not found"));
 
         User newUser = User.builder()
                 .role(customerRole)
-                .email(email)
-                .fullName(fullName)
-                .phoneNumber(null) // Nullable for Google auto-registered users
+                .email(profile.email())
+                .fullName(profile.fullName())
+                .phoneNumber(null) // Nullable for social auto-registered users
                 .passwordHash(null) // Social login users do not have a local password
                 .status(UserStatus.ACTIVE)
-                .authProvider(AuthProvider.GOOGLE)
-                .providerId(googleSub)
+                .authProvider(profile.provider())
+                .providerId(profile.providerId())
                 .build();
 
         return userRepository.save(newUser);

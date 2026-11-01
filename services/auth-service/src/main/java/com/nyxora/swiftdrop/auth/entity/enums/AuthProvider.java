@@ -12,6 +12,15 @@ public enum AuthProvider {
     /**
      * Social single sign-on via Google Identity Services / OAuth 2.0.
      */
-    GOOGLE
-}
+    GOOGLE,
 
+    /**
+     * Social single sign-on via Apple ID / OpenID Connect.
+     */
+    APPLE,
+
+    /**
+     * Social single sign-on via Facebook Login / Graph API.
+     */
+    FACEBOOK
+}
