@@ -32,6 +32,8 @@ class RouteValidatorTest {
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/parcels/track/SD-20261101-0001").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/health").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/info").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/v3/api-docs").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/swagger-ui/index.html").build()));
     }
 
     @Test

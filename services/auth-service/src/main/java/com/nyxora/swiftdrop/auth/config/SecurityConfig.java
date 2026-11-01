@@ -25,6 +25,7 @@ import java.util.List;
  * Spring Security 6 Configuration for SwiftDrop auth-service.
  * - Stateless JWT Authentication
  * - Pre-authorized Method-Level Security (@PreAuthorize)
+ * - Swagger / OpenAPI endpoints publicly accessible
  * - CORS policy enabling frontend (port 3000) and API Gateway (port 8080)
  */
 @Configuration
@@ -51,6 +52,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
                                 "/actuator/health",
                                 "/error"
                         ).permitAll()
@@ -78,4 +82,3 @@ public class SecurityConfig {
         return source;
     }
 }
-

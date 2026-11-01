@@ -25,7 +25,9 @@ public class RouteValidator {
             "/api/v1/auth/facebook",
             "/api/v1/parcels/track",
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            "/v3/api-docs",
+            "/swagger-ui"
     );
 
     /**

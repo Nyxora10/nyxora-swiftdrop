@@ -19,6 +19,19 @@ spring:
     properties:
       "[hibernate.format_sql]": true
 
+# SpringDoc OpenAPI & Swagger UI Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true
+    display-request-duration: true
+
 # Custom Application Security, JWT & Social OAuth Properties
 app:
   jwt:
