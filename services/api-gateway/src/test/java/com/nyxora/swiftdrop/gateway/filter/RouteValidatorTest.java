@@ -27,6 +27,8 @@ class RouteValidatorTest {
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/register/courier").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/refresh").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/google").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/apple").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/facebook").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/parcels/track/SD-20261101-0001").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/health").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/info").build()));
