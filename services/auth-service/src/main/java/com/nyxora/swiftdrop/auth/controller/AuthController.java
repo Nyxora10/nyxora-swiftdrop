@@ -50,6 +50,12 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody GoogleAuthRequest request) {
+        AuthResponse response = authService.authenticateGoogle(request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         AuthResponse response = authService.refreshToken(request);
@@ -68,4 +74,3 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 }
-

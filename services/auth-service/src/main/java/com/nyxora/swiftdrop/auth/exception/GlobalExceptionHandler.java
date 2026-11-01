@@ -71,7 +71,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Failed login attempt: {}", ex.getMessage());
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password.");
+        String detail = (ex.getMessage() != null && !ex.getMessage().isBlank())
+                ? ex.getMessage()
+                : "Invalid email or password.";
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, detail);
         problem.setTitle("Authentication Failed");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-credentials"));
         problem.setInstance(URI.create(request.getRequestURI()));
