@@ -13,8 +13,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Facebook Graph API client for verifying access tokens and extracting user profiles.
- * Automatically computes appsecret_proof (HMAC-SHA256) to prevent cross-application
+ * Facebook Graph API client for verifying access tokens and extracting user
+ * profiles.
+ * Automatically computes appsecret_proof (HMAC-SHA256) to prevent
+ * cross-application
  * token spoofing attacks.
  */
 @Component
@@ -26,18 +28,19 @@ public class FacebookClient {
 
     public FacebookClient(
             @Value("${app.facebook.app-secret:mock-facebook-app-secret}") String facebookAppSecret,
-            RestClient.Builder restClientBuilder
-    ) {
+            RestClient.Builder restClientBuilder) {
         this.facebookAppSecret = facebookAppSecret;
         this.restClient = restClientBuilder.baseUrl("https://graph.facebook.com").build();
     }
 
     /**
-     * Verifies the Facebook user access token and returns a normalized SocialUserProfile.
+     * Verifies the Facebook user access token and returns a normalized
+     * SocialUserProfile.
      *
      * @param accessToken Facebook User Access Token
      * @return Normalized SocialUserProfile
-     * @throws BadCredentialsException if the token is invalid, expired, or missing email
+     * @throws BadCredentialsException if the token is invalid, expired, or missing
+     *                                 email
      */
     public SocialUserProfile verify(String accessToken) {
         if (accessToken == null || accessToken.isBlank()) {
@@ -69,7 +72,8 @@ public class FacebookClient {
 
         if (response.email() == null || response.email().isBlank()) {
             log.warn("[FacebookClient] Facebook account has no verified email address for user id: {}", response.id());
-            throw new BadCredentialsException("Facebook account does not provide an email address. Please sign in with email.");
+            throw new BadCredentialsException(
+                    "Facebook account does not provide an email address. Please sign in with email.");
         }
 
         String email = response.email().toLowerCase().trim();
@@ -106,5 +110,6 @@ public class FacebookClient {
     /**
      * Response payload returned by Facebook Graph API /me endpoint.
      */
-    public record FacebookUserResponse(String id, String name, String email) {}
+    public record FacebookUserResponse(String id, String name, String email) {
+    }
 }
