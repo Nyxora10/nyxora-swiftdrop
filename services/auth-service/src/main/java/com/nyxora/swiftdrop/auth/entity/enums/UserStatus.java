@@ -17,6 +17,10 @@ public enum UserStatus {
     /**
      * Account suspended by Administrator due to policy violation or investigation.
      */
-    SUSPENDED
-}
+    SUSPENDED,
 
+    /**
+     * Account application rejected by Administrator during review (requires statusReason).
+     */
+    REJECTED
+}

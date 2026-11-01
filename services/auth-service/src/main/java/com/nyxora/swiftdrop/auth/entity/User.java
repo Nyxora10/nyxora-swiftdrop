@@ -47,6 +47,12 @@ public class User extends BaseAuditableEntity {
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
 
+    /**
+     * Feedback or justification provided by an administrator on rejection or suspension.
+     */
+    @Column(name = "status_reason", length = 500)
+    private String statusReason;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "auth_provider", nullable = false, length = 30)
     @Builder.Default
@@ -58,4 +64,3 @@ public class User extends BaseAuditableEntity {
     @Column(name = "provider_id", unique = true, length = 100)
     private String providerId;
 }
-

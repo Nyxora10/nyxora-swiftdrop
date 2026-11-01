@@ -57,6 +57,17 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(AccountRejectedException.class)
+    public ProblemDetail handleAccountRejected(AccountRejectedException ex, HttpServletRequest request) {
+        log.warn("[GlobalExceptionHandler] Rejected account login attempt: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Account Application Rejected");
+        problem.setType(URI.create("https://swiftdrop.lk/errors/account-rejected"));
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Failed login attempt: {}", ex.getMessage());
@@ -129,4 +140,3 @@ public class GlobalExceptionHandler {
         return problem;
     }
 }
-
