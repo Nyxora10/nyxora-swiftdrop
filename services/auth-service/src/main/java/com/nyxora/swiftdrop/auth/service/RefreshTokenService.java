@@ -1,12 +1,12 @@
 package com.nyxora.swiftdrop.auth.service;
 
-import com.nyxora.swiftdrop.auth.entity.RefreshToken;
 import com.nyxora.swiftdrop.auth.entity.User;
 
 import java.util.UUID;
 
 /**
- * Service managing the lifecycle, rotation, and cryptographic hashing of persistent Refresh Tokens.
+ * Service managing the lifecycle, rotation, and cryptographic hashing of
+ * persistent Refresh Tokens.
  */
 public interface RefreshTokenService {
 
@@ -37,6 +37,6 @@ public interface RefreshTokenService {
     /**
      * Container holding the verified User and newly rotated token string.
      */
-    record RotatedToken(User user, String newRefreshToken) {}
+    record RotatedToken(User user, String newRefreshToken) {
+    }
 }
-
