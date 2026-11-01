@@ -1,8 +1,11 @@
 package com.nyxora.swiftdrop.auth.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
 import com.nyxora.swiftdrop.auth.dto.request.CourierRegisterRequest;
 import com.nyxora.swiftdrop.auth.dto.request.CustomerRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.GoogleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.LoginRequest;
 import com.nyxora.swiftdrop.auth.dto.request.MerchantRegisterRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
@@ -34,10 +37,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -76,6 +81,9 @@ class AuthServiceTest {
     @Mock
     private JwtProperties jwtProperties;
 
+    @Mock
+    private GoogleIdTokenVerifier googleIdTokenVerifier;
+
     @InjectMocks
     private AuthServiceImpl authService;
 
@@ -88,6 +96,20 @@ class AuthServiceTest {
         customerRole = Role.builder().id(1).name(RoleName.ROLE_CUSTOMER).build();
         merchantRole = Role.builder().id(2).name(RoleName.ROLE_MERCHANT).build();
         courierRole = Role.builder().id(3).name(RoleName.ROLE_COURIER).build();
+    }
+
+    private GoogleIdToken createMockGoogleIdToken(String email, String sub, String name, Boolean emailVerified) {
+        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+        payload.setEmail(email);
+        payload.setSubject(sub);
+        payload.setEmailVerified(emailVerified);
+        if (name != null) {
+            payload.set("name", name);
+        }
+
+        GoogleIdToken idToken = mock(GoogleIdToken.class);
+        when(idToken.getPayload()).thenReturn(payload);
+        return idToken;
     }
 
     @Test
@@ -292,5 +314,252 @@ class AuthServiceTest {
         UUID userId = UUID.randomUUID();
         authService.logout(userId);
         verify(refreshTokenService, times(1)).revokeAllByUserId(userId);
+    }
+
+    @Test
+    @DisplayName("Google OAuth auto-registers a brand-new Customer and returns tokens")
+    void authenticateGoogle_NewCustomer_AutoRegistersAndReturnsTokens() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-google-id-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("newcustomer@gmail.com", "google-sub-12345", "Kamal Perera", true);
+
+        when(googleIdTokenVerifier.verify("valid-google-id-token")).thenReturn(googleIdToken);
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-12345"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("newcustomer@gmail.com")).thenReturn(Optional.empty());
+        when(roleRepository.findByName(RoleName.ROLE_CUSTOMER)).thenReturn(Optional.of(customerRole));
+
+        UUID generatedId = UUID.randomUUID();
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User userToSave = invocation.getArgument(0);
+            return User.builder()
+                    .id(generatedId)
+                    .email(userToSave.getEmail())
+                    .fullName(userToSave.getFullName())
+                    .role(userToSave.getRole())
+                    .status(userToSave.getStatus())
+                    .authProvider(userToSave.getAuthProvider())
+                    .providerId(userToSave.getProviderId())
+                    .phoneNumber(userToSave.getPhoneNumber())
+                    .passwordHash(userToSave.getPasswordHash())
+                    .build();
+        });
+
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("mock-access-token");
+        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("mock-refresh-token");
+
+        AuthResponse response = authService.authenticateGoogle(request);
+
+        assertNotNull(response);
+        assertEquals("mock-access-token", response.accessToken());
+        assertEquals("mock-refresh-token", response.refreshToken());
+        assertEquals("newcustomer@gmail.com", response.email());
+        assertEquals("Kamal Perera", response.fullName());
+        assertEquals(RoleName.ROLE_CUSTOMER.name(), response.role());
+
+        verify(userRepository).save(argThat(u ->
+                u.getEmail().equals("newcustomer@gmail.com") &&
+                u.getFullName().equals("Kamal Perera") &&
+                u.getAuthProvider() == AuthProvider.GOOGLE &&
+                "google-sub-12345".equals(u.getProviderId()) &&
+                u.getPhoneNumber() == null &&
+                u.getPasswordHash() == null &&
+                u.getStatus() == UserStatus.ACTIVE
+        ));
+    }
+
+    @Test
+    @DisplayName("Google OAuth logs in existing Google user directly")
+    void authenticateGoogle_ExistingGoogleUser_LogsInDirectly() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("existing.google@gmail.com", "google-sub-existing", "Existing User", true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        User existingUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("existing.google@gmail.com")
+                .fullName("Existing User")
+                .role(customerRole)
+                .status(UserStatus.ACTIVE)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("google-sub-existing")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-existing"))
+                .thenReturn(Optional.of(existingUser));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("access-token-existing");
+        when(refreshTokenService.createRefreshToken(existingUser)).thenReturn("refresh-token-existing");
+
+        AuthResponse response = authService.authenticateGoogle(request);
+
+        assertNotNull(response);
+        assertEquals("access-token-existing", response.accessToken());
+        assertEquals("existing.google@gmail.com", response.email());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Google OAuth links providerId to existing local user without overwriting password or authProvider")
+    void authenticateGoogle_ExistingLocalUser_LinksProviderIdAndPreservesPassword() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("local.courier@swiftdrop.lk", "google-sub-link", "Local Courier", true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        User existingLocalUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("local.courier@swiftdrop.lk")
+                .fullName("Local Courier")
+                .passwordHash("$2a$12$SecureBcryptHashPlaceholder")
+                .role(courierRole)
+                .status(UserStatus.ACTIVE)
+                .authProvider(AuthProvider.LOCAL)
+                .providerId(null)
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-link"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("local.courier@swiftdrop.lk")).thenReturn(Optional.of(existingLocalUser));
+        when(userRepository.save(existingLocalUser)).thenReturn(existingLocalUser);
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("access-token-linked");
+        when(refreshTokenService.createRefreshToken(existingLocalUser)).thenReturn("refresh-token-linked");
+
+        AuthResponse response = authService.authenticateGoogle(request);
+
+        assertNotNull(response);
+        assertEquals("access-token-linked", response.accessToken());
+        assertEquals("google-sub-link", existingLocalUser.getProviderId());
+        assertEquals(AuthProvider.LOCAL, existingLocalUser.getAuthProvider());
+        assertEquals("$2a$12$SecureBcryptHashPlaceholder", existingLocalUser.getPasswordHash());
+        verify(userRepository, times(1)).save(existingLocalUser);
+    }
+
+    @Test
+    @DisplayName("Google OAuth falls back to email prefix when name claim is missing or empty")
+    void authenticateGoogle_MissingName_FallsBackToEmailPrefix() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("anonymous.dev@gmail.com", "google-sub-anonymous", null, true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-anonymous"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("anonymous.dev@gmail.com")).thenReturn(Optional.empty());
+        when(roleRepository.findByName(RoleName.ROLE_CUSTOMER)).thenReturn(Optional.of(customerRole));
+
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("mock-access");
+        when(refreshTokenService.createRefreshToken(any())).thenReturn("mock-refresh");
+
+        AuthResponse response = authService.authenticateGoogle(request);
+
+        assertNotNull(response);
+        assertEquals("anonymous.dev", response.fullName());
+        verify(userRepository).save(argThat(u -> "anonymous.dev".equals(u.getFullName())));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws BadCredentialsException when token verification returns null")
+    void authenticateGoogle_InvalidToken_ThrowsBadCredentialsException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("invalid-id-token");
+        when(googleIdTokenVerifier.verify("invalid-id-token")).thenReturn(null);
+
+        assertThrows(BadCredentialsException.class, () -> authService.authenticateGoogle(request));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws BadCredentialsException when verification throws exception")
+    void authenticateGoogle_VerificationException_ThrowsBadCredentialsException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("corrupt-token");
+        when(googleIdTokenVerifier.verify("corrupt-token")).thenThrow(new IOException("Network error"));
+
+        assertThrows(BadCredentialsException.class, () -> authService.authenticateGoogle(request));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws BadCredentialsException when email is unverified")
+    void authenticateGoogle_UnverifiedEmail_ThrowsBadCredentialsException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("unverified-email-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("unverified@gmail.com", "google-sub-unverified", "Unverified User", false);
+
+        when(googleIdTokenVerifier.verify("unverified-email-token")).thenReturn(googleIdToken);
+
+        assertThrows(BadCredentialsException.class, () -> authService.authenticateGoogle(request));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws AccountPendingApprovalException when account is PENDING_APPROVAL")
+    void authenticateGoogle_PendingApproval_ThrowsAccountPendingApprovalException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("pending@partner.lk", "google-sub-pending", "Pending Merchant", true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        User pendingUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("pending@partner.lk")
+                .role(merchantRole)
+                .status(UserStatus.PENDING_APPROVAL)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("google-sub-pending")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-pending"))
+                .thenReturn(Optional.of(pendingUser));
+
+        assertThrows(AccountPendingApprovalException.class, () -> authService.authenticateGoogle(request));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws AccountSuspendedException when account is SUSPENDED")
+    void authenticateGoogle_Suspended_ThrowsAccountSuspendedException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("suspended@swiftdrop.lk", "google-sub-suspended", "Suspended User", true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        User suspendedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("suspended@swiftdrop.lk")
+                .role(customerRole)
+                .status(UserStatus.SUSPENDED)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("google-sub-suspended")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-suspended"))
+                .thenReturn(Optional.of(suspendedUser));
+
+        assertThrows(AccountSuspendedException.class, () -> authService.authenticateGoogle(request));
+    }
+
+    @Test
+    @DisplayName("Google OAuth throws AccountRejectedException with statusReason when account is REJECTED")
+    void authenticateGoogle_Rejected_ThrowsAccountRejectedException() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest("valid-token");
+        GoogleIdToken googleIdToken = createMockGoogleIdToken("rejected@rider.lk", "google-sub-rejected", "Rejected Courier", true);
+
+        when(googleIdTokenVerifier.verify("valid-token")).thenReturn(googleIdToken);
+
+        User rejectedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("rejected@rider.lk")
+                .role(courierRole)
+                .status(UserStatus.REJECTED)
+                .statusReason("Driving record does not satisfy safety criteria.")
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("google-sub-rejected")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "google-sub-rejected"))
+                .thenReturn(Optional.of(rejectedUser));
+
+        AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.authenticateGoogle(request));
+        assertTrue(ex.getMessage().contains("Driving record does not satisfy safety criteria."));
     }
 }

@@ -1,5 +1,7 @@
 package com.nyxora.swiftdrop.auth.service.impl;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
 import com.nyxora.swiftdrop.auth.dto.request.*;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
@@ -24,6 +26,7 @@ import com.nyxora.swiftdrop.auth.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -48,6 +51,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final JwtProperties jwtProperties;
+    private final GoogleIdTokenVerifier googleIdTokenVerifier;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -236,6 +240,109 @@ public class AuthServiceImpl implements AuthService {
                 user.getRole().getName().name(),
                 user.getFullName()
         );
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse authenticateGoogle(GoogleAuthRequest request) {
+        log.info("[AuthService] Processing Google OAuth 2.0 authentication");
+
+        GoogleIdToken googleIdToken;
+        try {
+            googleIdToken = googleIdTokenVerifier.verify(request.idToken());
+        } catch (Exception e) {
+            log.error("[AuthService] Exception while verifying Google ID token: {}", e.getMessage());
+            throw new BadCredentialsException("Failed to verify Google ID token.");
+        }
+
+        if (googleIdToken == null) {
+            log.warn("[AuthService] Google ID token is invalid or expired");
+            throw new BadCredentialsException("Google ID token is invalid or expired.");
+        }
+
+        GoogleIdToken.Payload payload = googleIdToken.getPayload();
+        Boolean emailVerified = payload.getEmailVerified();
+        if (!Boolean.TRUE.equals(emailVerified)) {
+            log.warn("[AuthService] Google ID token email is unverified for: {}", payload.getEmail());
+            throw new BadCredentialsException("Google email address is not verified.");
+        }
+
+        String email = payload.getEmail().toLowerCase().trim();
+        String googleSub = payload.getSubject();
+        String name = (String) payload.get("name");
+        if (name == null || name.trim().isEmpty()) {
+            name = email.split("@")[0]; // Fallback for missing name claim
+        }
+        final String resolvedFullName = name.trim();
+
+        // 3-way User Resolution:
+        // Scenario A: Existing user matched by authProvider=GOOGLE and providerId=sub
+        User user = userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, googleSub)
+                .orElseGet(() -> userRepository.findByEmail(email)
+                        // Scenario B: Existing user with matching email -> Link providerId while preserving password login!
+                        .map(existingUser -> {
+                            if (existingUser.getProviderId() == null) {
+                                existingUser.setProviderId(googleSub);
+                                log.info("[AuthService] Linked Google providerId for existing user: {}", email);
+                                return userRepository.save(existingUser);
+                            }
+                            return existingUser;
+                        })
+                        // Scenario C: Brand new user -> Auto-register as Customer
+                        .orElseGet(() -> autoRegisterGoogleCustomer(email, resolvedFullName, googleSub)));
+
+        // State Machine validation (checks REJECTED alongside SUSPENDED and PENDING)
+        if (user.getStatus() == UserStatus.PENDING_APPROVAL) {
+            log.warn("[AuthService] Google login denied - account pending approval for: {}", user.getEmail());
+            throw new AccountPendingApprovalException("Your account is currently awaiting administrator review and approval.");
+        }
+
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            log.warn("[AuthService] Google login denied - account suspended for: {}", user.getEmail());
+            throw new AccountSuspendedException("Your account has been suspended by an administrator. Please contact support.");
+        }
+
+        if (user.getStatus() == UserStatus.REJECTED) {
+            log.warn("[AuthService] Google login denied - account application rejected for: {}", user.getEmail());
+            String reason = user.getStatusReason() != null ? user.getStatusReason() : "Application rejected by administrator.";
+            throw new AccountRejectedException("Your account application was rejected. Reason: " + reason);
+        }
+
+        UserPrincipal principal = UserPrincipal.create(user);
+        String accessToken = jwtTokenProvider.generateAccessToken(principal);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
+
+        log.info("[AuthService] Successfully authenticated Google user: {} with role: {}", user.getEmail(), user.getRole().getName());
+
+        return AuthResponse.of(
+                accessToken,
+                refreshToken,
+                jwtProperties.getAccessTokenExpirationMs(),
+                user.getId(),
+                user.getEmail(),
+                user.getRole().getName().name(),
+                user.getFullName()
+        );
+    }
+
+    private User autoRegisterGoogleCustomer(String email, String fullName, String googleSub) {
+        log.info("[AuthService] Auto-registering new customer via Google OAuth: {}", email);
+
+        Role customerRole = roleRepository.findByName(RoleName.ROLE_CUSTOMER)
+                .orElseThrow(() -> new ResourceNotFoundException("Role 'ROLE_CUSTOMER' not found"));
+
+        User newUser = User.builder()
+                .role(customerRole)
+                .email(email)
+                .fullName(fullName)
+                .phoneNumber(null) // Nullable for Google auto-registered users
+                .passwordHash(null) // Social login users do not have a local password
+                .status(UserStatus.ACTIVE)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId(googleSub)
+                .build();
+
+        return userRepository.save(newUser);
     }
 
     @Override
