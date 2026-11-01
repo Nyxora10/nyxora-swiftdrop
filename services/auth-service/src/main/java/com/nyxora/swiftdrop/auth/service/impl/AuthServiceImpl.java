@@ -217,6 +217,12 @@ public class AuthServiceImpl implements AuthService {
             throw new AccountSuspendedException("Your account has been suspended by an administrator. Please contact support.");
         }
 
+        if (user.getStatus() == UserStatus.REJECTED) {
+            log.warn("[AuthService] Login denied - account application rejected for: {}", user.getEmail());
+            String reason = user.getStatusReason() != null ? user.getStatusReason() : "Application rejected by administrator.";
+            throw new AccountRejectedException("Your account application was rejected. Reason: " + reason);
+        }
+
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
         String accessToken = jwtTokenProvider.generateAccessToken(principal);
         String refreshToken = refreshTokenService.createRefreshToken(user);
@@ -272,4 +278,3 @@ public class AuthServiceImpl implements AuthService {
         return UserProfileResponse.fromEntity(user);
     }
 }
-

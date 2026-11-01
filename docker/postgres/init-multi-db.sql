@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255),            -- Nullable for Google OAuth 2.0 social login
     full_name VARCHAR(150) NOT NULL,
     phone_number VARCHAR(20) NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED'
+    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED', 'REJECTED'
+    status_reason VARCHAR(500),
     auth_provider VARCHAR(30) NOT NULL DEFAULT 'LOCAL', -- 'LOCAL', 'GOOGLE'
     provider_id VARCHAR(100) UNIQUE,       -- Google 'sub' claim identifier
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

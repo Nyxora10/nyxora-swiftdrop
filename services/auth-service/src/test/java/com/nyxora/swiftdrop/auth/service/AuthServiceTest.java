@@ -16,6 +16,7 @@ import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
 import com.nyxora.swiftdrop.auth.entity.enums.UserStatus;
 import com.nyxora.swiftdrop.auth.entity.enums.VehicleType;
 import com.nyxora.swiftdrop.auth.exception.AccountPendingApprovalException;
+import com.nyxora.swiftdrop.auth.exception.AccountRejectedException;
 import com.nyxora.swiftdrop.auth.exception.AccountSuspendedException;
 import com.nyxora.swiftdrop.auth.exception.EmailAlreadyExistsException;
 import com.nyxora.swiftdrop.auth.repository.CourierRepository;
@@ -266,6 +267,26 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("Login fails when account application was REJECTED")
+    void login_Rejected_ThrowsException() {
+        LoginRequest request = new LoginRequest("rejected@swiftdrop.lk", "Password123!");
+
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("rejected@swiftdrop.lk")
+                .role(courierRole)
+                .status(UserStatus.REJECTED)
+                .statusReason("Driver's license photo is unreadable.")
+                .build();
+
+        when(authenticationManager.authenticate(any())).thenReturn(mock(Authentication.class));
+        when(userRepository.findByEmail("rejected@swiftdrop.lk")).thenReturn(Optional.of(user));
+
+        AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.login(request));
+        assertTrue(ex.getMessage().contains("Driver's license photo is unreadable."));
+    }
+
+    @Test
     @DisplayName("Logout invalidates all user refresh tokens")
     void logout_Success() {
         UUID userId = UUID.randomUUID();
@@ -273,4 +294,3 @@ class AuthServiceTest {
         verify(refreshTokenService, times(1)).revokeAllByUserId(userId);
     }
 }
-
