@@ -1,7 +1,9 @@
 package com.nyxora.swiftdrop.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.auth.dto.request.AppleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.CustomerRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.FacebookAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.GoogleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.LoginRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
@@ -214,5 +216,109 @@ class AuthControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.title").value("Account Application Rejected"))
                 .andExpect(jsonPath("$.detail").value("Your account application was rejected. Reason: License expired."));
+    }
+
+    @Test
+    @DisplayName("POST /apple with valid token returns HTTP 200 OK and tokens")
+    void appleLogin_Success_Returns200() throws Exception {
+        AppleAuthRequest request = new AppleAuthRequest("valid-apple-identity-token", "Steve Jobs");
+
+        AuthResponse authResponse = AuthResponse.of(
+                "apple_access_token_123", "apple_refresh_token_123", 900000L,
+                UUID.randomUUID(), "steve@icloud.com", "ROLE_CUSTOMER", "Steve Jobs"
+        );
+
+        when(authService.authenticateApple(any(AppleAuthRequest.class))).thenReturn(authResponse);
+
+        mockMvc.perform(post("/api/v1/auth/apple")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("apple_access_token_123"))
+                .andExpect(jsonPath("$.refreshToken").value("apple_refresh_token_123"))
+                .andExpect(jsonPath("$.email").value("steve@icloud.com"))
+                .andExpect(jsonPath("$.role").value("ROLE_CUSTOMER"))
+                .andExpect(jsonPath("$.fullName").value("Steve Jobs"));
+    }
+
+    @Test
+    @DisplayName("POST /apple with blank identityToken returns HTTP 400 Bad Request with field error")
+    void appleLogin_BlankToken_Returns400() throws Exception {
+        AppleAuthRequest request = new AppleAuthRequest("", "Steve Jobs");
+
+        mockMvc.perform(post("/api/v1/auth/apple")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation Failed"))
+                .andExpect(jsonPath("$.errors.identityToken").exists());
+    }
+
+    @Test
+    @DisplayName("POST /apple with invalid/expired token returns HTTP 401 Unauthorized")
+    void appleLogin_InvalidToken_Returns401() throws Exception {
+        AppleAuthRequest request = new AppleAuthRequest("expired-apple-token", null);
+
+        when(authService.authenticateApple(any(AppleAuthRequest.class)))
+                .thenThrow(new BadCredentialsException("Apple identity token is invalid or expired."));
+
+        mockMvc.perform(post("/api/v1/auth/apple")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.title").value("Authentication Failed"))
+                .andExpect(jsonPath("$.detail").value("Apple identity token is invalid or expired."));
+    }
+
+    @Test
+    @DisplayName("POST /facebook with valid token returns HTTP 200 OK and tokens")
+    void facebookLogin_Success_Returns200() throws Exception {
+        FacebookAuthRequest request = new FacebookAuthRequest("valid-fb-access-token");
+
+        AuthResponse authResponse = AuthResponse.of(
+                "fb_access_token_123", "fb_refresh_token_123", 900000L,
+                UUID.randomUUID(), "mark@facebook.com", "ROLE_CUSTOMER", "Mark Zuckerberg"
+        );
+
+        when(authService.authenticateFacebook(any(FacebookAuthRequest.class))).thenReturn(authResponse);
+
+        mockMvc.perform(post("/api/v1/auth/facebook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("fb_access_token_123"))
+                .andExpect(jsonPath("$.refreshToken").value("fb_refresh_token_123"))
+                .andExpect(jsonPath("$.email").value("mark@facebook.com"))
+                .andExpect(jsonPath("$.role").value("ROLE_CUSTOMER"))
+                .andExpect(jsonPath("$.fullName").value("Mark Zuckerberg"));
+    }
+
+    @Test
+    @DisplayName("POST /facebook with blank accessToken returns HTTP 400 Bad Request with field error")
+    void facebookLogin_BlankToken_Returns400() throws Exception {
+        FacebookAuthRequest request = new FacebookAuthRequest("");
+
+        mockMvc.perform(post("/api/v1/auth/facebook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation Failed"))
+                .andExpect(jsonPath("$.errors.accessToken").exists());
+    }
+
+    @Test
+    @DisplayName("POST /facebook when account has no email returns HTTP 401 Unauthorized")
+    void facebookLogin_MissingEmail_Returns401() throws Exception {
+        FacebookAuthRequest request = new FacebookAuthRequest("valid-fb-token-without-email");
+
+        when(authService.authenticateFacebook(any(FacebookAuthRequest.class)))
+                .thenThrow(new BadCredentialsException("Your Facebook account does not have an associated email address. Please ensure an email is verified in Facebook."));
+
+        mockMvc.perform(post("/api/v1/auth/facebook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.title").value("Authentication Failed"))
+                .andExpect(jsonPath("$.detail").value("Your Facebook account does not have an associated email address. Please ensure an email is verified in Facebook."));
     }
 }
