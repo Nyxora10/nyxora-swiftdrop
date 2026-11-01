@@ -1,6 +1,13 @@
 package com.nyxora.swiftdrop.auth.controller;
 
-import com.nyxora.swiftdrop.auth.dto.request.*;
+import com.nyxora.swiftdrop.auth.dto.request.AppleAuthRequest;
+import com.nyxora.swiftdrop.auth.dto.request.CourierRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.CustomerRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.FacebookAuthRequest;
+import com.nyxora.swiftdrop.auth.dto.request.GoogleAuthRequest;
+import com.nyxora.swiftdrop.auth.dto.request.LoginRequest;
+import com.nyxora.swiftdrop.auth.dto.request.MerchantRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.RefreshTokenRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
 import com.nyxora.swiftdrop.auth.dto.response.RegistrationResponse;
 import com.nyxora.swiftdrop.auth.dto.response.UserProfileResponse;
