@@ -19,17 +19,18 @@ spring:
     properties:
       "[hibernate.format_sql]": true
 
-# Custom Application Security & JWT Properties
+# Custom Application Security, JWT & Google OAuth Properties
 app:
   jwt:
     # 256-bit default secret key for development (override via JWT_SECRET in production)
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
     access-token-expiration-ms: 900000       # 15 minutes (in milliseconds)
     refresh-token-expiration-ms: 604800000   # 7 days (in milliseconds)
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:mock-google-client-id.apps.googleusercontent.com}
 
 logging:
   level:
     root: INFO
     "[com.nyxora.swiftdrop]": DEBUG
     "[org.springframework.security]": INFO
-

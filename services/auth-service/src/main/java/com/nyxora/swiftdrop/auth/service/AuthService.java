@@ -35,6 +35,12 @@ public interface AuthService {
     AuthResponse login(LoginRequest request);
 
     /**
+     * Authenticates a user via Google OAuth 2.0 ID Token.
+     * Auto-registers new customers or logs in existing linked accounts.
+     */
+    AuthResponse authenticateGoogle(GoogleAuthRequest request);
+
+    /**
      * Exchanges a valid refresh token for a fresh access token and rotates the refresh token.
      */
     AuthResponse refreshToken(RefreshTokenRequest request);
@@ -49,4 +55,3 @@ public interface AuthService {
      */
     UserProfileResponse getCurrentUserProfile(UUID currentUserId);
 }
-
