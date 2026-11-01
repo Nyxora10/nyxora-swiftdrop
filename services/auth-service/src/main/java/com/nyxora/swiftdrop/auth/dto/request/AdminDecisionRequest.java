@@ -11,3 +11,4 @@ public record AdminDecisionRequest(
         @Size(max = 500, message = "Reason cannot exceed 500 characters")
         String reason
 ) {}
+

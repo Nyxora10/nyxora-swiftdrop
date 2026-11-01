@@ -22,5 +22,5 @@ public enum UserStatus {
     /**
      * Account application rejected by Administrator during review (requires statusReason).
      */
-    REJECTED
+    REJECTED;
 }
