@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${GATEWAY_PORT:8080}
 
 spring:
   application:
@@ -9,9 +9,7 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowed-origins:
-              - "http://localhost:3000"
-              - "http://127.0.0.1:3000"
+            allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
             allowed-methods:
               - "GET"
               - "POST"
@@ -31,33 +29,34 @@ spring:
             - Path=/api/v1/auth/**
 
         # Route 2: Parcel Service (Port 8082 - Prepared for Phase 6)
+        # Note: No spaces after commas in Path pattern to avoid Spring Cloud Gateway regex routing bugs
         - id: parcel-service-route
           uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
           predicates:
-            - Path=/api/v1/parcels/**, /api/v1/pricing/**, /api/v1/zones/**, /api/v1/couriers/**
+            - Path=/api/v1/parcels/**,/api/v1/pricing/**,/api/v1/zones/**,/api/v1/couriers/**
 
         # Route 3: Notification Webhook Service (Port 8083 - Prepared)
         - id: notification-service-route
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
           predicates:
-            - Path=/api/v1/notifications/**, /api/v1/webhooks/**
+            - Path=/api/v1/notifications/**,/api/v1/webhooks/**
 
 app:
   jwt:
-    secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        # Gateway routes endpoint removed to prevent route & internal IP leaks
+        include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
 
 logging:
   level:
     root: INFO
     '[org.springframework.cloud.gateway]': INFO
     '[com.nyxora.swiftdrop]': DEBUG
-
