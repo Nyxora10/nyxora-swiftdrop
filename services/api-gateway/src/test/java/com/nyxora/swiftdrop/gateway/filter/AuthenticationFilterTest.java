@@ -149,3 +149,4 @@ class AuthenticationFilterTest {
         assertNull(exchange.getResponse().getStatusCode());
     }
 }
+
