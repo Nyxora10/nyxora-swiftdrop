@@ -47,8 +47,12 @@ public class DataInitializer implements CommandLineRunner {
     private static final String DEFAULT_COURIER_EMAIL = "courier.kamal@swiftdrop.lk";
     private static final String DEFAULT_COURIER_PASSWORD = "Courier@123";
 
-    private static final String DEFAULT_MERCHANT_EMAIL = "merchant.daraz@swiftdrop.lk";
-    private static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@123";
+    public static final String DEFAULT_MERCHANT_EMAIL = "merchant.daraz@swiftdrop.lk";
+    public static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@123";
+    // Member 2 (Task 2.3): demo OAuth 2.0 client_credentials for headless M2M order creation
+    public static final String DEFAULT_MERCHANT_CLIENT_ID = "mch_daraz_client_01";
+    public static final String DEFAULT_MERCHANT_CLIENT_SECRET = "sec_daraz_secret_2026";
+    public static final String DEFAULT_MERCHANT_WEBHOOK_SECRET = "whsec_daraz_hmac_secret_2026";
 
     @Override
     @Transactional
@@ -179,14 +183,35 @@ public class DataInitializer implements CommandLineRunner {
                     .businessName("Daraz Sri Lanka PVT LTD")
                     .registrationNumber("PV-123456")
                     .webhookUrl("http://localhost:8083/api/v1/webhooks/demo-receiver")
-                    .webhookSecret("demo-secret-12345")
-                    .oauthClientId("mer_daraz123456")
+                    .webhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET)
+                    .oauthClientId(DEFAULT_MERCHANT_CLIENT_ID)
+                    .oauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET))
                     .build();
 
             merchantRepository.save(merchant);
-            log.info("[DataInitializer] Successfully created default merchant account: {}", DEFAULT_MERCHANT_EMAIL);
+            log.info("[DataInitializer] Successfully created default merchant account: {} (client_id: {})",
+                    DEFAULT_MERCHANT_EMAIL, DEFAULT_MERCHANT_CLIENT_ID);
         } else {
+            backfillDemoMerchantCredentials();
             log.info("[DataInitializer] Default merchant account already exists.");
         }
+    }
+
+    /**
+     * Databases seeded by an earlier build may hold the demo merchant without OAuth
+     * client credentials, which breaks the client_credentials grant. Fill them in once.
+     */
+    private void backfillDemoMerchantCredentials() {
+        userRepository.findByEmail(DEFAULT_MERCHANT_EMAIL)
+                .flatMap(user -> merchantRepository.findByUserId(user.getId()))
+                .filter(merchant -> merchant.getOauthClientSecretHash() == null)
+                .ifPresent(merchant -> {
+                    merchant.setOauthClientId(DEFAULT_MERCHANT_CLIENT_ID);
+                    merchant.setOauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET));
+                    merchant.setWebhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET);
+                    merchantRepository.save(merchant);
+                    log.info("[DataInitializer] Backfilled OAuth client credentials for demo merchant (client_id: {})",
+                            DEFAULT_MERCHANT_CLIENT_ID);
+                });
     }
 }
