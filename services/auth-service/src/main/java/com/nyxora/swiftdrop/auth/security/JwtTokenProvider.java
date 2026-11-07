@@ -1,6 +1,8 @@
 package com.nyxora.swiftdrop.auth.security;
 
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
+import com.nyxora.swiftdrop.auth.entity.Merchant;
+import com.nyxora.swiftdrop.auth.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -15,7 +17,9 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -54,6 +58,13 @@ public class JwtTokenProvider {
      * Generates a stateless Access Token (JWT) with claims: sub, email, role, fullName.
      */
     public String generateAccessToken(UserPrincipal userPrincipal) {
+        return generateAccessToken(userPrincipal, Collections.emptyMap());
+    }
+
+    /**
+     * Generates a stateless Access Token (JWT) with custom extra claims (e.g. merchantId, courierId).
+     */
+    public String generateAccessToken(UserPrincipal userPrincipal, Map<String, Object> extraClaims) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpirationMs());
 
@@ -62,11 +73,35 @@ public class JwtTokenProvider {
                 .findFirst()
                 .orElse("ROLE_CUSTOMER");
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(userPrincipal.getId().toString())
                 .claim("email", userPrincipal.getEmail())
                 .claim("role", role)
                 .claim("fullName", userPrincipal.getFullName())
+                .issuedAt(now)
+                .expiration(expiryDate);
+
+        if (extraClaims != null && !extraClaims.isEmpty()) {
+            extraClaims.forEach(builder::claim);
+        }
+
+        return builder.signWith(getSigningKey()).compact();
+    }
+
+    /**
+     * Issues an OAuth 2.0 Machine-to-Machine (M2M) Bearer JWT for an active Merchant partner.
+     * Contains standard claims plus role=ROLE_MERCHANT and merchantId.
+     */
+    public String generateM2mToken(User user, Merchant merchant) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpirationMs());
+
+        return Jwts.builder()
+                .subject(user.getId().toString())
+                .claim("email", user.getEmail())
+                .claim("role", "ROLE_MERCHANT")
+                .claim("merchantId", merchant.getId().toString())
+                .claim("fullName", merchant.getBusinessName())
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())

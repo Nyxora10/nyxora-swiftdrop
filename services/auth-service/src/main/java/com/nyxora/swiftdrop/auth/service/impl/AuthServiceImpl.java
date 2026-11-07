@@ -38,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -246,7 +248,17 @@ public class AuthServiceImpl implements AuthService {
         }
 
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
-        String accessToken = jwtTokenProvider.generateAccessToken(principal);
+        Map<String, Object> extraClaims = new HashMap<>();
+        if (user.getRole().getName() == RoleName.ROLE_MERCHANT) {
+            merchantRepository.findByUserId(user.getId())
+                    .ifPresent(m -> extraClaims.put("merchantId", m.getId().toString()));
+        } else if (user.getRole().getName() == RoleName.ROLE_COURIER) {
+            courierRepository.findByUserId(user.getId())
+                    .ifPresent(c -> extraClaims.put("courierId", c.getId().toString()));
+        }
+        String accessToken = extraClaims.isEmpty()
+                ? jwtTokenProvider.generateAccessToken(principal)
+                : jwtTokenProvider.generateAccessToken(principal, extraClaims);
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
         return AuthResponse.of(
@@ -374,7 +386,17 @@ public class AuthServiceImpl implements AuthService {
         }
 
         UserPrincipal principal = UserPrincipal.create(user);
-        String newAccessToken = jwtTokenProvider.generateAccessToken(principal);
+        Map<String, Object> extraClaims = new HashMap<>();
+        if (user.getRole().getName() == RoleName.ROLE_MERCHANT) {
+            merchantRepository.findByUserId(user.getId())
+                    .ifPresent(m -> extraClaims.put("merchantId", m.getId().toString()));
+        } else if (user.getRole().getName() == RoleName.ROLE_COURIER) {
+            courierRepository.findByUserId(user.getId())
+                    .ifPresent(c -> extraClaims.put("courierId", c.getId().toString()));
+        }
+        String newAccessToken = extraClaims.isEmpty()
+                ? jwtTokenProvider.generateAccessToken(principal)
+                : jwtTokenProvider.generateAccessToken(principal, extraClaims);
 
         return AuthResponse.of(
                 newAccessToken,
