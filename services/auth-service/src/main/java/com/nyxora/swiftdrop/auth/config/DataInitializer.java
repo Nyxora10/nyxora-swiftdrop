@@ -23,8 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Startup Data Initializer that primes the auth_db with:
  * 1. Default RBAC Roles (ROLE_CUSTOMER, ROLE_MERCHANT, ROLE_COURIER, ROLE_ADMIN)
  * 2. Default Platform Administrator Account
- * 3. Default Demo Courier Account (Task 2.5)
- * 4. Default Demo Merchant Account
+ * 3. Default Demo Customer Account
+ * 4. Default Demo Courier Account (Task 2.5)
+ * 5. Default Demo Merchant Account
  */
 @Slf4j
 @Component
@@ -40,6 +41,9 @@ public class DataInitializer implements CommandLineRunner {
     private static final String DEFAULT_ADMIN_EMAIL = "admin@swiftdrop.lk";
     private static final String DEFAULT_ADMIN_PASSWORD = "Admin@SwiftDrop2026!";
 
+    private static final String DEFAULT_CUSTOMER_EMAIL = "customer.kasun@swiftdrop.lk";
+    private static final String DEFAULT_CUSTOMER_PASSWORD = "Customer@123";
+
     private static final String DEFAULT_COURIER_EMAIL = "courier.kamal@swiftdrop.lk";
     private static final String DEFAULT_COURIER_PASSWORD = "Courier@123";
 
@@ -52,6 +56,7 @@ public class DataInitializer implements CommandLineRunner {
         log.info("[DataInitializer] Verifying database seeding for auth_db...");
         seedRoles();
         seedDefaultAdmin();
+        seedDefaultCustomer();
         seedDefaultCourier();
         seedDefaultMerchant();
         log.info("[DataInitializer] Database verification complete.");
@@ -97,6 +102,28 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
+    private void seedDefaultCustomer() {
+        if (!userRepository.existsByEmail(DEFAULT_CUSTOMER_EMAIL)) {
+            Role customerRole = roleRepository.findByName(RoleName.ROLE_CUSTOMER)
+                    .orElseThrow(() -> new IllegalStateException("ROLE_CUSTOMER not found during customer seeding"));
+
+            User customer = User.builder()
+                    .role(customerRole)
+                    .email(DEFAULT_CUSTOMER_EMAIL)
+                    .passwordHash(passwordEncoder.encode(DEFAULT_CUSTOMER_PASSWORD))
+                    .fullName("Kasun Perera")
+                    .phoneNumber("+94771234567")
+                    .status(UserStatus.ACTIVE)
+                    .authProvider(AuthProvider.LOCAL)
+                    .build();
+
+            userRepository.save(customer);
+            log.info("[DataInitializer] Successfully created default customer account: {}", DEFAULT_CUSTOMER_EMAIL);
+        } else {
+            log.info("[DataInitializer] Default customer account already exists.");
+        }
+    }
+
     private void seedDefaultCourier() {
         if (!userRepository.existsByEmail(DEFAULT_COURIER_EMAIL)) {
             Role courierRole = roleRepository.findByName(RoleName.ROLE_COURIER)
@@ -107,7 +134,7 @@ public class DataInitializer implements CommandLineRunner {
                     .email(DEFAULT_COURIER_EMAIL)
                     .passwordHash(passwordEncoder.encode(DEFAULT_COURIER_PASSWORD))
                     .fullName("Kamal Perera")
-                    .phoneNumber("+94771234567")
+                    .phoneNumber("+94777654321")
                     .status(UserStatus.ACTIVE)
                     .authProvider(AuthProvider.LOCAL)
                     .build();
@@ -139,7 +166,7 @@ public class DataInitializer implements CommandLineRunner {
                     .role(merchantRole)
                     .email(DEFAULT_MERCHANT_EMAIL)
                     .passwordHash(passwordEncoder.encode(DEFAULT_MERCHANT_PASSWORD))
-                    .fullName("Daraz Sri Lanka")
+                    .fullName("Daraz Logistics Hub")
                     .phoneNumber("+94112345678")
                     .status(UserStatus.ACTIVE)
                     .authProvider(AuthProvider.LOCAL)
@@ -163,4 +190,3 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 }
-
