@@ -57,6 +57,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,    "/api/v1/parcels/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
                 .requestMatchers(HttpMethod.GET,    "/api/v1/parcels/merchant/**").hasAnyRole("MERCHANT", "ADMIN")
 
+                // Member 2: B2B Merchant order creation & bulk ingestion
+                .requestMatchers(HttpMethod.POST,   "/api/v1/parcels/merchant/**").hasAnyRole("MERCHANT", "ADMIN")
+                .requestMatchers(HttpMethod.POST,   "/api/v1/parcels/bulk").hasAnyRole("MERCHANT", "ADMIN")
+
                 // Member 3: Admin zone and pricing management — ROLE_ADMIN only
                 .requestMatchers(HttpMethod.GET,    "/api/v1/zones/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST,   "/api/v1/zones/**").hasRole("ADMIN")
