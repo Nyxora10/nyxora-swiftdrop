@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftDrop - Out for Delivery</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8fafc;
+            color: #334155;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            max-width: 600px;
+            margin: 30px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+        }
+        .header {
+            background-color: #0f172a;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        .header p {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 6px;
+            margin-bottom: 0;
+        }
+        .content {
+            padding: 32px 28px;
+        }
+        .greeting {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 12px;
+        }
+        .lead-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #475569;
+            margin-bottom: 24px;
+        }
+        .card {
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border-left: 4px solid #f59e0b;
+        }
+        .badge {
+            display: inline-block;
+            background-color: #fef3c7;
+            color: #b45309;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .btn-container {
+            text-align: center;
+            margin: 32px 0 16px;
+        }
+        .btn {
+            background-color: #2563eb;
+            color: #ffffff !important;
+            padding: 14px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 8px;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+        .footer {
+            background-color: #f8fafc;
+            padding: 24px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>SwiftDrop</h1>
+        <p>Enterprise Courier &amp; Parcel Logistics</p>
+    </div>
+    <div class="content">
+        <div class="greeting">
+            Hello <span th:text="${recipientName != null ? recipientName : 'Valued Customer'}">Valued Customer</span>,
+        </div>
+        <p class="lead-text">
+            Great news! Your parcel is currently out for delivery and will arrive at your address today.
+        </p>
+        <div class="card">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Tracking Number</td>
+                    <td style="padding: 8px 0; color: #0f172a; font-size: 14px; font-weight: 700; text-align: right;" th:text="${trackingNumber}">SWIFT-00000000-LK</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Status</td>
+                    <td style="padding: 8px 0; text-align: right;">
+                        <span class="badge" th:text="${currentStatus}">OUT_FOR_DELIVERY</span>
+                    </td>
+                </tr>
+                <tr th:if="${courierName != null and !#strings.isEmpty(courierName)}" style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Assigned Courier</td>
+                    <td style="padding: 8px 0; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;" th:text="${courierName}">Kamal Silva</td>
+                </tr>
+                <tr th:if="${courierPhone != null and !#strings.isEmpty(courierPhone)}" style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Courier Contact</td>
+                    <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;" th:text="${courierPhone}">+94 77 123 4567</td>
+                </tr>
+                <tr th:if="${deliveryNote != null and !#strings.isEmpty(deliveryNote)}" style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Delivery Instructions</td>
+                    <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;" th:text="${deliveryNote}">-</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-weight: 500;">Dispatched At</td>
+                    <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;" th:text="${timestamp}">2026-11-08 00:00:00 UTC</td>
+                </tr>
+            </table>
+        </div>
+        <div class="btn-container">
+            <a class="btn" th:href="${trackingUrl}">Track Live Courier Progress</a>
+        </div>
+    </div>
+    <div class="footer">
+        <p>Please ensure someone is available at the delivery location to receive the parcel.</p>
+        <p>&copy; 2026 SwiftDrop Inc. All rights reserved.</p>
+    </div>
+</div>
+</body>
+</html>
+

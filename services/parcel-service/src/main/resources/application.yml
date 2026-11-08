@@ -1,0 +1,40 @@
+server:
+  port: ${PARCEL_SERVICE_PORT:8082}
+
+spring:
+  application:
+    name: parcel-service
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/parcel_db
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgrespassword}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      "[hibernate.format_sql]": true
+
+# SpringDoc OpenAPI & Swagger UI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true
+    display-request-duration: true
+
+logging:
+  level:
+    root: INFO
+    "[com.nyxora.swiftdrop]": DEBUG
+    "[org.springframework.security]": INFO
+

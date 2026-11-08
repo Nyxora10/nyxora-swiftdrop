@@ -34,6 +34,9 @@ class RouteValidatorTest {
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/info").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/v3/api-docs").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/swagger-ui/index.html").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/ws-swiftdrop").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/ws-swiftdrop/info").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/ws-swiftdrop/websocket").build()));
     }
 
     @Test
