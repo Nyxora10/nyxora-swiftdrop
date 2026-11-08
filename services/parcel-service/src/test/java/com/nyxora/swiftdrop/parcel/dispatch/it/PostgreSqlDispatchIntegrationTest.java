@@ -48,9 +48,16 @@ class PostgreSqlDispatchIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:postgresql://localhost:5432/swiftdrop_it_db");
-        registry.add("spring.datasource.username", () -> "postgres");
-        registry.add("spring.datasource.password", () -> "postgrespassword");
+        String dbUrl = System.getProperty("spring.datasource.url",
+                System.getenv().getOrDefault("SPRING_DATASOURCE_URL", "jdbc:postgresql://localhost:5432/swiftdrop_it_db"));
+        String dbUser = System.getProperty("spring.datasource.username",
+                System.getenv().getOrDefault("SPRING_DATASOURCE_USERNAME", "postgres"));
+        String dbPassword = System.getProperty("spring.datasource.password",
+                System.getenv().getOrDefault("SPRING_DATASOURCE_PASSWORD", "postgrespassword"));
+
+        registry.add("spring.datasource.url", () -> dbUrl);
+        registry.add("spring.datasource.username", () -> dbUser);
+        registry.add("spring.datasource.password", () -> dbPassword);
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
     }
