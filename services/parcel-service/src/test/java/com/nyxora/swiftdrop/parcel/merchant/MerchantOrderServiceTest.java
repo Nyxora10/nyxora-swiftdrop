@@ -131,6 +131,92 @@ class MerchantOrderServiceTest {
     }
 
     @Test
+    @DisplayName("createMerchantOrder succeeds when senderUserId is null (falls back to merchantId) and order reference is null")
+    void createMerchantOrder_NullSenderUserIdAndNullReference_Success() {
+        MerchantOrderRequest reqNoRef = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Peliyagoda")
+                .dropoffAddress("Kandy")
+                .recipientName("Kamal")
+                .recipientPhone("+94770001122")
+                .weightKg(new BigDecimal("1.0"))
+                .parcelSize(ParcelSize.SMALL)
+                .merchantOrderReference(null)
+                .build();
+
+        ParcelQuoteResponse quote = ParcelQuoteResponse.builder()
+                .appliedTier(QuoteTier.MERCHANT)
+                .totalFee(new BigDecimal("425.00"))
+                .discountAmount(new BigDecimal("75.00"))
+                .build();
+
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(colomboZone));
+        when(deliveryZoneRepository.findById(2)).thenReturn(Optional.of(kandyZone));
+        when(pricingEngine.calculateQuote(any(ParcelQuoteRequest.class))).thenReturn(quote);
+        when(trackingNumberGenerator.generateUniqueTrackingNumber()).thenReturn("SD-20261107-DARAZ2");
+        when(parcelRepository.save(any(Parcel.class))).thenAnswer(i -> {
+            Parcel p = i.getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+
+        MerchantOrderResponse response = merchantOrderService.createMerchantOrder(reqNoRef, merchantId, null);
+
+        assertNotNull(response);
+        assertEquals("SD-20261107-DARAZ2", response.getTrackingNumber());
+        assertNull(response.getMerchantOrderReference());
+    }
+
+    @Test
+    @DisplayName("createMerchantOrder catches RabbitMQ exception gracefully without failing order")
+    void createMerchantOrder_RabbitMqFailure_DoesNotFailOrder() {
+        ParcelQuoteResponse quote = ParcelQuoteResponse.builder()
+                .appliedTier(QuoteTier.MERCHANT)
+                .totalFee(new BigDecimal("765.00"))
+                .discountAmount(new BigDecimal("135.00"))
+                .build();
+
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(colomboZone));
+        when(deliveryZoneRepository.findById(2)).thenReturn(Optional.of(kandyZone));
+        when(pricingEngine.calculateQuote(any(ParcelQuoteRequest.class))).thenReturn(quote);
+        when(trackingNumberGenerator.generateUniqueTrackingNumber()).thenReturn("SD-20261107-DARAZ3");
+        when(parcelRepository.save(any(Parcel.class))).thenAnswer(i -> {
+            Parcel p = i.getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+        doThrow(new RuntimeException("RabbitMQ connection down")).when(rabbitTemplate)
+                .convertAndSend(anyString(), anyString(), any(Object.class));
+
+        MerchantOrderResponse response = merchantOrderService.createMerchantOrder(orderRequest, merchantId, senderUserId);
+
+        assertNotNull(response);
+        assertEquals("SD-20261107-DARAZ3", response.getTrackingNumber());
+    }
+
+    @Test
+    @DisplayName("createMerchantOrder throws IllegalArgumentException if origin zone not found")
+    void createMerchantOrder_OriginZoneNotFound_ThrowsException() {
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> merchantOrderService.createMerchantOrder(orderRequest, merchantId, senderUserId));
+        assertTrue(ex.getMessage().contains("Origin delivery zone ID 1 not found"));
+    }
+
+    @Test
+    @DisplayName("createMerchantOrder throws IllegalArgumentException if destination zone not found")
+    void createMerchantOrder_DestinationZoneNotFound_ThrowsException() {
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(colomboZone));
+        when(deliveryZoneRepository.findById(2)).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> merchantOrderService.createMerchantOrder(orderRequest, merchantId, senderUserId));
+        assertTrue(ex.getMessage().contains("Destination delivery zone ID 2 not found"));
+    }
+
+    @Test
     @DisplayName("createMerchantOrder throws IllegalArgumentException if merchantId is null")
     void createMerchantOrder_NullMerchantId_ThrowsException() {
         assertThrows(IllegalArgumentException.class,
