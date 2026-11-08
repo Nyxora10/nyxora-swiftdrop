@@ -173,40 +173,6 @@ function LoginForm() {
       };
 
       const status = error.response?.status;
-
-      // Offline Dev Fallback: If backend is offline, enable seamless demo access
-      if (!error.response) {
-        const demo = DEMO_ACCOUNTS.find((d) => d.email.toLowerCase() === email.trim().toLowerCase());
-        const resolvedRole = demo ? `ROLE_${demo.role}` : (email.includes('admin') ? 'ROLE_ADMIN' : 'ROLE_ADMIN');
-        const resolvedName = demo ? demo.label : 'Administrator';
-
-        authStorage.setSession(
-          { accessToken: 'mock-jwt-token-active', refreshToken: 'mock-refresh-token-active' },
-          {
-            userId: '00000000-0000-0000-0000-000000000001',
-            email: email.trim().toLowerCase(),
-            role: resolvedRole,
-            fullName: resolvedName,
-            status: 'ACTIVE',
-          }
-        );
-
-        toast.success(`Demo Mode: Signed in as ${resolvedName}!`);
-        if (redirectUrl) {
-          router.push(redirectUrl);
-          return;
-        }
-        if (resolvedRole === 'ROLE_ADMIN') {
-          router.push('/admin/pricing');
-        } else if (resolvedRole === 'ROLE_MERCHANT') {
-          router.push('/merchant/dashboard');
-        } else if (resolvedRole === 'ROLE_COURIER') {
-          router.push('/courier/runsheet');
-        } else {
-          router.push('/customer/book');
-        }
-        return;
-      }
       const errorData = error.response?.data;
       const detail = errorData?.detail || '';
       const type = errorData?.type || '';
