@@ -67,7 +67,3 @@ jobs:
 
       - name: Run Hermetic Unit and Integration Tests
         run: mvn verify -B -f services/${{ matrix.service }}/pom.xml
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/swiftdrop_it_db
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgrespassword

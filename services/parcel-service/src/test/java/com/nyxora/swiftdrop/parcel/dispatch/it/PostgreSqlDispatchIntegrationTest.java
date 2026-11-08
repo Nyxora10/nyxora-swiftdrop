@@ -48,12 +48,12 @@ class PostgreSqlDispatchIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        String dbUrl = System.getProperty("spring.datasource.url",
-                System.getenv().getOrDefault("SPRING_DATASOURCE_URL", "jdbc:postgresql://localhost:5432/swiftdrop_it_db"));
-        String dbUser = System.getProperty("spring.datasource.username",
-                System.getenv().getOrDefault("SPRING_DATASOURCE_USERNAME", "postgres"));
-        String dbPassword = System.getProperty("spring.datasource.password",
-                System.getenv().getOrDefault("SPRING_DATASOURCE_PASSWORD", "postgrespassword"));
+        String dbUrl = System.getProperty("it.postgres.url",
+                System.getenv().getOrDefault("IT_POSTGRES_URL", "jdbc:postgresql://localhost:5432/swiftdrop_it_db"));
+        String dbUser = System.getProperty("it.postgres.username",
+                System.getenv().getOrDefault("IT_POSTGRES_USERNAME", "postgres"));
+        String dbPassword = System.getProperty("it.postgres.password",
+                System.getenv().getOrDefault("IT_POSTGRES_PASSWORD", "postgrespassword"));
 
         registry.add("spring.datasource.url", () -> dbUrl);
         registry.add("spring.datasource.username", () -> dbUser);
