@@ -17,7 +17,6 @@ import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelStatusHistoryRepository;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -92,10 +91,23 @@ class PostgreSqlDispatchIntegrationTest {
         outboxRepository.deleteAll();
         historyRepository.deleteAll();
         parcelRepository.deleteAll();
-        zoneRepository.deleteAll();
 
-        zone1 = zoneRepository.save(DeliveryZone.builder().zoneCode("IT-Z1").zoneName("Zone 1").district("Colombo").baseSurcharge(BigDecimal.ZERO).isActive(true).build());
-        zone2 = zoneRepository.save(DeliveryZone.builder().zoneCode("IT-Z2").zoneName("Zone 2").district("Kandy").baseSurcharge(BigDecimal.ZERO).isActive(true).build());
+        zone1 = zoneRepository.findByZoneCode("IT-Z1")
+                .orElseGet(() -> zoneRepository.save(DeliveryZone.builder()
+                        .zoneCode("IT-Z1")
+                        .zoneName("Zone 1")
+                        .district("Colombo")
+                        .baseSurcharge(BigDecimal.ZERO)
+                        .isActive(true)
+                        .build()));
+        zone2 = zoneRepository.findByZoneCode("IT-Z2")
+                .orElseGet(() -> zoneRepository.save(DeliveryZone.builder()
+                        .zoneCode("IT-Z2")
+                        .zoneName("Zone 2")
+                        .district("Kandy")
+                        .baseSurcharge(BigDecimal.ZERO)
+                        .isActive(true)
+                        .build()));
 
         testCourierId = UUID.randomUUID();
     }
