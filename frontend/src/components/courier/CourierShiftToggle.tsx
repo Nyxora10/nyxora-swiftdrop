@@ -1,51 +1,37 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import React, { useState } from 'react';
 
 export default function CourierShiftToggle() {
-  const [isAvailable, setIsAvailable] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [isOnDuty, setIsOnDuty] = useState(false);
 
-  useEffect(() => {
-    // Optionally fetch initial status
-    api.get('/api/v1/auth/courier/profile')
-      .then((res) => {
-        if (res.data?.isAvailable !== undefined) {
-          setIsAvailable(res.data.isAvailable);
-        }
-      })
-      .catch(() => {
-        // Fallback or ignore
-      });
-  }, []);
-
-  const toggleAvailability = async () => {
-    setLoading(true);
-    try {
-      const nextStatus = !isAvailable;
-      await api.patch('/api/v1/auth/courier/availability', { isAvailable: nextStatus });
-      setIsAvailable(nextStatus);
-    } catch {
-      // Toggle locally for demo resilience
-      setIsAvailable(!isAvailable);
-    } finally {
-      setLoading(false);
-    }
+  const toggleShift = () => {
+    setIsOnDuty(!isOnDuty);
   };
 
   return (
-    <button
-      onClick={toggleAvailability}
-      disabled={loading}
-      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-        isAvailable
-          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-          : 'bg-slate-100 text-slate-600 border-slate-300'
-      }`}
-    >
-      <span className={`w-2 h-2 rounded-full ${isAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-      {isAvailable ? 'On Duty' : 'Off Duty'}
-    </button>
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-slate-600 hidden sm:inline">
+        Shift: <strong className={isOnDuty ? "text-emerald-600" : "text-slate-400"}>
+          {isOnDuty ? 'ON DUTY' : 'OFF DUTY'}
+        </strong>
+      </span>
+      <button
+        type="button"
+        onClick={toggleShift}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+          isOnDuty ? 'bg-emerald-500' : 'bg-slate-300'
+        }`}
+        role="switch"
+        aria-checked={isOnDuty}
+        title="Toggle Courier Shift Availability"
+      >
+        <span
+          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            isOnDuty ? 'translate-x-4' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
   );
 }
