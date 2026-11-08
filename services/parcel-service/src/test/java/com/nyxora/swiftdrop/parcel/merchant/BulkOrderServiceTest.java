@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -137,5 +138,61 @@ class BulkOrderServiceTest {
         assertEquals("SUCCESS", response.getResults().get(0).getStatus());
         assertEquals("FAILED", response.getResults().get(1).getStatus());
         assertTrue(response.getResults().get(1).getErrors().get(0).contains("zone ID 999 not found"));
+    }
+
+    @Test
+    @DisplayName("processBulkOrders throws IllegalArgumentException when request is null")
+    void processBulkOrders_NullRequest_ThrowsException() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> bulkOrderService.processBulkOrders(null, merchantId, senderUserId));
+        assertEquals("Bulk order batch cannot be empty.", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("processBulkOrders throws IllegalArgumentException when orders list is null")
+    void processBulkOrders_NullOrdersList_ThrowsException() {
+        BulkOrderRequest request = new BulkOrderRequest(null);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> bulkOrderService.processBulkOrders(request, merchantId, senderUserId));
+        assertEquals("Bulk order batch cannot be empty.", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("processBulkOrders throws IllegalArgumentException when orders list is empty")
+    void processBulkOrders_EmptyOrdersList_ThrowsException() {
+        BulkOrderRequest request = new BulkOrderRequest(Collections.emptyList());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> bulkOrderService.processBulkOrders(request, merchantId, senderUserId));
+        assertEquals("Bulk order batch cannot be empty.", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("processBulkOrders handles row exception with null message and null reference gracefully")
+    void processBulkOrders_ExceptionWithNullMessage_HandlesGracefully() {
+        MerchantOrderRequest orderReq = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Warehouse")
+                .dropoffAddress("Home")
+                .recipientName("Test")
+                .recipientPhone("+94770001122")
+                .weightKg(new BigDecimal("1.0"))
+                .parcelSize(ParcelSize.SMALL)
+                .merchantOrderReference(null)
+                .build();
+
+        BulkOrderRequest request = new BulkOrderRequest(List.of(orderReq));
+        when(merchantOrderService.createMerchantOrder(eq(orderReq), eq(merchantId), eq(senderUserId)))
+                .thenThrow(new NullPointerException());
+
+        BulkOrderResponse response = bulkOrderService.processBulkOrders(request, merchantId, senderUserId);
+
+        assertNotNull(response);
+        assertEquals(1, response.getTotalReceived());
+        assertEquals(0, response.getSuccessfulCount());
+        assertEquals(1, response.getFailedCount());
+        assertEquals("FAILED", response.getResults().get(0).getStatus());
+        assertNull(response.getResults().get(0).getMerchantOrderReference());
+        assertEquals("Unknown error processing row", response.getResults().get(0).getErrors().get(0));
     }
 }

@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -172,5 +173,152 @@ class MerchantParcelControllerTest {
                 .andExpect(jsonPath("$.successfulCount").value(1))
                 .andExpect(jsonPath("$.results[0].trackingNumber").value("SD-20261107-BULK01"))
                 .andExpect(jsonPath("$.results[0].status").value("SUCCESS"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MERCHANT")
+    @DisplayName("POST /merchant/orders succeeds with only X-Merchant-Id header")
+    void createMerchantOrder_OnlyMerchantIdHeader_Success() throws Exception {
+        UUID merchantId = UUID.randomUUID();
+
+        MerchantOrderRequest request = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Warehouse 1, Colombo")
+                .dropoffAddress("Customer Home, Kandy")
+                .recipientName("Nimal Bandara")
+                .recipientPhone("+94772345678")
+                .weightKg(new BigDecimal("2.5"))
+                .parcelSize(ParcelSize.MEDIUM)
+                .build();
+
+        MerchantOrderResponse response = MerchantOrderResponse.builder()
+                .trackingNumber("SD-20261107-MCHONLY")
+                .estimatedFee(new BigDecimal("765.00"))
+                .currentStatus(ParcelStatus.CREATED)
+                .build();
+
+        when(merchantOrderService.createMerchantOrder(any(MerchantOrderRequest.class), eq(merchantId), eq(merchantId)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/parcels/merchant/orders")
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.trackingNumber").value("SD-20261107-MCHONLY"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MERCHANT")
+    @DisplayName("POST /merchant/orders succeeds with only X-User-Id header as fallback")
+    void createMerchantOrder_OnlyUserIdHeader_Success() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        MerchantOrderRequest request = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Warehouse 1, Colombo")
+                .dropoffAddress("Customer Home, Kandy")
+                .recipientName("Nimal Bandara")
+                .recipientPhone("+94772345678")
+                .weightKg(new BigDecimal("2.5"))
+                .parcelSize(ParcelSize.MEDIUM)
+                .build();
+
+        MerchantOrderResponse response = MerchantOrderResponse.builder()
+                .trackingNumber("SD-20261107-USERONLY")
+                .estimatedFee(new BigDecimal("765.00"))
+                .currentStatus(ParcelStatus.CREATED)
+                .build();
+
+        when(merchantOrderService.createMerchantOrder(any(MerchantOrderRequest.class), eq(userId), eq(userId)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/parcels/merchant/orders")
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.trackingNumber").value("SD-20261107-USERONLY"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MERCHANT")
+    @DisplayName("POST /merchant/orders returns 400 when merchant identification headers are missing")
+    void createMerchantOrder_MissingHeaders_Returns400() throws Exception {
+        MerchantOrderRequest request = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Warehouse 1, Colombo")
+                .dropoffAddress("Customer Home, Kandy")
+                .recipientName("Nimal Bandara")
+                .recipientPhone("+94772345678")
+                .weightKg(new BigDecimal("2.5"))
+                .parcelSize(ParcelSize.MEDIUM)
+                .build();
+
+        mockMvc.perform(post("/api/v1/parcels/merchant/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(roles = "MERCHANT")
+    @DisplayName("POST /bulk returns 400 when merchant identification headers are missing")
+    void createBulkOrders_MissingHeaders_Returns400() throws Exception {
+        MerchantOrderRequest orderReq = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Peliyagoda")
+                .dropoffAddress("Kandy")
+                .recipientName("Kamal")
+                .recipientPhone("+94771234567")
+                .weightKg(new BigDecimal("1.0"))
+                .parcelSize(ParcelSize.SMALL)
+                .build();
+        BulkOrderRequest request = new BulkOrderRequest(List.of(orderReq));
+
+        mockMvc.perform(post("/api/v1/parcels/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(roles = "MERCHANT")
+    @DisplayName("POST /bulk succeeds with only X-Merchant-Id header")
+    void createBulkOrders_OnlyMerchantIdHeader_Success() throws Exception {
+        UUID merchantId = UUID.randomUUID();
+
+        MerchantOrderRequest orderReq = MerchantOrderRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .pickupAddress("Peliyagoda")
+                .dropoffAddress("Kandy")
+                .recipientName("Kamal")
+                .recipientPhone("+94771234567")
+                .weightKg(new BigDecimal("1.0"))
+                .parcelSize(ParcelSize.SMALL)
+                .build();
+
+        BulkOrderRequest request = new BulkOrderRequest(List.of(orderReq));
+        BulkOrderResponse response = BulkOrderResponse.builder()
+                .totalReceived(1)
+                .successfulCount(1)
+                .failedCount(0)
+                .results(Collections.emptyList())
+                .build();
+
+        when(bulkOrderService.processBulkOrders(any(BulkOrderRequest.class), eq(merchantId), eq(merchantId)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/parcels/bulk")
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalReceived").value(1));
     }
 }
