@@ -7,8 +7,3 @@
 
 # Global owners for the entire repository
 * @DileepaPRA @AshenRandira
-
-# Team leads can also be scoped to specific directories if needed:
-# /services/auth-service/   @DileepaPRA
-# /services/parcel-service/ @DileepaPRA
-# /frontend/                @DileepaPRA @AshenRandira
