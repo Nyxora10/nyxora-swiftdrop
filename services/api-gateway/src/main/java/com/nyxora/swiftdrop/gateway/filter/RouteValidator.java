@@ -19,6 +19,7 @@ public class RouteValidator {
     public static final List<String> OPEN_API_ENDPOINTS = List.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
+            "/api/v1/auth/oauth/token",
             "/api/v1/auth/refresh",
             "/api/v1/auth/google",
             "/api/v1/auth/apple",
@@ -27,6 +28,8 @@ public class RouteValidator {
             "/api/v1/parcels/track",
             "/api/v1/public/zones",
             "/ws-swiftdrop",
+            "/api/v1/parcels/quote",
+            "/api/v1/webhooks/demo-receiver",
             "/actuator/health",
             "/actuator/info",
             "/v3/api-docs",
