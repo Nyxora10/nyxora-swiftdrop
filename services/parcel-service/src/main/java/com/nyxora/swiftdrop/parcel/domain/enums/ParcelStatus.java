@@ -12,10 +12,10 @@ package com.nyxora.swiftdrop.parcel.domain.enums;
  */
 public enum ParcelStatus {
     CREATED,
+    ASSIGNED,
     PICKED_UP,
     IN_TRANSIT,
     OUT_FOR_DELIVERY,
     DELIVERED,
     FAILED
 }
-
