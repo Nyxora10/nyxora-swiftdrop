@@ -27,4 +27,3 @@ public interface CourierService {
      */
     CourierProfileResponse updateAvailability(UUID userId, CourierAvailabilityRequest request);
 }
-

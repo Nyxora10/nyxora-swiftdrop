@@ -60,4 +60,3 @@ public class CourierServiceImpl implements CourierService {
         return CourierProfileResponse.fromEntity(saved);
     }
 }
-
