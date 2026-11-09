@@ -14,12 +14,18 @@ interface DeliveryZoneApiRecord {
 
 /**
  * Service to fetch active logistics delivery zones across Sri Lanka.
+ * Calls the public, unauthenticated lookup endpoint: GET /api/v1/public/zones.
  */
-export async function getDeliveryZones(): Promise<DeliveryZone[]> {
+export async function getDeliveryZones(search?: string, district?: string): Promise<DeliveryZone[]> {
   try {
-    const res = await fetch('/api/v1/zones');
+    const params = new URLSearchParams();
+    if (search?.trim()) params.append('search', search.trim());
+    if (district?.trim()) params.append('district', district.trim());
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(`/api/v1/public/zones${query}`);
     if (!res.ok) {
-      console.warn(`Zones fetch failed with status ${res.status}. Utilizing resilient fallback zones.`);
+      console.warn(`Public zones fetch failed with status ${res.status}. Utilizing resilient fallback zones.`);
       return DEFAULT_FALLBACK_ZONES;
     }
 
@@ -43,8 +49,7 @@ export async function getDeliveryZones(): Promise<DeliveryZone[]> {
 
     return DEFAULT_FALLBACK_ZONES;
   } catch (error) {
-    console.warn('Network error while retrieving zones. Utilizing fallback delivery zones:', error);
+    console.warn('Network error while retrieving public zones. Utilizing fallback delivery zones:', error);
     return DEFAULT_FALLBACK_ZONES;
   }
 }
-
