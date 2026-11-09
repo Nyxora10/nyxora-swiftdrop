@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import { authStorage } from '@/lib/auth';
 import {
   BookingFormData,
   BookingResponse,
@@ -6,6 +7,27 @@ import {
   ParcelQuotePayload,
   RateQuoteResponse,
 } from '@/types/booking';
+import {
+  CustomerOrderQuery,
+  OrderSummary,
+  PagedOrderResponse,
+} from '@/types/order';
+
+/**
+ * Helper to build authenticated customer identity headers.
+ * Supplies X-User-Id and X-User-Role for direct microservice gateway alignment.
+ */
+function getCustomerAuthHeaders(): Record<string, string> {
+  const user = authStorage.getUser();
+  const headers: Record<string, string> = {};
+  if (user?.userId) {
+    headers['X-User-Id'] = user.userId;
+  }
+  if (user?.role) {
+    headers['X-User-Role'] = user.role;
+  }
+  return headers;
+}
 
 /**
  * Service to calculate dynamic rate quotes for shipments.
@@ -84,7 +106,9 @@ export async function bookParcel(formData: BookingFormData): Promise<BookingResp
     tier: formData.deliveryTier,
   };
 
-  const res = await api.post('/api/v1/parcels/book', payload);
+  const res = await api.post('/api/v1/parcels/book', payload, {
+    headers: getCustomerAuthHeaders(),
+  });
   const raw = res.data;
 
   return {
@@ -100,11 +124,40 @@ export async function bookParcel(formData: BookingFormData): Promise<BookingResp
 }
 
 /**
+ * Service to retrieve paginated order history for the authenticated customer.
+ * Calls GET /api/v1/parcels/customer/orders?page={page}&size={size}&status={status}.
+ */
+export async function getCustomerOrders(
+  params: CustomerOrderQuery = {}
+): Promise<PagedOrderResponse<OrderSummary>> {
+  const queryParams: Record<string, string | number> = {
+    page: Math.max(0, params.page ?? 0),
+    size: Math.max(1, Math.min(params.size ?? 10, 50)),
+  };
+
+  if (params.status) {
+    queryParams.status = params.status;
+  }
+
+  const response = await api.get<PagedOrderResponse<OrderSummary>>(
+    '/api/v1/parcels/customer/orders',
+    {
+      params: queryParams,
+      headers: getCustomerAuthHeaders(),
+    }
+  );
+
+  return response.data;
+}
+
+/**
  * Service to download the official delivery receipt PDF for a booked parcel.
  * Streams binary application/pdf from GET /api/v1/parcels/{id}/receipt/pdf.
+ * Injects authenticated headers so customer can access their own invoice.
  */
 export async function downloadReceiptPdf(parcelId: string): Promise<Blob> {
   const response = await api.get(`/api/v1/parcels/${parcelId}/receipt/pdf`, {
+    headers: getCustomerAuthHeaders(),
     responseType: 'blob',
   });
   return new Blob([response.data], { type: 'application/pdf' });
