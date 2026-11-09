@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.notification.webhook.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.client.AuthInternalClient;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookDispatchResult;
@@ -356,7 +357,7 @@ public class WebhookDispatcherService {
         } catch (ResourceAccessException ex) {
             log.warn(
                     "Connection timeout or I/O failure reaching merchant webhook endpoint for merchantId={}, parcelId={}, retryCount={}: {}",
-                    merchantId, parcelId, deliveryLog.getRetryCount(), ex.getMessage());
+                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()));
 
             deliveryLog.setHttpStatusCode(null);
             deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);
@@ -370,7 +371,7 @@ public class WebhookDispatcherService {
 
         } catch (Exception ex) {
             log.error("Unexpected error dispatching webhook for merchantId={}, parcelId={}, retryCount={}: {}",
-                    merchantId, parcelId, deliveryLog.getRetryCount(), ex.getMessage(), ex);
+                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()), ex);
 
             deliveryLog.setHttpStatusCode(null);
             deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);

@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.notification.webhook.client;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,10 +108,12 @@ public class AuthInternalClient {
             log.error("Auth-service 5xx server error while querying webhook config for merchantId={}: status={}", merchantId, ex.getStatusCode());
             return Optional.empty();
         } catch (ResourceAccessException ex) {
-            log.error("Network I/O failure reaching auth-service at configured endpoint for merchantId={}: {}", merchantId, ex.getMessage());
+            log.error("Network I/O failure reaching auth-service at configured endpoint for merchantId={}: {}",
+                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()));
             return Optional.empty();
         } catch (Exception ex) {
-            log.error("Unexpected error retrieving merchant webhook configuration for merchantId={}", merchantId, ex);
+            log.error("Unexpected error retrieving merchant webhook configuration for merchantId={}: {}",
+                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()), ex);
             return Optional.empty();
         }
     }
