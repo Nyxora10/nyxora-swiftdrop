@@ -1,12 +1,14 @@
 package com.nyxora.swiftdrop.ai_assistant_service.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.ai_assistant_service.dto.PublicDeliveryZoneResponse;
+import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteRequest;
+import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteResponse;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.tracking.ParcelTrackingResponseDto;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.tracking.TrackingTimelineEventDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
@@ -99,5 +101,46 @@ class ParcelServiceClientTest {
                 .isInstanceOf(HttpServerErrorException.class);
         mockServer.verify();
     }
-}
 
+    @Test
+    @DisplayName("Should query public zones with search query")
+    void shouldQueryPublicZonesWithSearch() throws Exception {
+        List<PublicDeliveryZoneResponse> expected = List.of(
+                new PublicDeliveryZoneResponse(1, "WP-COL-01", "Colombo Central Metro", "Colombo")
+        );
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/public/zones?search=Colombo"))
+                .andRespond(withSuccess(objectMapper.writeValueAsString(expected), MediaType.APPLICATION_JSON));
+
+        List<PublicDeliveryZoneResponse> zones = parcelServiceClient.getPublicZones("Colombo", null);
+
+        assertThat(zones).hasSize(1);
+        assertThat(zones.get(0).zoneName()).isEqualTo("Colombo Central Metro");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should calculate delivery quote successfully")
+    void shouldCalculateQuoteSuccessfully() throws Exception {
+        ParcelQuoteRequest request = new ParcelQuoteRequest(1, 2, new BigDecimal("2.50"), "MEDIUM", "STANDARD");
+        ParcelQuoteResponse expectedResponse = new ParcelQuoteResponse(
+                "STANDARD",
+                new BigDecimal("350.00"),
+                new BigDecimal("125.00"),
+                new BigDecimal("1.20"),
+                new BigDecimal("50.00"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                new BigDecimal("620.00")
+        );
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/parcels/quote"))
+                .andRespond(withSuccess(objectMapper.writeValueAsString(expectedResponse), MediaType.APPLICATION_JSON));
+
+        ParcelQuoteResponse response = parcelServiceClient.calculateQuote(request);
+
+        assertThat(response.totalFee()).isEqualByComparingTo("620.00");
+        assertThat(response.appliedTier()).isEqualTo("STANDARD");
+        mockServer.verify();
+    }
+}

@@ -1,11 +1,15 @@
 package com.nyxora.swiftdrop.ai_assistant_service.client;
 
+import com.nyxora.swiftdrop.ai_assistant_service.dto.PublicDeliveryZoneResponse;
+import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteRequest;
+import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteResponse;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.tracking.ParcelTrackingResponseDto;
 import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -14,11 +18,13 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
  * REST client for communicating with the downstream SwiftDrop Parcel Service.
- * Uses Spring Boot's {@link RestClient} to fetch real-time parcel tracking data.
+ * Uses Spring Boot's {@link RestClient} to fetch real-time parcel tracking,
+ * query public delivery zones, and calculate delivery rate quotes.
  */
 @Service
 public class ParcelServiceClient {
@@ -87,5 +93,61 @@ public class ParcelServiceClient {
             throw ex;
         }
     }
-}
 
+    /**
+     * Queries active Sri Lankan delivery zones matching optional search or district criteria.
+     *
+     * @param search   optional free-text query (matches zone name, code, or district)
+     * @param district optional administrative district filter
+     * @return list of matching active delivery zone DTOs
+     */
+    public List<PublicDeliveryZoneResponse> getPublicZones(String search, String district) {
+        log.debug("Querying public delivery zones: search='{}', district='{}'", search, district);
+
+        try {
+            List<PublicDeliveryZoneResponse> zones = restClient.get()
+                    .uri(uriBuilder -> {
+                        uriBuilder.path("/api/v1/public/zones");
+                        if (search != null && !search.trim().isBlank()) {
+                            uriBuilder.queryParam("search", search.trim());
+                        }
+                        if (district != null && !district.trim().isBlank()) {
+                            uriBuilder.queryParam("district", district.trim());
+                        }
+                        return uriBuilder.build();
+                    })
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<PublicDeliveryZoneResponse>>() {});
+
+            return zones != null ? zones : List.of();
+        } catch (RestClientException ex) {
+            log.error("Failed to query public delivery zones from Parcel Service: {}", ex.getMessage(), ex);
+            throw ex;
+        }
+    }
+
+    /**
+     * Calculates an itemized delivery rate quotation from the Parcel Service.
+     *
+     * @param request the validated quotation request
+     * @return the itemized fee quote response
+     */
+    public ParcelQuoteResponse calculateQuote(ParcelQuoteRequest request) {
+        log.debug("Requesting delivery quote: originZone={}, destZone={}, weight={}kg, size={}, tier={}",
+                request.originZoneId(), request.destinationZoneId(), request.weightKg(), request.parcelSize(), request.tier());
+
+        try {
+            return restClient.post()
+                    .uri("/api/v1/parcels/quote")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(ParcelQuoteResponse.class);
+        } catch (RestClientException ex) {
+            log.error("Error executing parcel rate quote with Parcel Service: {}", ex.getMessage(), ex);
+            throw ex;
+        }
+    }
+}
