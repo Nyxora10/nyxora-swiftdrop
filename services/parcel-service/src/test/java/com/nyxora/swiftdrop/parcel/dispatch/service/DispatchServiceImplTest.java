@@ -276,4 +276,123 @@ class DispatchServiceImplTest {
         assertFalse(capturedStatuses.contains(ParcelStatus.DELIVERED));
         assertFalse(capturedStatuses.contains(ParcelStatus.FAILED));
     }
+
+    @Test
+    @DisplayName("assignCourier() with null adminUserId records system zero UUID in audit history")
+    void assignCourier_nullAdminUserId_recordsZeroUuidInHistory() {
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        when(dispatchParcelRepository.findById(parcelId)).thenReturn(Optional.of(sampleParcel));
+        when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any(Collection.class))).thenReturn(0L);
+        when(dispatchParcelRepository.save(any(Parcel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxRepository.save(any(DispatchOutboxEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        dispatchService.assignCourier(parcelId, request, null);
+
+        ArgumentCaptor<ParcelStatusHistory> historyCaptor = ArgumentCaptor.forClass(ParcelStatusHistory.class);
+        verify(parcelStatusHistoryRepository).save(historyCaptor.capture());
+        assertEquals(UUID.fromString("00000000-0000-0000-0000-000000000000"), historyCaptor.getValue().getUpdatedByUserId());
+    }
+
+    @Test
+    @DisplayName("assignCourier() when parcel is CREATED but already has assignedCourierId throws InvalidParcelStateException")
+    void assignCourier_createdWithAssignedCourierId_throwsInvalidParcelStateException() {
+        sampleParcel.setCurrentStatus(ParcelStatus.CREATED);
+        sampleParcel.setAssignedCourierId(UUID.randomUUID());
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        when(dispatchParcelRepository.findById(parcelId)).thenReturn(Optional.of(sampleParcel));
+
+        assertThrows(InvalidParcelStateException.class, () ->
+                dispatchService.assignCourier(parcelId, request, adminUserId));
+
+        verify(dispatchParcelRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assignCourier() throws IllegalStateException when ObjectMapper serialization fails")
+    void assignCourier_jsonSerializationFails_throwsIllegalStateException() throws Exception {
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        when(dispatchParcelRepository.findById(parcelId)).thenReturn(Optional.of(sampleParcel));
+        when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any(Collection.class))).thenReturn(0L);
+        when(dispatchParcelRepository.save(any(Parcel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        doThrow(new com.fasterxml.jackson.core.JsonParseException(null, "Mock JSON serialization error"))
+                .when(objectMapper).writeValueAsString(any());
+
+        assertThrows(IllegalStateException.class, () ->
+                dispatchService.assignCourier(parcelId, request, adminUserId));
+    }
+
+    @Test
+    @DisplayName("UnassignedParcelResponse.fromEntity handles null originZone and destinationZone")
+    void unassignedParcelResponse_nullZones_mapsNullSafely() {
+        Parcel parcelWithoutZones = Parcel.builder()
+                .id(parcelId)
+                .trackingNumber("SD-20261108-999999")
+                .originZone(null)
+                .destinationZone(null)
+                .build();
+
+        UnassignedParcelResponse dto = UnassignedParcelResponse.fromEntity(parcelWithoutZones);
+
+        assertNull(dto.originZoneId());
+        assertNull(dto.originZoneCode());
+        assertNull(dto.originZoneName());
+        assertNull(dto.destinationZoneId());
+        assertNull(dto.destinationZoneCode());
+        assertNull(dto.destinationZoneName());
+    }
+
+    @Test
+    @DisplayName("assignCourier() registers transaction synchronization and invokes afterCommit hook")
+    void assignCourier_withActiveTransactionSynchronization_registersAfterCommit() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            AssignCourierRequest request = new AssignCourierRequest(courierId);
+            when(dispatchParcelRepository.findById(parcelId)).thenReturn(Optional.of(sampleParcel));
+            when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any(Collection.class))).thenReturn(0L);
+            when(dispatchParcelRepository.save(any(Parcel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            DispatchOutboxEvent savedEvent = DispatchOutboxEvent.builder().id(UUID.randomUUID()).build();
+            when(outboxRepository.save(any(DispatchOutboxEvent.class))).thenReturn(savedEvent);
+
+            dispatchService.assignCourier(parcelId, request, adminUserId);
+
+            List<org.springframework.transaction.support.TransactionSynchronization> synchs =
+                    org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            assertFalse(synchs.isEmpty());
+
+            // Trigger afterCommit
+            synchs.get(0).afterCommit();
+            verify(outboxPublisher).publishEvent(savedEvent.getId());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("assignCourier() afterCommit catches exception from outboxPublisher gracefully")
+    void assignCourier_afterCommitPublisherFails_caughtGracefully() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            AssignCourierRequest request = new AssignCourierRequest(courierId);
+            when(dispatchParcelRepository.findById(parcelId)).thenReturn(Optional.of(sampleParcel));
+            when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any(Collection.class))).thenReturn(0L);
+            when(dispatchParcelRepository.save(any(Parcel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            DispatchOutboxEvent savedEvent = DispatchOutboxEvent.builder().id(UUID.randomUUID()).build();
+            when(outboxRepository.save(any(DispatchOutboxEvent.class))).thenReturn(savedEvent);
+
+            doThrow(new RuntimeException("RabbitMQ connection refused")).when(outboxPublisher).publishEvent(any());
+
+            dispatchService.assignCourier(parcelId, request, adminUserId);
+
+            List<org.springframework.transaction.support.TransactionSynchronization> synchs =
+                    org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            assertFalse(synchs.isEmpty());
+
+            assertDoesNotThrow(() -> synchs.get(0).afterCommit());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 }
