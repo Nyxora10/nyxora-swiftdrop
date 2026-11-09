@@ -6,7 +6,7 @@ spring:
     name: auth-service
 
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/auth_db
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/auth_db
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:postgrespassword}
     driver-class-name: org.postgresql.Driver
@@ -18,6 +18,15 @@ spring:
     open-in-view: false
     properties:
       "[hibernate.format_sql]": true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    listener:
+      simple:
+        default-requeue-rejected: false
 
 # SpringDoc OpenAPI & Swagger UI Configuration
 springdoc:

@@ -72,6 +72,12 @@
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
 
+        <!-- RabbitMQ / AMQP Messaging for Cross-Service Workload Events (Member 5: Task 2.2) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- Modern JJWT for Stateless Token Management -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
