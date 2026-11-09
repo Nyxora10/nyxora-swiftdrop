@@ -47,9 +47,10 @@ public class SecurityConfig {
                     "/v3/api-docs/**"
                 ).permitAll()
 
-                // Member 4: Public endpoints (instant rate quote calculation & tracking)
+                // Member 4: Public endpoints (instant rate quote calculation & tracking & active zones)
                 .requestMatchers(HttpMethod.POST,   "/api/v1/parcels/quote").permitAll()
                 .requestMatchers(HttpMethod.GET,    "/api/v1/parcels/track/**").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/api/v1/public/zones/**").permitAll()
 
                 // Member 7: Public real-time STOMP WebSocket & SockJS fallback endpoints (Task 1.11 / 4.4)
                 .requestMatchers("/ws-swiftdrop/**").permitAll()
