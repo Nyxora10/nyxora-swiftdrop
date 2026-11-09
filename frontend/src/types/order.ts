@@ -74,3 +74,4 @@ export interface CustomerOrderQuery {
   status?: ParcelStatus;
   search?: string;
 }
+
