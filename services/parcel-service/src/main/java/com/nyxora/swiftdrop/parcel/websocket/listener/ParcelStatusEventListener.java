@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.websocket.listener;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.websocket.broadcaster.ParcelWebSocketBroadcaster;
 import com.nyxora.swiftdrop.parcel.websocket.dto.ParcelTrackingUpdateDTO;
 import com.nyxora.swiftdrop.parcel.websocket.event.ParcelStatusChangedLocalEvent;
@@ -66,7 +67,8 @@ public class ParcelStatusEventListener {
     }
 
     /**
-     * Masks recipient full name into privacy-preserving format (e.g. "Kamal Perera" -> "K***l P***a").
+     * Masks recipient full name into privacy-preserving format (e.g. "Kamal Perera" -> "K***l P***a")
+     * using centralized {@link PiiMaskingUtil#maskName(String)}.
      *
      * @param fullName Raw recipient full name
      * @return Masked name, or "Customer" if input is null or blank
@@ -75,23 +77,7 @@ public class ParcelStatusEventListener {
         if (fullName == null || fullName.isBlank()) {
             return "Customer";
         }
-
-        String[] parts = fullName.trim().split("\\s+");
-        StringBuilder sb = new StringBuilder();
-
-        for (int i = 0; i < parts.length; i++) {
-            String part = parts[i];
-            if (part.length() <= 2) {
-                sb.append(part.charAt(0)).append("*");
-            } else {
-                sb.append(part.charAt(0)).append("***").append(part.charAt(part.length() - 1));
-            }
-            if (i < parts.length - 1) {
-                sb.append(" ");
-            }
-        }
-
-        return sb.toString();
+        return PiiMaskingUtil.maskName(fullName);
     }
 }
 

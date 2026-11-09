@@ -5,6 +5,7 @@ import com.nyxora.swiftdrop.parcel.booking.dto.BookingResponse;
 import com.nyxora.swiftdrop.parcel.booking.dto.CustomerBookingRequest;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteRequest;
 import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteResponse;
 import com.nyxora.swiftdrop.parcel.pricing.QuoteTier;
@@ -316,15 +317,15 @@ class CustomerParcelControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/parcels/track/{trackingNumber} returns 400 when parcel is not found")
-    void trackParcel_notFound_returns400() throws Exception {
+    @DisplayName("GET /api/v1/parcels/track/{trackingNumber} returns 404 when parcel is not found")
+    void trackParcel_notFound_returns404() throws Exception {
         String code = "SD-UNKNOWN-000000";
         when(parcelTrackingService.trackParcel(code))
-                .thenThrow(new IllegalArgumentException("Parcel with tracking number '" + code + "' was not found."));
+                .thenThrow(new ResourceNotFoundException("Parcel with tracking number '" + code + "' was not found."));
 
         mockMvc.perform(get("/api/v1/parcels/track/" + code))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Resource Not Found"))
                 .andExpect(jsonPath("$.detail").value("Parcel with tracking number 'SD-UNKNOWN-000000' was not found."));
     }
 
@@ -404,6 +405,34 @@ class CustomerParcelControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].trackingNumber").value("SD-20261107-7K9P2X"))
                 .andExpect(jsonPath("$.content[0].currency").value("LKR"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/customer/orders clamps page size to maximum 50 and page index to at least 0")
+    void getCustomerOrders_clampsOversizedPageSize() throws Exception {
+        UUID userId = UUID.randomUUID();
+        org.mockito.ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+
+        when(parcelHistoryService.getCustomerOrders(eq(userId), any(), pageableCaptor.capture()))
+                .thenReturn(com.nyxora.swiftdrop.parcel.history.dto.PagedOrderResponse.<com.nyxora.swiftdrop.parcel.history.dto.OrderSummaryDto>builder()
+                        .content(Collections.emptyList())
+                        .pageNumber(0)
+                        .pageSize(50)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .isFirst(true)
+                        .isLast(true)
+                        .build());
+
+        mockMvc.perform(get("/api/v1/parcels/customer/orders?page=-2&size=200")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ROLE_CUSTOMER"))
+                .andExpect(status().isOk());
+
+        org.springframework.data.domain.Pageable captured = pageableCaptor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals(0, captured.getPageNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(50, captured.getPageSize());
     }
 
     // ─────────────────────────────────────────────
