@@ -7,6 +7,8 @@ import {
   Building,
   ArrowRight,
   ShieldCheck,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { BookingFormData, DeliveryZone } from '@/types/booking';
 import { SRI_LANKAN_PHONE_REGEX } from '@/constants/booking';
@@ -17,6 +19,8 @@ interface Step1RouteContactsProps {
   onChange: (updates: Partial<BookingFormData>) => void;
   zones: DeliveryZone[];
   loadingZones: boolean;
+  zoneError?: string | null;
+  onRetryZones?: () => void;
   onNext: () => void;
   isLoggedIn: boolean;
 }
@@ -26,6 +30,8 @@ export default function Step1RouteContacts({
   onChange,
   zones,
   loadingZones,
+  zoneError,
+  onRetryZones,
   onNext,
   isLoggedIn,
 }: Step1RouteContactsProps) {
@@ -65,6 +71,27 @@ export default function Step1RouteContacts({
 
   return (
     <div className="space-y-6">
+      {/* Zone Fetch Error Notice */}
+      {zoneError && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-medium">{zoneError}</span>
+          </div>
+          {onRetryZones && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onRetryZones}
+              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+            >
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ================================================================= */}
         {/* SENDER CARD                                                      */}
@@ -85,12 +112,6 @@ export default function Step1RouteContacts({
                 <p className="text-xs text-slate-500">Origin contact details for collection</p>
               </div>
             </div>
-            {isLoggedIn && (
-              <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" />
-                Verified Customer
-              </span>
-            )}
           </div>
 
           <div className="space-y-3.5">
@@ -112,8 +133,8 @@ export default function Step1RouteContacts({
               required
               value={formData.senderPhone}
               onChange={(val) => onChange({ senderPhone: val })}
-              placeholder="07XXXXXXXX"
-              helperText="Must be 10 digits starting with 07."
+              placeholder="07XXXXXXXX or +947XXXXXXXX"
+              helperText="Valid Sri Lankan mobile or landline (07XXXXXXXX or +94XXXXXXXXX)."
             />
 
             {/* Origin Zone */}
@@ -181,7 +202,7 @@ export default function Step1RouteContacts({
               required
               value={formData.recipientPhone}
               onChange={(val) => onChange({ recipientPhone: val })}
-              placeholder="07XXXXXXXX"
+              placeholder="07XXXXXXXX or +947XXXXXXXX"
               helperText="Courier will call this number prior to doorstep delivery."
             />
 

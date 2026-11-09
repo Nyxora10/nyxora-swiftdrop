@@ -27,6 +27,10 @@ export interface BookingFormData {
 export interface RateQuoteResponse {
   baseRate: number;
   weightSurcharge: number;
+  zoneSurcharge: number;
+  sizeMultiplier: number;
+  expressSurcharge: number;
+  discountAmount: number;
   sizeSurcharge: number;
   tierMultiplier: number;
   totalEstimatedFee: number;
@@ -55,7 +59,6 @@ export interface ParcelQuotePayload {
   weightKg: number;
   parcelSize: ParcelSize;
   tier: DeliveryTier;
-  deliveryTier?: DeliveryTier;
 }
 
 /**
@@ -72,4 +75,3 @@ export interface CustomerBookingPayload {
   parcelSize: ParcelSize;
   tier: DeliveryTier;
 }
-

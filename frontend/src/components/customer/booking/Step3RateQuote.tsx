@@ -194,9 +194,20 @@ export default function Step3RateQuote({
               </div>
             </div>
           ) : (
-            <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error || 'Failed to obtain rate quote. Please try again.'}</span>
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error || 'Failed to obtain rate quote from pricing engine. Please try again.'}</span>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={onRecalculate}
+                leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+              >
+                Recalculate Rate
+              </Button>
             </div>
           )}
         </div>
