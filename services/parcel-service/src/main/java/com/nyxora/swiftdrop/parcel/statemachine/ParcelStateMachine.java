@@ -17,13 +17,13 @@ import java.util.Set;
  * <pre>
  * Permitted Flow:
  * CREATED ───────► ASSIGNED ───► PICKED_UP ───► IN_TRANSIT ───► OUT_FOR_DELIVERY ───► DELIVERED (Terminal)
- *    │                              ▲                                    │
- *    └──────────────────────────────┘                                    ▼
- *                                                                     FAILED
- *                                                                     │     ▲
- *                                      (After 3 failed attempts)      │     │ (Re-attempt < 3)
- *                                                                     ▼     │
- *                                                           RETURNED_TO_SENDER (Terminal)
+ *                                                                    │
+ *                                                                    ▼
+ *                                                                 FAILED
+ *                                                                 │     ▲
+ *                                  (After 3 failed attempts)      │     │ (Re-attempt < 3)
+ *                                                                 ▼     │
+ *                                                       RETURNED_TO_SENDER (Terminal)
  * </pre>
  */
 @Slf4j
@@ -36,9 +36,9 @@ public class ParcelStateMachine {
     private static final Map<ParcelStatus, Set<ParcelStatus>> TRANSITION_MATRIX = new EnumMap<>(ParcelStatus.class);
 
     static {
-        // CREATED can be assigned by a dispatcher, or directly picked up
+        // CREATED must be assigned by a dispatcher to a courier first
         TRANSITION_MATRIX.put(ParcelStatus.CREATED,
-                EnumSet.of(ParcelStatus.ASSIGNED, ParcelStatus.PICKED_UP));
+                EnumSet.of(ParcelStatus.ASSIGNED));
 
         // ASSIGNED courier picks up the parcel from sender
         TRANSITION_MATRIX.put(ParcelStatus.ASSIGNED,
