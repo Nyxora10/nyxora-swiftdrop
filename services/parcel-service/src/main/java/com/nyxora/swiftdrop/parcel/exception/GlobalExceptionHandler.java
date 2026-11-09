@@ -10,6 +10,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import com.nyxora.swiftdrop.parcel.statemachine.InvalidStateTransitionException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,6 +44,21 @@ public class GlobalExceptionHandler {
         log.warn("Resource conflict: {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Resource Conflict");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ProblemDetail handleInvalidStateTransition(InvalidStateTransitionException ex) {
+        log.warn("Invalid parcel state transition: from={} to={}, reason={}",
+                ex.getFromStatus(), ex.getToStatus(), ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Invalid State Transition");
+        if (ex.getFromStatus() != null) {
+            problem.setProperty("fromStatus", ex.getFromStatus().name());
+        }
+        if (ex.getToStatus() != null) {
+            problem.setProperty("toStatus", ex.getToStatus().name());
+        }
         return problem;
     }
 
