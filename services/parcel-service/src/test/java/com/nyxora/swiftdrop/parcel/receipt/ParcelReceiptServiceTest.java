@@ -2,6 +2,7 @@ package com.nyxora.swiftdrop.parcel.receipt;
 
 import com.nyxora.swiftdrop.parcel.domain.entity.Parcel;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,12 +65,12 @@ class ParcelReceiptServiceTest {
     }
 
     @Test
-    @DisplayName("generateReceiptPdf throws IllegalArgumentException when parcel does not exist")
+    @DisplayName("generateReceiptPdf throws ResourceNotFoundException when parcel does not exist")
     void generateReceiptPdf_parcelNotFound_throwsException() {
         when(parcelRepository.findById(parcelId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> receiptService.generateReceiptPdf(parcelId, senderUserId, Collections.emptyList()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Parcel with ID " + parcelId + " was not found.");
     }
 
