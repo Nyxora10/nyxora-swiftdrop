@@ -1,0 +1,9 @@
+# ==============================================================================
+# SwiftDrop Repository Code Owners
+# ==============================================================================
+# These owners will be automatically requested for review on every pull request.
+# In GitHub Branch Rulesets, require "Code Owner Review" so that at least one of
+# the designated owners must approve changes before merging to protected branches.
+
+# Global owners for the entire repository
+* @DileepaPRA @AshenRandira

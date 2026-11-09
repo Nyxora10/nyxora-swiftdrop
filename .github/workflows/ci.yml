@@ -33,6 +33,7 @@ jobs:
         service:
           - auth-service
           - api-gateway
+          - parcel-service
       fail-fast: false
 
     steps:

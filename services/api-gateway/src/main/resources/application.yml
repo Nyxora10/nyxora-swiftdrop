@@ -6,6 +6,8 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
       globalcors:
         cors-configurations:
           '[/**]':
@@ -40,6 +42,19 @@ spring:
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/notifications/**,/api/v1/webhooks/**
+
+        # Route 4: Parcel Service WebSocket Route (Port 8082 - Task 4.4 Member 7)
+        - id: parcel-service-websocket-route
+          uri: ${PARCEL_SERVICE_WS_URL:ws://localhost:8082}
+          predicates:
+            - Path=/ws-swiftdrop/**
+            - Header=Upgrade, (?i)websocket
+
+        # Route 5: Parcel Service SockJS HTTP Handshake & Fallback Route (Task 4.4 Member 7)
+        - id: parcel-service-sockjs-route
+          uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/ws-swiftdrop/**
 
 app:
   jwt:
