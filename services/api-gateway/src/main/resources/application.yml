@@ -6,8 +6,11 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      # Backend services also protect direct development access with CORS.
+      # Keep a single edge-owned header when their responses pass through here;
+      # browsers reject comma-joined duplicate Access-Control-Allow-* values.
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin RETAIN_FIRST
       globalcors:
         cors-configurations:
           '[/**]':
