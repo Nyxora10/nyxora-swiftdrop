@@ -51,6 +51,13 @@ spring:
           uri: ${PARCEL_SERVICE_WS_URL:ws://localhost:8082}
           predicates:
             - Path=/ws-swiftdrop/**
+            - Header=Upgrade, (?i)websocket
+
+        # Route 5: Parcel Service SockJS HTTP Handshake & Fallback Route (Task 4.4 Member 7)
+        - id: parcel-service-sockjs-route
+          uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/ws-swiftdrop/**
 
 app:
   jwt:

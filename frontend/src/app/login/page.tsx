@@ -146,7 +146,6 @@ function LoginForm() {
       };
 
       const status = error.response?.status;
-
       const errorData = error.response?.data;
       const detail = errorData?.detail || '';
       const type = errorData?.type || '';
