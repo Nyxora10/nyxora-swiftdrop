@@ -26,6 +26,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -179,5 +181,110 @@ class DispatchReportControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/unassigned with originZoneId query parameter filters parcels")
+    void getUnassignedParcels_withOriginZoneId_filtersSuccessfully() throws Exception {
+        UUID parcelId = UUID.randomUUID();
+        UnassignedParcelResponse parcelDto = new UnassignedParcelResponse(
+                parcelId,
+                "SD-20261107-789012",
+                "No. 12, Main St, Colombo",
+                "No. 45, Temple Rd, Kandy",
+                "Nimal Jayasinghe",
+                "+94771112233",
+                BigDecimal.valueOf(2.50),
+                ParcelSize.MEDIUM,
+                BigDecimal.valueOf(850.00),
+                ParcelStatus.CREATED,
+                1, "WP-COL-01", "Colombo Central",
+                5, "CP-KDY-01", "Kandy Central",
+                Instant.now()
+        );
+
+        when(dispatchService.getUnassignedParcels(1)).thenReturn(List.of(parcelDto));
+
+        mockMvc.perform(get("/api/v1/parcels/unassigned")
+                        .param("originZoneId", "1")
+                        .header("X-User-Id", ADMIN_USER_ID)
+                        .header("X-User-Role", "ROLE_ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].trackingNumber").value("SD-20261107-789012"))
+                .andExpect(jsonPath("$[0].originZoneId").value(1));
+
+        verify(dispatchService).getUnassignedParcels(1);
+    }
+
+    @Test
+    @DisplayName("assignCourier method directly with null userIdHeader passes null adminUserId to service")
+    void assignCourier_nullHeaderDirect_passesNullAdminId() {
+        DispatchReportController controller = new DispatchReportController(dispatchService);
+        UUID parcelId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        when(dispatchService.assignCourier(eq(parcelId), any(), isNull())).thenReturn(null);
+
+        controller.assignCourier(parcelId, request, null);
+
+        verify(dispatchService).assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull());
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/parcels/{id}/assign with blank X-User-Id header passes null adminUserId")
+    void assignCourier_withBlankUserIdHeader_passesNullAdminId() throws Exception {
+        UUID parcelId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        AssignCourierResponse response = new AssignCourierResponse(
+                parcelId,
+                "SD-20261107-123456",
+                courierId,
+                "ASSIGNED",
+                Instant.now(),
+                "Parcel assigned successfully"
+        );
+
+        when(dispatchService.assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull()))
+                .thenReturn(response);
+
+        mockMvc.perform(put("/api/v1/parcels/" + parcelId + "/assign")
+                        .header("X-User-Id", "   ")
+                        .header("X-User-Role", "ROLE_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ASSIGNED"));
+
+        verify(dispatchService).assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull());
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/parcels/{id}/assign with invalid format X-User-Id header catches exception and passes null adminUserId")
+    void assignCourier_withInvalidUserIdHeader_passesNullAdminId() throws Exception {
+        UUID parcelId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+        AssignCourierRequest request = new AssignCourierRequest(courierId);
+        AssignCourierResponse response = new AssignCourierResponse(
+                parcelId,
+                "SD-20261107-123456",
+                courierId,
+                "ASSIGNED",
+                Instant.now(),
+                "Parcel assigned successfully"
+        );
+
+        when(dispatchService.assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull()))
+                .thenReturn(response);
+
+        mockMvc.perform(put("/api/v1/parcels/" + parcelId + "/assign")
+                        .header("X-User-Id", "invalid-uuid-string")
+                        .header("X-User-Role", "ROLE_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ASSIGNED"));
+
+        verify(dispatchService).assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull());
     }
 }
