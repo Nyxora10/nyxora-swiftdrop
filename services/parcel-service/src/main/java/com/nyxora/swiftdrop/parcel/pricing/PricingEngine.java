@@ -45,6 +45,10 @@ public class PricingEngine {
                 request.getOriginZoneId(), request.getDestinationZoneId(),
                 request.getWeightKg(), request.getParcelSize(), request.getTier());
 
+        if (request.getOriginZoneId().equals(request.getDestinationZoneId())) {
+            throw new IllegalArgumentException("Origin and destination zones must be different");
+        }
+
         // Resolve destination zone for surcharge
         DeliveryZone destZone = deliveryZoneRepository.findById(request.getDestinationZoneId())
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -90,4 +94,3 @@ public class PricingEngine {
         return quote;
     }
 }
-

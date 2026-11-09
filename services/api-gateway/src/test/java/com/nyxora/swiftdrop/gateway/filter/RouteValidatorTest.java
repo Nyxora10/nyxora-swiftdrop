@@ -29,7 +29,11 @@ class RouteValidatorTest {
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/google").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/apple").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/facebook").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/parcels/quote").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/parcels/track/SD-20261101-0001").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/public/zones").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/public/zones?search=Colombo").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/webhooks/demo-receiver").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/health").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/info").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/v3/api-docs").build()));
@@ -69,5 +73,13 @@ class RouteValidatorTest {
     @DisplayName("Task 4.2: /api/v1/webhooks/other is secured (only demo-receiver is whitelisted)")
     void otherWebhooks_ReturnSecured() {
         assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/webhooks/merchant-payload").build()));
+    }
+
+    @Test
+    @DisplayName("Paths that only share a public endpoint prefix remain secured")
+    void lookalikePublicEndpointPrefixes_ReturnSecured() {
+        assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/auth/login-callback").build()));
+        assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/parcels/quote-preview").build()));
+        assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/healthcheck").build()));
     }
 }

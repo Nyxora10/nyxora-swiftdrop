@@ -82,33 +82,6 @@ function LoginForm() {
     setEmail(acc.email);
     setPassword(acc.pass);
     setErrorMessage(null);
-
-    // Direct 1-click login for smooth demo testing
-    const resolvedRole = `ROLE_${acc.role}`;
-    authStorage.setSession(
-      { accessToken: 'mock-jwt-token-active', refreshToken: 'mock-refresh-token-active' },
-      {
-        userId: '00000000-0000-0000-0000-000000000001',
-        email: acc.email,
-        role: resolvedRole,
-        fullName: acc.label,
-        status: 'ACTIVE',
-      }
-    );
-    toast.success(`Signed in as ${acc.label}!`);
-    if (redirectUrl) {
-      router.push(redirectUrl);
-      return;
-    }
-    if (resolvedRole === 'ROLE_ADMIN') {
-      router.push('/admin/pricing');
-    } else if (resolvedRole === 'ROLE_MERCHANT') {
-      router.push('/merchant/dashboard');
-    } else if (resolvedRole === 'ROLE_COURIER') {
-      router.push('/courier/runsheet');
-    } else {
-      router.push('/customer/book');
-    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -356,14 +329,14 @@ function LoginForm() {
             </button>
           </div>
 
-          {/* Quick-Fill Demo Section (1-Click for Demo) */}
+          {/* Demo credential helper */}
           <div className="mt-8 pt-6 border-t border-slate-100">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                1-Click Demo Accounts
+                Demo Account Credentials
               </span>
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                Instant Access
+                Fill Form
               </span>
             </div>
 

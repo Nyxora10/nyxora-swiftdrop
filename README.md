@@ -155,7 +155,7 @@ Start the multi-database PostgreSQL container:
 ```bash
 docker compose up -d
 ```
-*This boots PostgreSQL on `localhost:5432` and automatically initializes `auth_db`, `parcel_db`, and `notification_db`.*
+*This boots PostgreSQL on `localhost:5433` and automatically initializes `auth_db`, `parcel_db`, and `notification_db`. Port 5433 avoids conflicts with a PostgreSQL installation already using the standard host port 5432.*
 
 ### 3. Run Microservices
 In separate terminal sessions:
@@ -169,6 +169,12 @@ mvn spring-boot:run
 **Start API Gateway (Port 8080):**
 ```bash
 cd services/api-gateway
+mvn spring-boot:run
+```
+
+**Start Parcel Service (Port 8082):**
+```bash
+cd services/parcel-service
 mvn spring-boot:run
 ```
 

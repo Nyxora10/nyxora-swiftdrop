@@ -19,7 +19,6 @@ import {
   Boxes,
   LogOut,
   User as UserIcon,
-  Shield,
 } from 'lucide-react';
 import { UserSession, authStorage } from '@/lib/auth';
 import api from '@/lib/api';

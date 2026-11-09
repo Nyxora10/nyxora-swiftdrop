@@ -1,17 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
-import { useUserSession } from '@/lib/auth';
+import { authStorage, useUserSession } from '@/lib/auth';
 
 interface AppShellProps {
   children: React.ReactNode;
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const user = useUserSession();
+
+  useEffect(() => {
+    if (!authStorage.getAccessToken()) {
+      router.replace('/login?session_expired=true');
+    }
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">

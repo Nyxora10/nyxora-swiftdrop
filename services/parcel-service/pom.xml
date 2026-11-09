@@ -22,6 +22,7 @@
         <springdoc.version>2.6.0</springdoc.version>
         <openpdf.version>2.0.3</openpdf.version>
         <zxing.version>3.5.3</zxing.version>
+        <aws.sdk.version>2.25.27</aws.sdk.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <argLine></argLine>
@@ -97,6 +98,13 @@
             <groupId>com.google.zxing</groupId>
             <artifactId>javase</artifactId>
             <version>${zxing.version}</version>
+        </dependency>
+
+        <!-- AWS Java SDK v2 S3 (Member 6: Cloud Object Storage for Delivery Proofs) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
         </dependency>
 
         <!-- PostgreSQL JDBC Driver (runtime only) -->

@@ -4,6 +4,8 @@ import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceConflictException;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,7 +47,7 @@ public class ZonePricingService {
     @Transactional(readOnly = true)
     public DeliveryZone getZoneById(Integer id) {
         return zoneRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Delivery zone not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery zone not found: " + id));
     }
 
     /**
@@ -56,7 +58,7 @@ public class ZonePricingService {
     @Transactional
     public DeliveryZone createZone(CreateZoneRequest request) {
         if (zoneRepository.existsByZoneCode(request.getZoneCode())) {
-            throw new IllegalArgumentException("Zone code already exists: " + request.getZoneCode());
+            throw new ResourceConflictException("Zone code already exists: " + request.getZoneCode());
         }
         DeliveryZone zone = DeliveryZone.builder()
                 .zoneCode(request.getZoneCode())
@@ -75,6 +77,12 @@ public class ZonePricingService {
     @Transactional
     public DeliveryZone updateZone(Integer id, UpdateZoneRequest request) {
         DeliveryZone zone = getZoneById(id);
+        if (request.getZoneName() == null
+                && request.getDistrict() == null
+                && request.getBaseSurcharge() == null
+                && request.getIsActive() == null) {
+            throw new IllegalArgumentException("At least one zone field must be provided for update");
+        }
         if (request.getZoneName()      != null) zone.setZoneName(request.getZoneName());
         if (request.getDistrict()      != null) zone.setDistrict(request.getDistrict());
         if (request.getBaseSurcharge() != null) zone.setBaseSurcharge(request.getBaseSurcharge());
@@ -99,7 +107,7 @@ public class ZonePricingService {
     @Transactional(readOnly = true)
     public PricingRule getPricingRuleById(Integer id) {
         return pricingRuleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Pricing rule not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found: " + id));
     }
 
     /**
@@ -109,15 +117,18 @@ public class ZonePricingService {
      */
     @Transactional
     public PricingRule createPricingRule(CreatePricingRuleRequest request) {
+        if (request.getOriginZoneId().equals(request.getDestinationZoneId())) {
+            throw new IllegalArgumentException("Origin and destination zones must be different");
+        }
         DeliveryZone originZone = zoneRepository.findById(request.getOriginZoneId())
-                .orElseThrow(() -> new IllegalArgumentException("Origin zone not found: " + request.getOriginZoneId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Origin zone not found: " + request.getOriginZoneId()));
         DeliveryZone destZone = zoneRepository.findById(request.getDestinationZoneId())
-                .orElseThrow(() -> new IllegalArgumentException("Destination zone not found: " + request.getDestinationZoneId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Destination zone not found: " + request.getDestinationZoneId()));
 
         pricingRuleRepository.findByOriginZone_IdAndDestinationZone_IdAndParcelSize(
                 request.getOriginZoneId(), request.getDestinationZoneId(), request.getParcelSize()
         ).ifPresent(existing -> {
-            throw new IllegalArgumentException(String.format(
+            throw new ResourceConflictException(String.format(
                     "Pricing rule already exists for origin=%d, destination=%d, size=%s",
                     request.getOriginZoneId(), request.getDestinationZoneId(), request.getParcelSize()));
         });
@@ -140,10 +151,14 @@ public class ZonePricingService {
     @Transactional
     public PricingRule updatePricingRule(Integer id, UpdatePricingRuleRequest request) {
         PricingRule rule = getPricingRuleById(id);
+        if (request.getBaseFee() == null
+                && request.getRatePerKg() == null
+                && request.getSizeMultiplier() == null) {
+            throw new IllegalArgumentException("At least one pricing field must be provided for update");
+        }
         if (request.getBaseFee()        != null) rule.setBaseFee(request.getBaseFee());
         if (request.getRatePerKg()      != null) rule.setRatePerKg(request.getRatePerKg());
         if (request.getSizeMultiplier() != null) rule.setSizeMultiplier(request.getSizeMultiplier());
         return pricingRuleRepository.save(rule);
     }
 }
-

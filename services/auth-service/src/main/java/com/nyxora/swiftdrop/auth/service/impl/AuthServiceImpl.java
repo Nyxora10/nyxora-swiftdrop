@@ -245,7 +245,23 @@ public class AuthServiceImpl implements AuthService {
             throw new AccountRejectedException("Your account application was rejected. Reason: " + reason);
         }
 
-        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+        // Task 2.5 — embed courierId / merchantId into JWT so the Gateway can inject headers
+        UUID courierId = null;
+        UUID merchantId = null;
+        RoleName roleName = user.getRole().getName();
+        if (roleName == RoleName.ROLE_COURIER) {
+            courierId = courierRepository.findByUserId(user.getId())
+                    .map(Courier::getId)
+                    .orElse(null);
+        } else if (roleName == RoleName.ROLE_MERCHANT) {
+            merchantId = merchantRepository.findByUserId(user.getId())
+                    .map(Merchant::getId)
+                    .orElse(null);
+        }
+
+        UserPrincipal principal = (courierId != null || merchantId != null)
+                ? UserPrincipal.create(user, courierId, merchantId)
+                : (UserPrincipal) authentication.getPrincipal();
         String accessToken = jwtTokenProvider.generateAccessToken(principal);
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
@@ -373,7 +389,19 @@ public class AuthServiceImpl implements AuthService {
             throw new AccountPendingApprovalException("User account is not currently active.");
         }
 
-        UserPrincipal principal = UserPrincipal.create(user);
+        // Task 2.5 — re-embed courier/merchant IDs on token refresh
+        UUID refreshCourierId = null;
+        UUID refreshMerchantId = null;
+        RoleName refreshRole = user.getRole().getName();
+        if (refreshRole == RoleName.ROLE_COURIER) {
+            refreshCourierId = courierRepository.findByUserId(user.getId())
+                    .map(Courier::getId).orElse(null);
+        } else if (refreshRole == RoleName.ROLE_MERCHANT) {
+            refreshMerchantId = merchantRepository.findByUserId(user.getId())
+                    .map(Merchant::getId).orElse(null);
+        }
+
+        UserPrincipal principal = UserPrincipal.create(user, refreshCourierId, refreshMerchantId);
         String newAccessToken = jwtTokenProvider.generateAccessToken(principal);
 
         return AuthResponse.of(

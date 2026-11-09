@@ -8,28 +8,36 @@ export async function POST(
   let reason = '';
   try {
     const body = await request.json();
-    reason = body.reason || '';
+    reason = typeof body.reason === 'string' ? body.reason : '';
   } catch {
-    // ignore
+    // Forward an empty payload so the backend returns its normal validation error.
   }
 
   try {
     const backendRes = await fetch(`http://localhost:8080/api/v1/auth/admin/users/${id}/suspend`, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Authorization': request.headers.get('authorization') || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ reason }),
-      signal: AbortSignal.timeout(600),
+      signal: AbortSignal.timeout(5000),
     });
-    if (backendRes.ok) {
-      return NextResponse.json(await backendRes.json());
-    }
-  } catch {
-    // Backend offline -> mock success
-  }
 
-  return NextResponse.json({ success: true, id, status: 'SUSPENDED', reason });
+    return new NextResponse(await backendRes.text(), {
+      status: backendRes.status,
+      headers: {
+        'Content-Type': backendRes.headers.get('content-type') || 'application/json',
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        title: 'Auth service unavailable',
+        detail: 'The suspension could not be saved because the authentication service is unavailable.',
+      },
+      { status: 503 }
+    );
+  }
 }
 

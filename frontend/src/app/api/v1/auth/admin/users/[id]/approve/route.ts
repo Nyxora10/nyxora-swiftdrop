@@ -8,20 +8,28 @@ export async function POST(
 
   try {
     const backendRes = await fetch(`http://localhost:8080/api/v1/auth/admin/users/${id}/approve`, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Authorization': request.headers.get('authorization') || '',
         'Content-Type': 'application/json',
       },
-      signal: AbortSignal.timeout(600),
+      signal: AbortSignal.timeout(5000),
     });
-    if (backendRes.ok) {
-      return NextResponse.json(await backendRes.json());
-    }
-  } catch {
-    // Backend offline -> mock success
-  }
 
-  return NextResponse.json({ success: true, id, status: 'ACTIVE' });
+    return new NextResponse(await backendRes.text(), {
+      status: backendRes.status,
+      headers: {
+        'Content-Type': backendRes.headers.get('content-type') || 'application/json',
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        title: 'Auth service unavailable',
+        detail: 'The approval could not be saved because the authentication service is unavailable.',
+      },
+      { status: 503 }
+    );
+  }
 }
 

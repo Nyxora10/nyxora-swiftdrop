@@ -37,7 +37,7 @@ public class CreatePricingRuleRequest {
     private ParcelSize parcelSize;
 
     @DecimalMin(value = "1.00", message = "Size multiplier must be at least 1.00")
+    @NotNull(message = "Size multiplier is required")
     @Builder.Default
     private BigDecimal sizeMultiplier = BigDecimal.ONE;
 }
-

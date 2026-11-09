@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
+import com.nyxora.swiftdrop.parcel.exception.ResourceConflictException;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreatePricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreateZoneRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdatePricingRuleRequest;
@@ -24,6 +26,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -134,6 +137,55 @@ class ZonePricingAdminControllerTest {
                 .andExpect(jsonPath("$.zoneName").value("Colombo Central Renovated"));
     }
 
+    @Test
+    @DisplayName("GET /api/v1/zones/{id} returns 404 when the zone is missing")
+    void getZone_missing_returns404() throws Exception {
+        when(zonePricingService.getZoneById(999))
+                .thenThrow(new ResourceNotFoundException("Delivery zone not found: 999"));
+
+        mockMvc.perform(get("/api/v1/zones/999")
+                        .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
+                        .header("X-User-Role", "ROLE_ADMIN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Resource Not Found"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/zones returns 409 for a duplicate zone code")
+    void createZone_duplicate_returns409() throws Exception {
+        CreateZoneRequest request = CreateZoneRequest.builder()
+                .zoneCode("WP-COL-02")
+                .zoneName("Duplicate Colombo")
+                .district("Colombo")
+                .baseSurcharge(BigDecimal.ZERO)
+                .build();
+
+        when(zonePricingService.createZone(any(CreateZoneRequest.class)))
+                .thenThrow(new ResourceConflictException("Zone code already exists: WP-COL-02"));
+
+        mockMvc.perform(post("/api/v1/zones")
+                        .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
+                        .header("X-User-Role", "ROLE_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Resource Conflict"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/zones/{id} validates partial update values")
+    void updateZone_negativeSurcharge_returns422() throws Exception {
+        mockMvc.perform(put("/api/v1/zones/1")
+                        .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
+                        .header("X-User-Role", "ROLE_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"baseSurcharge\":-1}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.title").value("Validation Failed"));
+
+        verifyNoInteractions(zonePricingService);
+    }
+
     // ─────────────────────────────────────────────
     //  PRICING RULE ENDPOINTS
     // ─────────────────────────────────────────────
@@ -217,4 +269,3 @@ class ZonePricingAdminControllerTest {
                 .andExpect(jsonPath("$.baseFee").value(275.00));
     }
 }
-

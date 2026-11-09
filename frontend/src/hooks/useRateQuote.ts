@@ -16,27 +16,24 @@ export function useRateQuote(formData: BookingFormData, currentStep: number) {
     try {
       const quote = await getRateQuote(formData);
       setQuoteResult(quote);
-    } catch (err: any) {
-      console.warn('API quote request error, computing fallback estimate:', err);
+    } catch (error: unknown) {
+      console.warn('API quote request error, computing fallback estimate:', error);
       // Fallback calculation for offline resilience
       const fallback = calculateFallbackQuote(formData);
       setQuoteResult(fallback);
     } finally {
       setQuoteLoading(false);
     }
-  }, [
-    formData.originZoneId,
-    formData.destinationZoneId,
-    formData.weightKg,
-    formData.parcelSize,
-    formData.deliveryTier,
-  ]);
+  }, [formData]);
 
   // Trigger quote calculation whenever entering Step 3 or when quote parameters update
   useEffect(() => {
-    if (currentStep === 3) {
-      fetchQuote();
-    }
+    if (currentStep !== 3) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchQuote();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [currentStep, fetchQuote]);
 
   const clearQuote = useCallback(() => {

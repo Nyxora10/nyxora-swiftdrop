@@ -178,5 +178,20 @@ class PricingEngineTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("No pricing rule found");
     }
-}
 
+    @Test
+    @DisplayName("Rejects quote when origin and destination zones are the same")
+    void calculateQuote_sameZone_throwsException() {
+        ParcelQuoteRequest request = ParcelQuoteRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(1)
+                .weightKg(new BigDecimal("1.0"))
+                .parcelSize(ParcelSize.SMALL)
+                .tier(QuoteTier.STANDARD)
+                .build();
+
+        assertThatThrownBy(() -> pricingEngine.calculateQuote(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Origin and destination zones must be different");
+    }
+}

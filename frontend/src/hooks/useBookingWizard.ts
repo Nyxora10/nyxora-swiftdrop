@@ -16,13 +16,15 @@ export function useBookingWizard({ userFullName, zones }: UseBookingWizardOption
   // Auto-prefill sender details from active authenticated session
   useEffect(() => {
     if (userFullName && !formData.senderName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronize the authenticated profile after hydration.
       setFormData((prev) => ({ ...prev, senderName: userFullName }));
     }
-  }, [userFullName]);
+  }, [formData.senderName, userFullName]);
 
   // Synchronize initial zone selections once zones are resolved
   useEffect(() => {
     if (zones.length >= 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronize selections after remote zones resolve.
       setFormData((prev) => {
         const hasValidOrigin = zones.some((z) => z.id === prev.originZoneId);
         const hasValidDest = zones.some((z) => z.id === prev.destinationZoneId);
