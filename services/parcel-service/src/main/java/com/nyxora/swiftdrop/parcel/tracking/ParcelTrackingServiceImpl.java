@@ -55,7 +55,7 @@ public class ParcelTrackingServiceImpl implements ParcelTrackingService {
         String maskedPhone = PiiMaskingUtil.maskPhoneNumber(parcel.getRecipientPhone());
         String maskedAddress = PiiMaskingUtil.maskAddress(parcel.getDropoffAddress());
         String maskedName = maskRecipientName(parcel.getRecipientName());
-
+                
         return ParcelTrackingResponse.builder()
                 .trackingNumber(parcel.getTrackingNumber())
                 .currentStatus(parcel.getCurrentStatus())
