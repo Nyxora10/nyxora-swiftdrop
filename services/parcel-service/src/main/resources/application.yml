@@ -19,6 +19,14 @@ spring:
     properties:
       "[hibernate.format_sql]": true
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
 # SpringDoc OpenAPI & Swagger UI
 springdoc:
   api-docs:
