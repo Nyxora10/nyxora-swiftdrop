@@ -6,6 +6,11 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      # Backend services also protect direct development access with CORS.
+      # Keep a single edge-owned header when their responses pass through here;
+      # browsers reject comma-joined duplicate Access-Control-Allow-* values.
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin RETAIN_FIRST
       globalcors:
         cors-configurations:
           '[/**]':
@@ -33,13 +38,26 @@ spring:
         - id: parcel-service-route
           uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
           predicates:
-            - Path=/api/v1/parcels/**,/api/v1/pricing/**,/api/v1/zones/**,/api/v1/couriers/**
+            - Path=/api/v1/parcels/**,/api/v1/pricing/**,/api/v1/zones/**,/api/v1/couriers/**,/api/v1/public/**
 
         # Route 3: Notification Webhook Service (Port 8083 - Prepared)
         - id: notification-service-route
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/notifications/**,/api/v1/webhooks/**
+
+        # Route 4: Parcel Service WebSocket Route (Port 8082 - Task 4.4 Member 7)
+        - id: parcel-service-websocket-route
+          uri: ${PARCEL_SERVICE_WS_URL:ws://localhost:8082}
+          predicates:
+            - Path=/ws-swiftdrop/**
+            - Header=Upgrade, (?i)websocket
+
+        # Route 5: Parcel Service SockJS HTTP Handshake & Fallback Route (Task 4.4 Member 7)
+        - id: parcel-service-sockjs-route
+          uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/ws-swiftdrop/**
 
 app:
   jwt:
