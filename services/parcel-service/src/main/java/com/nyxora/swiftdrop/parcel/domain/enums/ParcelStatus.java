@@ -9,9 +9,14 @@ package com.nyxora.swiftdrop.parcel.domain.enums;
  * {@code com.nyxora.swiftdrop.parcel.statemachine.ParcelStateMachine}.
  *
  * <pre>
- * CREATED → ASSIGNED → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED
- *    └──────────────↗                                   ↘ FAILED ──↗ (re-attempt)
- *                                                          ↘ RETURNED_TO_SENDER (after 3 failures)
+ * CREATED ───────► ASSIGNED ───► PICKED_UP ───► IN_TRANSIT ───► OUT_FOR_DELIVERY ───► DELIVERED (Terminal)
+ *                                                                    │
+ *                                                                    ▼
+ *                                                                 FAILED
+ *                                                                 │     ▲
+ *                                  (After 3 failed attempts)      │     │ (Re-attempt < 3)
+ *                                                                 ▼     │
+ *                                                       RETURNED_TO_SENDER (Terminal)
  * </pre>
  */
 public enum ParcelStatus {

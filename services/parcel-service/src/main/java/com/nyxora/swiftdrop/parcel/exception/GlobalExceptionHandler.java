@@ -31,6 +31,22 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Resource Not Found");
+        return problem;
+    }
+
+    @ExceptionHandler(ResourceConflictException.class)
+    public ProblemDetail handleResourceConflict(ResourceConflictException ex) {
+        log.warn("Resource conflict: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Resource Conflict");
+        return problem;
+    }
+
     @ExceptionHandler(InvalidStateTransitionException.class)
     public ProblemDetail handleInvalidStateTransition(InvalidStateTransitionException ex) {
         log.warn("Invalid parcel state transition: from={} to={}, reason={}",

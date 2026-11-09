@@ -32,7 +32,7 @@ export function usePdfReceipt({ toast }: UsePdfReceiptOptions) {
             const blob = generateDemoPdf(bookingResult);
             triggerBlobDownload(blob, `SwiftDrop-Receipt-${bookingResult.trackingNumber}.pdf`);
             toast.success('Digital PDF delivery receipt downloaded successfully!');
-          } catch (e) {
+          } catch {
             toast.error('Failed to generate mock PDF.');
           } finally {
             setDownloadingPdf(false);
@@ -45,8 +45,8 @@ export function usePdfReceipt({ toast }: UsePdfReceiptOptions) {
         const blob = await downloadReceiptPdf(bookingResult.parcelId);
         triggerBlobDownload(blob, `SwiftDrop-Receipt-${bookingResult.trackingNumber}.pdf`);
         toast.success('Digital PDF delivery receipt downloaded successfully!');
-      } catch (err: any) {
-        console.error('Failed to download PDF receipt:', err);
+      } catch (error: unknown) {
+        console.error('Failed to download PDF receipt:', error);
         toast.error('Unable to generate PDF receipt. Please check authorization or try again later.');
       } finally {
         setDownloadingPdf(false);
