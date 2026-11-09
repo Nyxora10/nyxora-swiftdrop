@@ -42,7 +42,7 @@ class AiChatServiceImplTest {
         ChatMemoryRepository repository = config.chatMemoryRepository();
         chatMemory = config.chatMemory(repository);
 
-        parcelTrackingTool = new ParcelTrackingTool();
+        parcelTrackingTool = new ParcelTrackingTool(mock(com.nyxora.swiftdrop.ai_assistant_service.client.ParcelServiceClient.class));
         rateQuoteTool = new RateQuoteTool();
 
         aiChatService = new AiChatServiceImpl(builder, chatMemory, parcelTrackingTool, rateQuoteTool);
