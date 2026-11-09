@@ -25,6 +25,11 @@ const ACCESS_TOKEN_KEY = 'swiftdrop_access_token';
 const REFRESH_TOKEN_KEY = 'swiftdrop_refresh_token';
 const USER_KEY = 'swiftdrop_user';
 
+function isJwtFormatted(token: string): boolean {
+  const segments = token.split('.');
+  return segments.length === 3 && segments.every((segment) => segment.length > 0);
+}
+
 // Cookie helper
 function setCookie(name: string, value: string, days = 7) {
   if (typeof document === 'undefined') return;
@@ -46,7 +51,12 @@ function removeCookie(name: string) {
 export const authStorage = {
   getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(ACCESS_TOKEN_KEY) || getCookie(ACCESS_TOKEN_KEY);
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY) || getCookie(ACCESS_TOKEN_KEY);
+    if (token && !isJwtFormatted(token)) {
+      this.clearSession();
+      return null;
+    }
+    return token;
   },
 
   setAccessToken(token: string) {

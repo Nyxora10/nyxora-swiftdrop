@@ -23,7 +23,9 @@ public class RouteValidator {
             "/api/v1/auth/google",
             "/api/v1/auth/apple",
             "/api/v1/auth/facebook",
+            "/api/v1/parcels/quote",
             "/api/v1/parcels/track",
+            "/api/v1/public/zones",
             "/ws-swiftdrop",
             "/actuator/health",
             "/actuator/info",
@@ -36,6 +38,7 @@ public class RouteValidator {
      */
     public Predicate<ServerHttpRequest> isSecured = request -> {
         String path = request.getPath().pathWithinApplication().value();
-        return OPEN_API_ENDPOINTS.stream().noneMatch(path::startsWith);
+        return OPEN_API_ENDPOINTS.stream()
+                .noneMatch(endpoint -> path.equals(endpoint) || path.startsWith(endpoint + "/"));
     };
 }
