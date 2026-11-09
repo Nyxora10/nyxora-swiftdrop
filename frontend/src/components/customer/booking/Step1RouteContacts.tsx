@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   AlertCircle,
   RefreshCw,
+  Navigation,
 } from 'lucide-react';
 import { BookingFormData, DeliveryZone } from '@/types/booking';
 import { SRI_LANKAN_PHONE_REGEX } from '@/constants/booking';
@@ -102,8 +103,8 @@ export default function Step1RouteContacts({
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                1A
+              <div className="w-8 h-8 rounded-lg bg-emerald-30 text-blue-600 flex items-center justify-center border border-blue-100/80">
+                <MapPin className="w-4 h-4 text-blue-600" aria-hidden="true" />
               </div>
               <div>
                 <h2 id="sender-card-title" className="text-sm font-bold text-slate-900">
@@ -171,8 +172,8 @@ export default function Step1RouteContacts({
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                1B
+              <div className="w-8 h-8 rounded-lg bg-emerald-30 text-blue-600 flex items-center justify-center border border-emerald-100/80">
+                <Navigation className="w-4 h-4 text-blue-600" aria-hidden="true" />
               </div>
               <div>
                 <h2 id="recipient-card-title" className="text-sm font-bold text-slate-900">

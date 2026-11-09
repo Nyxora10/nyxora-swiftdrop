@@ -30,16 +30,26 @@ export async function getRateQuote(formData: BookingFormData): Promise<RateQuote
   const res = await api.post('/api/v1/parcels/quote', payload);
   const raw = res.data;
 
+  const baseRate = Number(raw.baseFee ?? 0);
+  const weightSurcharge = Number(raw.weightCharge ?? 0);
+  const sizeMultiplier = Number(raw.sizeMultiplier ?? 1.0);
+  const zoneSurcharge = Number(raw.zoneSurcharge ?? 0);
+  const expressSurcharge = Number(raw.expressSurcharge ?? 0);
+  const discountAmount = Number(raw.discountAmount ?? 0);
+
+  // Incremental volumetric size surcharge: (baseRate + weightSurcharge) * (sizeMultiplier - 1.0)
+  const routeSubtotal = baseRate + weightSurcharge;
+  const sizeSurcharge = Math.round(routeSubtotal * (sizeMultiplier - 1.0) * 100) / 100;
+
   return {
-    baseRate: Number(raw.baseFee),
-    weightSurcharge: Number(raw.weightCharge),
-    zoneSurcharge: Number(raw.zoneSurcharge),
-    sizeMultiplier: Number(raw.sizeMultiplier),
-    expressSurcharge: Number(raw.expressSurcharge ?? 0),
-    discountAmount: Number(raw.discountAmount ?? 0),
-    // Surcharges for breakdown display:
-    sizeSurcharge: Number(raw.zoneSurcharge ?? 0),
-    tierMultiplier: Number(raw.sizeMultiplier ?? 1.0),
+    baseRate,
+    weightSurcharge,
+    zoneSurcharge,
+    sizeMultiplier,
+    expressSurcharge,
+    discountAmount,
+    sizeSurcharge,
+    tierMultiplier: sizeMultiplier,
     totalEstimatedFee: Number(raw.totalFee),
     currency: 'LKR',
     estimatedDeliveryHours: formData.deliveryTier === 'EXPRESS' ? 24 : 48,

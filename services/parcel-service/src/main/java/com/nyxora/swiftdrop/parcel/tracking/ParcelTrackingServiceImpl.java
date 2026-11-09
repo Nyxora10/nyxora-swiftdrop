@@ -5,6 +5,7 @@ import com.nyxora.swiftdrop.parcel.domain.entity.Parcel;
 import com.nyxora.swiftdrop.parcel.domain.entity.ParcelStatusHistory;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelStatusHistoryRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.tracking.dto.ParcelTrackingResponse;
 import com.nyxora.swiftdrop.parcel.tracking.dto.TrackingTimelineEventDto;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +39,7 @@ public class ParcelTrackingServiceImpl implements ParcelTrackingService {
         log.debug("Processing public tracking request for code: {}", normalizedCode);
 
         Parcel parcel = parcelRepository.findByTrackingNumber(normalizedCode)
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Parcel with tracking number '" + normalizedCode + "' was not found."));
 
         List<ParcelStatusHistory> history =
@@ -54,7 +55,7 @@ public class ParcelTrackingServiceImpl implements ParcelTrackingService {
 
         String maskedPhone = PiiMaskingUtil.maskPhoneNumber(parcel.getRecipientPhone());
         String maskedAddress = PiiMaskingUtil.maskAddress(parcel.getDropoffAddress());
-        String maskedName = maskRecipientName(parcel.getRecipientName());
+        String maskedName = PiiMaskingUtil.maskName(parcel.getRecipientName());
 
         return ParcelTrackingResponse.builder()
                 .trackingNumber(parcel.getTrackingNumber())
@@ -71,42 +72,6 @@ public class ParcelTrackingServiceImpl implements ParcelTrackingService {
                 .createdAt(parcel.getCreatedAt())
                 .timeline(timeline)
                 .build();
-    }
-
-    /**
-     * Masks recipient full names by preserving the outer characters of each name token.
-     * e.g., "Kamal Perera" &rarr; "K***l P***a"
-     */
-    private String maskRecipientName(String fullName) {
-        if (fullName == null) {
-            return null;
-        }
-        String trimmed = fullName.trim();
-        if (trimmed.isEmpty()) {
-            return trimmed;
-        }
-
-        String[] parts = trimmed.split("\\s+");
-        StringBuilder sb = new StringBuilder();
-
-        for (int i = 0; i < parts.length; i++) {
-            String part = parts[i];
-            int len = part.length();
-
-            if (len == 1) {
-                sb.append('*');
-            } else if (len == 2) {
-                sb.append(part.charAt(0)).append('*');
-            } else {
-                sb.append(part.charAt(0)).append("***").append(part.charAt(len - 1));
-            }
-
-            if (i < parts.length - 1) {
-                sb.append(' ');
-            }
-        }
-
-        return sb.toString();
     }
 }
 

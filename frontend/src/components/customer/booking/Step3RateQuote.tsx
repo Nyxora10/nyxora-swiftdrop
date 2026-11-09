@@ -3,8 +3,6 @@
 import React from 'react';
 import {
   RefreshCw,
-  Zap,
-  ShieldCheck,
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
@@ -104,7 +102,6 @@ export default function Step3RateQuote({
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-base font-extrabold text-slate-900">Instant Rate Quote Breakdown</h2>
-              <p className="text-xs text-slate-500">Calculated by the SwiftDrop GoF dynamic pricing engine</p>
             </div>
             <button
               type="button"
@@ -149,20 +146,46 @@ export default function Step3RateQuote({
 
                 <div className="flex justify-between py-1.5 border-b border-slate-100">
                   <span className="text-slate-600">
-                    Volumetric Size Adjustment ({formData.parcelSize})
+                    Volumetric Size Adjustment ({formData.parcelSize}
+                    {quote.sizeMultiplier > 1 ? ` \u00d7 ${quote.sizeMultiplier.toFixed(2)}` : ''})
                   </span>
                   <span className="font-semibold text-slate-900">
-                    + LKR {Number(quote.sizeSurcharge).toFixed(2)}
+                    {quote.sizeSurcharge > 0
+                      ? `+ LKR ${Number(quote.sizeSurcharge).toFixed(2)}`
+                      : 'Included'}
                   </span>
                 </div>
 
-                {formData.deliveryTier === 'EXPRESS' && (
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 text-amber-700 bg-amber-50/50 px-2 rounded-lg">
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-600">
+                    Destination Zone Surcharge ({destZone?.zoneCode || 'Dest Zone'})
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {quote.zoneSurcharge > 0
+                      ? `+ LKR ${Number(quote.zoneSurcharge).toFixed(2)}`
+                      : 'LKR 0.00'}
+                  </span>
+                </div>
+
+                {formData.deliveryTier === 'EXPRESS' && quote.expressSurcharge > 0 && (
+                  <div className="flex justify-between py-1.5 border-b border-slate-100 text-amber-700 bg-amber-30/20 px-2 rounded-lg">
                     <span className="font-medium flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" aria-hidden="true" />
-                      Express Priority Surcharge (1.5x)
+                      Express Priority Surcharge (1.5&times;)
                     </span>
-                    <span className="font-bold">Applied</span>
+                    <span className="font-bold">
+                      + LKR {Number(quote.expressSurcharge).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {quote.discountAmount > 0 && (
+                  <div className="flex justify-between py-1.5 border-b border-slate-100 text-emerald-700 bg-emerald-50/50 px-2 rounded-lg">
+                    <span className="font-medium">
+                      Corporate Merchant Discount
+                    </span>
+                    <span className="font-bold">
+                      - LKR {Number(quote.discountAmount).toFixed(2)}
+                    </span>
                   </div>
                 )}
 
@@ -170,7 +193,6 @@ export default function Step3RateQuote({
                 <div className="flex justify-between items-baseline pt-4 border-t-2 border-slate-900">
                   <div>
                     <span className="text-base font-extrabold text-slate-900">Total Delivery Charge</span>
-                    <span className="block text-[10px] text-slate-400">All taxes and fuel surcharges included</span>
                   </div>
                   <div className="text-right">
                     <span className="text-2xl sm:text-3xl font-black text-blue-600">
@@ -181,15 +203,11 @@ export default function Step3RateQuote({
               </div>
 
               {/* SLA Guarantee Banner */}
-              <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-3.5 flex items-center gap-3">
-                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
+              <div className="bg-emerald-30 border border-emerald-100/80 rounded-xl p-3.5 flex items-center gap-3">
                 <div className="text-xs">
                   <span className="font-bold text-emerald-900">
                     Guaranteed Delivery SLA: Within {quote.estimatedDeliveryHours} Hours
                   </span>
-                  <p className="text-emerald-700 text-[11px]">
-                    Real-time status events published to the dispatch queue upon confirmation.
-                  </p>
                 </div>
               </div>
             </div>
