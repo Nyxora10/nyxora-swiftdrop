@@ -15,6 +15,7 @@ import java.util.UUID;
  * Spring Data JPA repository for {@link Parcel}.
  * Provides tracking, sender, merchant, and courier-based parcel lookup operations.
  */
+@Repository
 public interface ParcelRepository extends JpaRepository<Parcel, UUID> {
 
     /** Public tracking lookup — no authentication required (whitelisted in Gateway). */
