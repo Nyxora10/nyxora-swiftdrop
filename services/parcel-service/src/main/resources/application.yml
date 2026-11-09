@@ -45,3 +45,14 @@ logging:
     root: INFO
     "[com.nyxora.swiftdrop]": DEBUG
     "[org.springframework.security]": INFO
+
+# Delivery Proof Storage (Member 6: Task 1.8)
+app:
+  storage:
+    type: ${STORAGE_TYPE:s3}
+    proofs-dir: ${PROOFS_DIR:uploads/proofs}
+    s3:
+      bucket-name: ${AWS_S3_BUCKET_NAME:swiftdrop-delivery-proofs}
+      region: ${AWS_REGION:ap-southeast-2}
+      access-key: ${AWS_ACCESS_KEY_ID:}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:}
