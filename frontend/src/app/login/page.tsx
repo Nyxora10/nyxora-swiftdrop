@@ -82,7 +82,6 @@ function LoginForm() {
     setEmail(acc.email);
     setPassword(acc.pass);
     setErrorMessage(null);
-    toast.info(`Filled credentials for ${acc.label}`);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -330,14 +329,14 @@ function LoginForm() {
             </button>
           </div>
 
-          {/* Quick-Fill Demo Section (1-Click for Demo) */}
+          {/* Demo credential helper */}
           <div className="mt-8 pt-6 border-t border-slate-100">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                1-Click Demo Accounts
+                Demo Account Credentials
               </span>
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                Act 1A Ready
+                Fill Form
               </span>
             </div>
 

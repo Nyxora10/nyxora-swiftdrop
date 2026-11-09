@@ -5,6 +5,7 @@ import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreatePricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreateZoneRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdatePricingRuleRequest;
@@ -97,6 +98,16 @@ class ZonePricingServiceTest {
     }
 
     @Test
+    @DisplayName("getZoneById throws a typed not-found exception for an unknown zone")
+    void getZoneById_missing_throwsNotFound() {
+        when(zoneRepository.findById(999)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> zonePricingService.getZoneById(999))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Delivery zone not found: 999");
+    }
+
+    @Test
     @DisplayName("createZone saves new zone when code is unique")
     void createZone_success() {
         CreateZoneRequest request = CreateZoneRequest.builder()
@@ -157,6 +168,18 @@ class ZonePricingServiceTest {
     }
 
     @Test
+    @DisplayName("updateZone rejects an empty partial update")
+    void updateZone_emptyPatch_throwsException() {
+        when(zoneRepository.findById(1)).thenReturn(Optional.of(zone1));
+
+        assertThatThrownBy(() -> zonePricingService.updateZone(1, UpdateZoneRequest.builder().build()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("At least one zone field");
+
+        verify(zoneRepository, never()).save(any(DeliveryZone.class));
+    }
+
+    @Test
     @DisplayName("createPricingRule saves rule when zone pair and size are unique")
     void createPricingRule_success() {
         when(zoneRepository.findById(1)).thenReturn(Optional.of(zone1));
@@ -207,6 +230,25 @@ class ZonePricingServiceTest {
     }
 
     @Test
+    @DisplayName("createPricingRule rejects a rule from a zone to itself")
+    void createPricingRule_sameZone_throwsException() {
+        CreatePricingRuleRequest request = CreatePricingRuleRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(1)
+                .baseFee(new BigDecimal("200.00"))
+                .ratePerKg(new BigDecimal("30.00"))
+                .parcelSize(ParcelSize.SMALL)
+                .sizeMultiplier(BigDecimal.ONE)
+                .build();
+
+        assertThatThrownBy(() -> zonePricingService.createPricingRule(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Origin and destination zones must be different");
+
+        verifyNoInteractions(zoneRepository, pricingRuleRepository);
+    }
+
+    @Test
     @DisplayName("updatePricingRule modifies rule rates")
     void updatePricingRule_success() {
         when(pricingRuleRepository.findById(100)).thenReturn(Optional.of(rule1));
@@ -222,5 +264,16 @@ class ZonePricingServiceTest {
         assertThat(result.getBaseFee()).isEqualByComparingTo("300.00");
         assertThat(result.getRatePerKg()).isEqualByComparingTo("45.00");
     }
-}
 
+    @Test
+    @DisplayName("updatePricingRule rejects an empty partial update")
+    void updatePricingRule_emptyPatch_throwsException() {
+        when(pricingRuleRepository.findById(100)).thenReturn(Optional.of(rule1));
+
+        assertThatThrownBy(() -> zonePricingService.updatePricingRule(100, UpdatePricingRuleRequest.builder().build()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("At least one pricing field");
+
+        verify(pricingRuleRepository, never()).save(any(PricingRule.class));
+    }
+}

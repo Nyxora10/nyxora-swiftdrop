@@ -1,6 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import AppShell from '@/components/layout/AppShell';
+import api from '@/lib/api';
+import {
+  MapPin,
+  Layers,
+  Zap,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  Sliders,
+  Calculator,
+  Scale,
+  Box,
+  Percent,
+  X,
+  RefreshCw,
+} from 'lucide-react';
 
 interface DeliveryZone {
   id: number;
@@ -32,554 +51,1095 @@ interface QuoteResponse {
   totalFee: number;
 }
 
+const readApiError = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as {
+      detail?: string;
+      message?: string;
+      title?: string;
+    } | undefined;
+    return payload?.detail || payload?.message || payload?.title || fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+
 export default function AdminPricingPage() {
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [rules, setRules] = useState<PricingRule[]>([]);
-  const [activeTab, setActiveTab] = useState<'ZONES' | 'RULES' | 'CALCULATOR'>('ZONES');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<'SIMULATOR' | 'ZONES' | 'RULES'>('SIMULATOR');
 
-  // Modal: Create Delivery Zone
-  const [showZoneModal, setShowZoneModal] = useState<boolean>(false);
-  const [zoneCode, setZoneCode] = useState<string>('');
-  const [zoneName, setZoneName] = useState<string>('');
-  const [district, setDistrict] = useState<string>('');
-  const [baseSurcharge, setBaseSurcharge] = useState<string>('0.00');
+  // Modals
+  const [showZoneModal, setShowZoneModal] = useState(false);
+  const [showRuleModal, setShowRuleModal] = useState(false);
+  const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
 
-  // Modal: Create Pricing Rule
-  const [showRuleModal, setShowRuleModal] = useState<boolean>(false);
-  const [originZoneId, setOriginZoneId] = useState<number>(0);
-  const [destZoneId, setDestZoneId] = useState<number>(0);
-  const [baseFee, setBaseFee] = useState<string>('200.00');
-  const [ratePerKg, setRatePerKg] = useState<string>('30.00');
-  const [parcelSize, setParcelSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('SMALL');
-  const [sizeMultiplier, setSizeMultiplier] = useState<string>('1.00');
+  // New Zone Form
+  const [newZoneCode, setNewZoneCode] = useState('');
+  const [newZoneName, setNewZoneName] = useState('');
+  const [newDistrict, setNewDistrict] = useState('');
+  const [newBaseSurcharge, setNewBaseSurcharge] = useState('25.00');
 
-  // Interactive Live Calculator (GoF Strategy Demo for Viva Act 2A)
+  // New Rule Form
+  const [ruleOriginId, setRuleOriginId] = useState<number>(0);
+  const [ruleDestId, setRuleDestId] = useState<number>(0);
+  const [ruleBaseFee, setRuleBaseFee] = useState('400.00');
+  const [ruleRatePerKg, setRuleRatePerKg] = useState('100.00');
+  const [ruleSize, setRuleSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('MEDIUM');
+  const [ruleMultiplier, setRuleMultiplier] = useState('1.25');
+
+  // Simulator State
   const [calcOrigin, setCalcOrigin] = useState<number>(0);
   const [calcDest, setCalcDest] = useState<number>(0);
-  const [calcWeight, setCalcWeight] = useState<string>('2.5');
-  const [calcSize, setCalcSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('SMALL');
-  const [calcTier, setCalcTier] = useState<'STANDARD' | 'MERCHANT' | 'EXPRESS'>('STANDARD');
+  const [calcWeight, setCalcWeight] = useState<number>(3.5);
+  const [calcSize, setCalcSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('MEDIUM');
+  const [calcTier, setCalcTier] = useState<'STANDARD' | 'MERCHANT' | 'EXPRESS'>('EXPRESS');
   const [quoteResult, setQuoteResult] = useState<QuoteResponse | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [pageNotice, setPageNotice] = useState('');
 
-  const fetchZones = async () => {
-    try {
-      const res = await fetch('/api/v1/zones', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'X-User-Role': 'ROLE_ADMIN'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setZones(data);
-        if (data.length > 0) {
-          setOriginZoneId(data[0].id);
-          setDestZoneId(data[0].id);
-          setCalcOrigin(data[0].id);
-          setCalcDest(data[0].id);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load delivery zones:', e);
+  const loadPricingData = useCallback(async () => {
+    const [{ data: zData }, { data: rData }] = await Promise.all([
+      api.get<DeliveryZone[]>('/api/v1/zones'),
+      api.get<PricingRule[]>('/api/v1/pricing/rules'),
+    ]);
+    const nextZones = Array.isArray(zData) ? zData : [];
+    const nextRules = Array.isArray(rData) ? rData : [];
+    const firstZoneId = nextZones[0]?.id ?? 0;
+    const secondZoneId = nextZones[1]?.id ?? firstZoneId;
+
+    setZones(nextZones);
+    setRules(nextRules);
+    setCalcOrigin((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
+    setCalcDest((current) => nextZones.some((zone) => zone.id === current) ? current : secondZoneId);
+    setRuleOriginId((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
+    setRuleDestId((current) => nextZones.some((zone) => zone.id === current) ? current : secondZoneId);
+
+    if (nextZones.length < 2) {
+      setQuoteResult(null);
+      setPageError('');
     }
-  };
-
-  const fetchRules = async () => {
-    try {
-      const res = await fetch('/api/v1/pricing/rules', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'X-User-Role': 'ROLE_ADMIN'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRules(data);
-      }
-    } catch (e) {
-      console.error('Failed to load pricing rules:', e);
-    }
-  };
-
-  useEffect(() => {
-    Promise.all([fetchZones(), fetchRules()]).finally(() => setLoading(false));
   }, []);
 
-  const handleCreateZone = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Load persisted pricing data before enabling the simulator.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this effect synchronizes remote pricing data into the page state.
+    loadPricingData().catch((error) => {
+      setZones([]);
+      setRules([]);
+      setQuoteResult(null);
+      setPageError(readApiError(error, 'Unable to load pricing data.'));
+    });
+  }, [loadPricingData]);
+
+  const handleRefreshPricingData = async () => {
+    setIsRefreshing(true);
+    setPageError('');
+    setPageNotice('');
     try {
-      const res = await fetch('/api/v1/zones', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'X-User-Role': 'ROLE_ADMIN'
-        },
-        body: JSON.stringify({
-          zoneCode,
-          zoneName,
-          district,
-          baseSurcharge: parseFloat(baseSurcharge)
-        })
-      });
-      if (res.ok) {
-        setShowZoneModal(false);
-        setZoneCode('');
-        setZoneName('');
-        setDistrict('');
-        setBaseSurcharge('0.00');
-        fetchZones();
-      } else {
-        const err = await res.json();
-        alert(err.detail || 'Failed to create zone');
-      }
-    } catch (err) {
-      console.error(err);
+      await loadPricingData();
+      setPageNotice('Pricing data refreshed successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to refresh pricing data.'));
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
-  const handleToggleZone = async (zone: DeliveryZone) => {
-    try {
-      const res = await fetch(`/api/v1/zones/${zone.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'X-User-Role': 'ROLE_ADMIN'
-        },
-        body: JSON.stringify({ isActive: !zone.isActive })
-      });
-      if (res.ok) fetchZones();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateRule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/v1/pricing/rules', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'X-User-Role': 'ROLE_ADMIN'
-        },
-        body: JSON.stringify({
-          originZoneId,
-          destinationZoneId: destZoneId,
-          baseFee: parseFloat(baseFee),
-          ratePerKg: parseFloat(ratePerKg),
-          parcelSize,
-          sizeMultiplier: parseFloat(sizeMultiplier)
-        })
-      });
-      if (res.ok) {
-        setShowRuleModal(false);
-        fetchRules();
-      } else {
-        const err = await res.json();
-        alert(err.detail || 'Failed to create rule');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Simulates live GoF strategy execution
-  const calculatePreview = () => {
-    const origin = zones.find(z => z.id === calcOrigin);
-    const dest = zones.find(z => z.id === calcDest);
-    if (!origin || !dest) return;
-
-    const rule = rules.find(r =>
-      r.originZone.id === calcOrigin &&
-      r.destinationZone.id === calcDest &&
-      r.parcelSize === calcSize
-    );
-
-    if (!rule) {
-      alert(`No pricing rule configured for ${origin.zoneCode} → ${dest.zoneCode} (${calcSize})`);
+  const runQuoteCalculation = useCallback(async (signal?: AbortSignal) => {
+    if (zones.length < 2) {
+      setQuoteResult(null);
+      setPageError('');
       return;
     }
 
-    const weight = parseFloat(calcWeight) || 1.0;
-    let bFee = rule.baseFee;
-    let rKg = rule.ratePerKg;
-    let discount = 0;
-    let expressSur = 0;
+    const origin = zones.find(z => z.id === calcOrigin) || zones[0];
+    const dest = zones.find(z => z.id === calcDest) || zones[1] || zones[0];
+    if (!origin || !dest) return;
 
-    if (calcTier === 'MERCHANT') {
-      // 15% corporate discount
-      discount = (bFee + weight * rKg) * 0.15;
-      bFee = bFee * 0.85;
-      rKg = rKg * 0.85;
+    if (origin.id === dest.id) {
+      setQuoteResult(null);
+      setPageError('Origin and destination zones must be different.');
+      return;
     }
 
-    const weightChg = weight * rKg;
-    const subtotal = (bFee + weightChg) * rule.sizeMultiplier;
+    try {
+      const response = await api.post<QuoteResponse>('/api/v1/parcels/quote', {
+          originZoneId: origin.id,
+          destinationZoneId: dest.id,
+          weightKg: calcWeight,
+          parcelSize: calcSize,
+          tier: calcTier,
+        }, {
+        signal,
+      });
 
-    let finalFee = subtotal;
-    if (calcTier === 'EXPRESS') {
-      // 1.5x expedited multiplier
-      expressSur = subtotal * 0.5;
-      finalFee = subtotal * 1.5;
+      setQuoteResult(response.data);
+      setPageError('');
+    } catch (error) {
+      if (axios.isCancel(error)) return;
+      setQuoteResult(null);
+      setPageError(readApiError(error, 'Unable to calculate a live quote.'));
+    }
+  }, [calcDest, calcOrigin, calcSize, calcTier, calcWeight, zones]);
+
+  // Recalculate through the real pricing engine whenever parameters change.
+  useEffect(() => {
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this effect runs the remote quote calculation for current inputs.
+    void runQuoteCalculation(controller.signal);
+    return () => controller.abort();
+  }, [runQuoteCalculation]);
+
+  const handleToggleZone = async (id: number) => {
+    const zone = zones.find((candidate) => candidate.id === id);
+    if (!zone) return;
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      await api.put(`/api/v1/zones/${id}`, { isActive: !zone.isActive });
+      await loadPricingData();
+      setPageNotice(`Zone ${zone.zoneCode} is now ${!zone.isActive ? 'active' : 'inactive'}.`);
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to update the delivery zone.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newZoneCode.trim() || !newZoneName.trim() || !newDistrict.trim()) return;
+
+    const baseSurcharge = Number(newBaseSurcharge);
+    if (!Number.isFinite(baseSurcharge) || baseSurcharge < 0) {
+      setPageError('Base surcharge must be a number greater than or equal to zero.');
+      setPageNotice('');
+      return;
     }
 
-    finalFee += dest.baseSurcharge;
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      const isEditing = editingZoneId !== null;
+      const payload = {
+        zoneCode: newZoneCode.trim().toUpperCase(),
+        zoneName: newZoneName.trim(),
+        district: newDistrict.trim(),
+        baseSurcharge,
+        ...(isEditing ? {} : { isActive: true }),
+      };
+      if (isEditing) {
+        await api.put(`/api/v1/zones/${editingZoneId}`, payload);
+      } else {
+        await api.post('/api/v1/zones', payload);
+      }
+      await loadPricingData();
+      setNewZoneCode('');
+      setNewZoneName('');
+      setNewDistrict('');
+      setEditingZoneId(null);
+      setShowZoneModal(false);
+      setPageNotice(isEditing ? 'Delivery zone updated successfully.' : 'Delivery zone created successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to save the delivery zone.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-    setQuoteResult({
-      appliedTier: calcTier,
-      baseFee: bFee,
-      weightCharge: weightChg,
-      sizeMultiplier: rule.sizeMultiplier,
-      zoneSurcharge: dest.baseSurcharge,
-      discountAmount: discount,
-      expressSurcharge: expressSur,
-      totalFee: finalFee
-    });
+  const handleSaveRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zones.some((zone) => zone.id === ruleOriginId) || !zones.some((zone) => zone.id === ruleDestId)) return;
+
+    if (ruleOriginId === ruleDestId) {
+      setPageError('Origin and destination zones must be different.');
+      setPageNotice('');
+      return;
+    }
+
+    const baseFee = Number(ruleBaseFee);
+    const ratePerKg = Number(ruleRatePerKg);
+    const sizeMultiplier = Number(ruleMultiplier);
+    if (!Number.isFinite(baseFee) || baseFee <= 0) {
+      setPageError('Base fee must be greater than zero.');
+      setPageNotice('');
+      return;
+    }
+    if (!Number.isFinite(ratePerKg) || ratePerKg <= 0) {
+      setPageError('Rate per kilogram must be greater than zero.');
+      setPageNotice('');
+      return;
+    }
+    if (!Number.isFinite(sizeMultiplier) || sizeMultiplier < 1) {
+      setPageError('Size multiplier must be at least 1.00.');
+      setPageNotice('');
+      return;
+    }
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      const isEditing = editingRuleId !== null;
+      const payload = {
+        baseFee,
+        ratePerKg,
+        sizeMultiplier,
+        ...(isEditing ? {} : {
+          originZoneId: ruleOriginId,
+          destinationZoneId: ruleDestId,
+          parcelSize: ruleSize,
+        }),
+      };
+      if (isEditing) {
+        await api.put(`/api/v1/pricing/rules/${editingRuleId}`, payload);
+      } else {
+        await api.post('/api/v1/pricing/rules', payload);
+      }
+      await loadPricingData();
+      setEditingRuleId(null);
+      setShowRuleModal(false);
+      setPageNotice(isEditing ? 'Pricing rule updated successfully.' : 'Pricing rule created successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to save the pricing rule.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const startEditingZone = (zone: DeliveryZone) => {
+    setEditingZoneId(zone.id);
+    setNewZoneCode(zone.zoneCode);
+    setNewZoneName(zone.zoneName);
+    setNewDistrict(zone.district);
+    setNewBaseSurcharge(zone.baseSurcharge.toFixed(2));
+    setShowZoneModal(true);
+  };
+
+  const startEditingRule = (rule: PricingRule) => {
+    setEditingRuleId(rule.id);
+    setRuleOriginId(rule.originZone.id);
+    setRuleDestId(rule.destinationZone.id);
+    setRuleBaseFee(rule.baseFee.toFixed(2));
+    setRuleRatePerKg(rule.ratePerKg.toFixed(2));
+    setRuleSize(rule.parcelSize);
+    setRuleMultiplier(rule.sizeMultiplier.toFixed(2));
+    setShowRuleModal(true);
+  };
+
+  const closeZoneModal = () => {
+    setEditingZoneId(null);
+    setShowZoneModal(false);
+  };
+
+  const closeRuleModal = () => {
+    setEditingRuleId(null);
+    setShowRuleModal(false);
+  };
+
+  const openNewZoneModal = () => {
+    setEditingZoneId(null);
+    setNewZoneCode('');
+    setNewZoneName('');
+    setNewDistrict('');
+    setNewBaseSurcharge('25.00');
+    setShowZoneModal(true);
+  };
+
+  const openNewRuleModal = () => {
+    setEditingRuleId(null);
+    setRuleBaseFee('400.00');
+    setRuleRatePerKg('100.00');
+    setRuleSize('MEDIUM');
+    setRuleMultiplier('1.25');
+    setShowRuleModal(true);
   };
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', margin: 0, color: '#111827' }}>
-            Sri Lankan Delivery Zones & Dynamic Pricing Matrix
-          </h1>
-          <p style={{ color: '#6b7280', margin: '0.25rem 0 0 0' }}>
-            Member 3 — Manage geographical districts, base surcharges, and inter-zone GoF Strategy pricing rules.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            onClick={() => setShowZoneModal(true)}
-            style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.6rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
-          >
-            + Add Delivery Zone
-          </button>
-          <button
-            onClick={() => setShowRuleModal(true)}
-            style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '0.6rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
-          >
-            + Add Pricing Rule
-          </button>
-        </div>
-      </div>
+    <AppShell>
+      <div className="space-y-6">
 
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #e5e7eb', marginBottom: '1.5rem' }}>
-        <button
-          onClick={() => setActiveTab('ZONES')}
-          style={{
-            padding: '0.75rem 1.5rem',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            fontWeight: 600,
-            borderBottom: activeTab === 'ZONES' ? '3px solid #3b82f6' : 'none',
-            color: activeTab === 'ZONES' ? '#3b82f6' : '#6b7280'
-          }}
-        >
-          Delivery Zones ({zones.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('RULES')}
-          style={{
-            padding: '0.75rem 1.5rem',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            fontWeight: 600,
-            borderBottom: activeTab === 'RULES' ? '3px solid #3b82f6' : 'none',
-            color: activeTab === 'RULES' ? '#3b82f6' : '#6b7280'
-          }}
-        >
-          Pricing Rules Matrix ({rules.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('CALCULATOR')}
-          style={{
-            padding: '0.75rem 1.5rem',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            fontWeight: 600,
-            borderBottom: activeTab === 'CALCULATOR' ? '3px solid #3b82f6' : 'none',
-            color: activeTab === 'CALCULATOR' ? '#3b82f6' : '#6b7280'
-          }}
-        >
-          ⚡ Dynamic Strategy Simulator (Act 2A Demo)
-        </button>
-      </div>
+        {(pageError || pageNotice) && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${pageError
+            ? 'border-red-200 bg-red-50 text-red-700'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+            <div className="flex items-center gap-2">
+              {pageError ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+              <span>{pageError || pageNotice}</span>
+            </div>
+          </div>
+        )}
 
-      {/* Tab 1: Delivery Zones */}
-      {activeTab === 'ZONES' && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-            <thead style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-              <tr>
-                <th style={{ padding: '0.75rem 1rem' }}>Zone Code</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Zone Name</th>
-                <th style={{ padding: '0.75rem 1rem' }}>District</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Base Surcharge (LKR)</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Toggle State</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zones.map(z => (
-                <tr key={z.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1f2937' }}>{z.zoneCode}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>{z.zoneName}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>{z.district}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>Rs. {z.baseSurcharge.toFixed(2)}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <span style={{
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      backgroundColor: z.isActive ? '#d1fae5' : '#fee2e2',
-                      color: z.isActive ? '#065f46' : '#991b1b'
-                    }}>
-                      {z.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                    <button
-                      onClick={() => handleToggleZone(z)}
-                      style={{
-                        padding: '0.3rem 0.7rem',
-                        fontSize: '0.75rem',
-                        borderRadius: '4px',
-                        border: '1px solid #d1d5db',
-                        cursor: 'pointer',
-                        backgroundColor: z.isActive ? '#fee2e2' : '#d1fae5',
-                        color: z.isActive ? '#991b1b' : '#065f46'
-                      }}
-                    >
-                      {z.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Page Top Header */}
+        <div className="pb-4 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                Delivery Zones &amp; Dynamic Pricing Matrix
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Manage island-wide logistics zones, inter-zone tariffs, and live quotation calculation.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => void handleRefreshPricingData()}
+                disabled={isRefreshing || isSaving}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh data'}</span>
+              </button>
+              <button
+                onClick={openNewZoneModal}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Zone</span>
+              </button>
+              <button
+                onClick={openNewRuleModal}
+                disabled={zones.length < 2}
+                title={zones.length < 2 ? 'Create at least two delivery zones first.' : undefined}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Pricing Rule</span>
+              </button>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* Tab 2: Pricing Rules Matrix */}
-      {activeTab === 'RULES' && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-            <thead style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-              <tr>
-                <th style={{ padding: '0.75rem 1rem' }}>Route</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Parcel Size</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Base Fee (LKR)</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Rate / kg (LKR)</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Size Multiplier</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
-                    {r.originZone.zoneCode} ({r.originZone.district}) → {r.destinationZone.zoneCode} ({r.destinationZone.district})
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#e0e7ff', color: '#3730a3' }}>
-                      {r.parcelSize}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>Rs. {r.baseFee.toFixed(2)}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>Rs. {r.ratePerKg.toFixed(2)} / kg</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>{r.sizeMultiplier.toFixed(2)}×</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Tab 3: Dynamic Strategy Simulator (Viva Examiner Act 2A) */}
-      {activeTab === 'CALCULATOR' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-          <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-            <h3 style={{ marginTop: 0, color: '#111827' }}>Configure Delivery Parameters</h3>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Origin Zone</label>
-              <select value={calcOrigin} onChange={e => setCalcOrigin(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                {zones.map(z => <option key={z.id} value={z.id}>{z.zoneCode} — {z.zoneName} ({z.district})</option>)}
-              </select>
+        {/* Top KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <MapPin className="w-5 h-5" />
             </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Destination Zone</label>
-              <select value={calcDest} onChange={e => setCalcDest(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                {zones.map(z => <option key={z.id} value={z.id}>{z.zoneCode} — {z.zoneName} ({z.district})</option>)}
-              </select>
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Zones</div>
+              <div className="text-xl font-bold text-slate-900">{zones.filter(z => z.isActive).length} / {zones.length} Active</div>
             </div>
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Weight (kg)</label>
-                <input type="number" step="0.1" value={calcWeight} onChange={e => setCalcWeight(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Size Tier</label>
-                <select value={calcSize} onChange={e => setCalcSize(e.target.value as any)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                  <option value="SMALL">SMALL (1.0×)</option>
-                  <option value="MEDIUM">MEDIUM (1.2×)</option>
-                  <option value="LARGE">LARGE (1.5×)</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>GoF Strategy Tier</label>
-              <select value={calcTier} onChange={e => setCalcTier(e.target.value as any)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db', fontWeight: 600 }}>
-                <option value="STANDARD">StandardZonePricingStrategy (Default)</option>
-                <option value="MERCHANT">MerchantDiscountPricingStrategy (15% Corporate Discount)</option>
-                <option value="EXPRESS">ExpressSameDayPricingStrategy (1.5× Expedited)</option>
-              </select>
-            </div>
-            <button
-              onClick={calculatePreview}
-              style={{ width: '100%', backgroundColor: '#3b82f6', color: '#fff', padding: '0.75rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-            >
-              Calculate Quote with Strategy
-            </button>
           </div>
 
-          {/* Results Card */}
-          <div style={{ backgroundColor: '#ffffff', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-            <h3 style={{ marginTop: 0, color: '#111827' }}>Itemized Fee Breakdown</h3>
-            {quoteResult ? (
-              <div>
-                <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Applied Strategy:</span>
-                  <strong>{quoteResult.appliedTier}</strong>
-                </div>
-                <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Base Delivery Fee:</span>
-                  <span>Rs. {quoteResult.baseFee.toFixed(2)}</span>
-                </div>
-                <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Weight Charge:</span>
-                  <span>Rs. {quoteResult.weightCharge.toFixed(2)}</span>
-                </div>
-                <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Size Multiplier:</span>
-                  <span>{quoteResult.sizeMultiplier.toFixed(2)}×</span>
-                </div>
-                <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Zone Destination Surcharge:</span>
-                  <span>Rs. {quoteResult.zoneSurcharge.toFixed(2)}</span>
-                </div>
-                {quoteResult.discountAmount > 0 && (
-                  <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
-                    <span>15% Merchant Corporate Discount:</span>
-                    <span>- Rs. {quoteResult.discountAmount.toFixed(2)}</span>
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pricing Rules</div>
+              <div className="text-xl font-bold text-slate-900">{rules.length} Matrix Rules</div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Strategy Engine</div>
+              <div className="text-xl font-bold text-slate-900">3 GoF Tiers</div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Suite Health</div>
+              <div className="text-xl font-bold text-slate-900">Automated</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation Switcher */}
+        <div className="flex bg-slate-100 p-1 rounded-xl max-w-xl">
+          <button
+            onClick={() => setActiveTab('SIMULATOR')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              activeTab === 'SIMULATOR'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-slate-500" />
+            <span>Dynamic Strategy Simulator</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('ZONES')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              activeTab === 'ZONES'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <MapPin className="w-4 h-4 text-slate-500" />
+            <span>Delivery Zones ({zones.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('RULES')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              activeTab === 'RULES'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-slate-500" />
+            <span>Pricing Rules ({rules.length})</span>
+          </button>
+        </div>
+
+        {/* Tab 1: Live Strategy Simulator (Act 2A Demo) */}
+        {activeTab === 'SIMULATOR' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            {zones.length < 2 && (
+              <div role="status" className="lg:col-span-12 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Add at least two delivery zones before creating pricing rules or calculating a quote.
+              </div>
+            )}
+
+            {/* Left Controls Card */}
+            <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                    <Sliders className="w-4 h-4" />
                   </div>
-                )}
-                {quoteResult.expressSurcharge > 0 && (
-                  <div style={{ padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', color: '#d97706' }}>
-                    <span>Expedited Same-Day Surcharge (50%):</span>
-                    <span>+ Rs. {quoteResult.expressSurcharge.toFixed(2)}</span>
-                  </div>
-                )}
-                <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f0fdf4', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#166534' }}>Total Delivery Fee:</span>
-                  <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#166534' }}>
-                    Rs. {quoteResult.totalFee.toFixed(2)} LKR
+                  <h2 className="text-base font-bold text-slate-900">Simulator Parameters</h2>
+                </div>
+                <span className="text-[11px] font-medium bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200">
+                  Real-Time Dynamic Run
+                </span>
+              </div>
+
+              {/* Origin & Destination */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Origin Zone
+                  </label>
+                  <select
+                    value={calcOrigin}
+                    onChange={(e) => setCalcOrigin(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  >
+                    {zones.map(z => (
+                      <option key={z.id} value={z.id}>
+                        {z.zoneCode} — {z.zoneName} ({z.district})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Destination Zone
+                  </label>
+                  <select
+                    value={calcDest}
+                    onChange={(e) => setCalcDest(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  >
+                    {zones.map(z => (
+                      <option key={z.id} value={z.id}>
+                        {z.zoneCode} — {z.zoneName} ({z.district})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Weight Slider */}
+              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-slate-500" />
+                    Package Weight
+                  </label>
+                  <span className="text-xs font-bold text-slate-900 bg-white px-2.5 py-0.5 rounded-md border border-slate-200 font-mono">
+                    {calcWeight.toFixed(2)} kg
                   </span>
                 </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="30"
+                  step="0.1"
+                  value={calcWeight}
+                  onChange={(e) => setCalcWeight(parseFloat(e.target.value))}
+                  className="w-full accent-slate-900 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                />
+                <div className="flex justify-between text-[11px] text-slate-400 mt-1 font-mono">
+                  <span>0.2 kg (Docs)</span>
+                  <span>15.0 kg</span>
+                  <span>30.0 kg (Freight)</span>
+                </div>
               </div>
-            ) : (
-              <p style={{ color: '#9ca3af' }}>Select parameters and click "Calculate Quote" to see the live strategy execution.</p>
-            )}
+
+              {/* Package Dimensions */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Box className="w-3.5 h-3.5 text-slate-500" />
+                  Dimension Tier (Multiplier)
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {(['SMALL', 'MEDIUM', 'LARGE'] as const).map(size => {
+                    const mult = size === 'SMALL' ? '1.0×' : (size === 'MEDIUM' ? '1.25×' : '1.5×');
+                    const isSelected = calcSize === size;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setCalcSize(size)}
+                        className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-slate-900 border-slate-900 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                          {size}
+                        </div>
+                        <div className={`text-[11px] mt-0.5 font-medium ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                          {mult} Multiplier
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Pricing Strategy Tier */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-slate-500" />
+                  GoF Pricing Strategy Tier
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setCalcTier('STANDARD')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                      calcTier === 'STANDARD'
+                        ? 'bg-slate-900 border-slate-900 shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${calcTier === 'STANDARD' ? 'text-white' : 'text-slate-800'}`}>STANDARD</div>
+                    <div className={`text-[11px] mt-0.5 font-medium ${calcTier === 'STANDARD' ? 'text-slate-300' : 'text-slate-500'}`}>Regular Base</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCalcTier('MERCHANT')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                      calcTier === 'MERCHANT'
+                        ? 'bg-slate-900 border-slate-900 shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${calcTier === 'MERCHANT' ? 'text-white' : 'text-slate-800'}`}>MERCHANT</div>
+                    <div className={`text-[11px] mt-0.5 font-medium ${calcTier === 'MERCHANT' ? 'text-slate-300' : 'text-slate-500'}`}>15% Discount</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCalcTier('EXPRESS')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                      calcTier === 'EXPRESS'
+                        ? 'bg-slate-900 border-slate-900 shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${calcTier === 'EXPRESS' ? 'text-white' : 'text-slate-800'}`}>EXPRESS</div>
+                    <div className={`text-[11px] mt-0.5 font-medium ${calcTier === 'EXPRESS' ? 'text-slate-300' : 'text-slate-500'}`}>1.5× Expedited</div>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Right Receipt & Breakdown Card */}
+            <div className="lg:col-span-6 flex flex-col justify-between bg-white text-slate-900 rounded-xl p-5 shadow-xs border border-slate-200">
+              
+              <div>
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-slate-600" />
+                      Dynamic Quotation Output
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Orchestrated by Spring GoF Strategy Engine
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                    {calcTier} STRATEGY
+                  </span>
+                </div>
+
+                {/* Mathematical Formulation Display */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 font-mono text-xs">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider block mb-1">
+                    Applied Strategy Formula:
+                  </span>
+                  <div className="text-slate-800 font-semibold">
+                    {calcTier === 'MERCHANT' && (
+                      <span>Total = [ (BaseFee×0.85 + Wt×Rate×0.85) × Multiplier ] + Surcharges</span>
+                    )}
+                    {calcTier === 'EXPRESS' && (
+                      <span>Total = [ (BaseFee + Wt×Rate) × Multiplier × 1.5 ] + Surcharges</span>
+                    )}
+                    {calcTier === 'STANDARD' && (
+                      <span>Total = [ (BaseFee + Wt×Rate) × Multiplier ] + Surcharges</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Line Items Breakdown */}
+                {quoteResult && (
+                  <div className="space-y-2.5 text-xs sm:text-sm">
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                      <span className="text-slate-600">Inter-Zone Base Tariff:</span>
+                      <span className="font-mono font-bold text-slate-900">LKR {quoteResult.baseFee.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                      <div>
+                        <span className="text-slate-600">Weight Charge:</span>
+                        <span className="text-xs text-slate-400 font-mono ml-1.5">({calcWeight.toFixed(2)} kg)</span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-900">LKR {quoteResult.weightCharge.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                      <div>
+                        <span className="text-slate-600">Size Multiplier Effect:</span>
+                        <span className="text-xs text-slate-400 font-mono ml-1.5">({calcSize} = {quoteResult.sizeMultiplier.toFixed(2)}×)</span>
+                      </div>
+                      <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
+                        Active
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                      <span className="text-slate-600">Provincial Surcharges:</span>
+                      <span className="font-mono font-bold text-slate-900">LKR {quoteResult.zoneSurcharge.toFixed(2)}</span>
+                    </div>
+
+                    {calcTier === 'MERCHANT' && (
+                      <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-emerald-50/70 border border-emerald-200/80 text-emerald-800">
+                        <span className="flex items-center gap-1.5 font-semibold text-xs">
+                          <Percent className="w-3.5 h-3.5 text-emerald-600" />
+                          Corporate Merchant Discount (15%):
+                        </span>
+                        <span className="font-mono font-bold text-emerald-700">- LKR {quoteResult.discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {calcTier === 'EXPRESS' && (
+                      <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-amber-50/70 border border-amber-200/80 text-amber-800">
+                        <span className="flex items-center gap-1.5 font-semibold text-xs">
+                          <Zap className="w-3.5 h-3.5 text-amber-600" />
+                          Express Expedited Surcharge (50%):
+                        </span>
+                        <span className="font-mono font-bold text-amber-700">+ LKR {quoteResult.expressSurcharge.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Total Card */}
+              {quoteResult && (
+                <div className="mt-5 p-4 rounded-xl bg-slate-900 text-white flex items-center justify-between shadow-xs">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider font-semibold text-slate-300 block">
+                      Grand Total Fee (LKR)
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Live PricingEngine quote
+                    </span>
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
+                    LKR {quoteResult.totalFee.toFixed(2)}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Modal: Create Zone */}
-      {showZoneModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <form onSubmit={handleCreateZone} style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', maxWidth: '450px', width: '100%' }}>
-            <h3 style={{ marginTop: 0 }}>Add New Sri Lankan Delivery Zone</h3>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Zone Code (WP-COL-01)</label>
-              <input type="text" required value={zoneCode} onChange={e => setZoneCode(e.target.value)} placeholder="e.g. WP-COL-03" style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+        {/* Tab 2: Delivery Zones */}
+        {activeTab === 'ZONES' && (
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Configured Sri Lankan Delivery Zones</h3>
+                <p className="text-xs text-slate-500">Maps directly to the PostgreSQL delivery_zones table</p>
+              </div>
+              <button
+                onClick={openNewZoneModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Zone</span>
+              </button>
             </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Zone Name</label>
-              <input type="text" required value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="e.g. Dehiwala - Mount Lavinia" style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>District</label>
-              <input type="text" required value={district} onChange={e => setDistrict(e.target.value)} placeholder="e.g. Colombo" style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-            </div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Base Surcharge (LKR)</label>
-              <input type="number" step="0.5" required value={baseSurcharge} onChange={e => setBaseSurcharge(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button type="button" onClick={() => setShowZoneModal(false)} style={{ padding: '0.5rem 1rem', border: '1px solid #d1d5db', backgroundColor: '#fff', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
-              <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Create Zone</button>
-            </div>
-          </form>
-        </div>
-      )}
 
-      {/* Modal: Create Pricing Rule */}
-      {showRuleModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <form onSubmit={handleCreateRule} style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', maxWidth: '450px', width: '100%' }}>
-            <h3 style={{ marginTop: 0 }}>Create Inter-Zone Pricing Rule</h3>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Origin Zone</label>
-              <select value={originZoneId} onChange={e => setOriginZoneId(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                {zones.map(z => <option key={z.id} value={z.id}>{z.zoneCode} — {z.district}</option>)}
-              </select>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider border-b border-slate-200 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3">Zone Code</th>
+                    <th className="px-5 py-3">Zone Name</th>
+                    <th className="px-5 py-3">District</th>
+                    <th className="px-5 py-3">Base Surcharge</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {zones.map(z => (
+                    <tr key={z.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-5 py-3 font-mono font-semibold text-slate-900">{z.zoneCode}</td>
+                      <td className="px-5 py-3 font-medium text-slate-900">{z.zoneName}</td>
+                      <td className="px-5 py-3 text-slate-600">{z.district}</td>
+                      <td className="px-5 py-3 font-mono text-slate-800">LKR {z.baseSurcharge.toFixed(2)}</td>
+                      <td className="px-5 py-3">
+                        {z.isActive ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                            Inactive
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => startEditingZone(z)}
+                          disabled={isSaving}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleToggleZone(z.id)}
+                          disabled={isSaving}
+                          aria-label={`${z.isActive ? 'Deactivate' : 'Activate'} ${z.zoneCode}`}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          {z.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Destination Zone</label>
-              <select value={destZoneId} onChange={e => setDestZoneId(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                {zones.map(z => <option key={z.id} value={z.id}>{z.zoneCode} — {z.district}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Base Fee (LKR)</label>
-                <input type="number" step="1.0" required value={baseFee} onChange={e => setBaseFee(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+          </div>
+        )}
+
+        {/* Tab 3: Pricing Rules Matrix */}
+        {activeTab === 'RULES' && (
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Inter-Zone Pricing Rules Matrix</h3>
+                <p className="text-xs text-slate-500">Unique constraint across (origin_zone_id, destination_zone_id, parcel_size)</p>
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Rate / kg (LKR)</label>
-                <input type="number" step="0.5" required value={ratePerKg} onChange={e => setRatePerKg(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-              </div>
+              <button
+                onClick={openNewRuleModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Rule</span>
+              </button>
             </div>
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Size</label>
-                <select value={parcelSize} onChange={e => setParcelSize(e.target.value as any)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                  <option value="SMALL">SMALL</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="LARGE">LARGE</option>
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>Multiplier</label>
-                <input type="number" step="0.05" required value={sizeMultiplier} onChange={e => setSizeMultiplier(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-              </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider border-b border-slate-200 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3">Route (Origin → Destination)</th>
+                    <th className="px-5 py-3">Parcel Size</th>
+                    <th className="px-5 py-3">Base Fee</th>
+                    <th className="px-5 py-3">Rate / Kg</th>
+                    <th className="px-5 py-3">Multiplier</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rules.map(r => (
+                    <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-5 py-3 font-semibold text-slate-900 flex items-center gap-2">
+                        <span className="font-mono text-slate-900">{r.originZone.zoneCode}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="font-mono text-slate-900">{r.destinationZone.zoneCode}</span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          {r.parcelSize}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 font-mono font-semibold text-slate-800">LKR {r.baseFee.toFixed(2)}</td>
+                      <td className="px-5 py-3 font-mono font-semibold text-slate-800">LKR {r.ratePerKg.toFixed(2)}</td>
+                      <td className="px-5 py-3 font-mono text-slate-900 font-bold">{r.sizeMultiplier.toFixed(2)}×</td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => startEditingRule(r)}
+                          disabled={isSaving}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button type="button" onClick={() => setShowRuleModal(false)} style={{ padding: '0.5rem 1rem', border: '1px solid #d1d5db', backgroundColor: '#fff', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
-              <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Create Rule</button>
+          </div>
+        )}
+
+        {/* Modal: Add Delivery Zone */}
+        {showZoneModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900">{editingZoneId === null ? 'Add' : 'Edit'} Sri Lankan Delivery Zone</h3>
+                <button onClick={closeZoneModal} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveZone} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Zone Code (e.g. NP-JAF-01)
+                  </label>
+                  <input
+                    type="text"
+                    value={newZoneCode}
+                    onChange={(e) => setNewZoneCode(e.target.value)}
+                    placeholder="e.g. NP-JAF-01"
+                    required
+                    disabled={editingZoneId !== null}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Zone Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newZoneName}
+                    onChange={(e) => setNewZoneName(e.target.value)}
+                    placeholder="e.g. Jaffna Metro Central"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    District
+                  </label>
+                  <input
+                    type="text"
+                    value={newDistrict}
+                    onChange={(e) => setNewDistrict(e.target.value)}
+                    placeholder="e.g. Jaffna"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Base Surcharge (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newBaseSurcharge}
+                    onChange={(e) => setNewBaseSurcharge(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={closeZoneModal}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
+                  >
+                    {isSaving ? 'Saving...' : editingZoneId === null ? 'Save Zone' : 'Update Zone'}
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+
+        {/* Modal: Add Pricing Rule */}
+        {showRuleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900">{editingRuleId === null ? 'Add' : 'Edit'} Pricing Matrix Rule</h3>
+                <button onClick={closeRuleModal} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveRule} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Origin
+                    </label>
+                    <select
+                      value={ruleOriginId}
+                      onChange={(e) => setRuleOriginId(Number(e.target.value))}
+                      disabled={editingRuleId !== null}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                    >
+                      {zones.map(z => (
+                        <option key={z.id} value={z.id}>{z.zoneCode}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Destination
+                    </label>
+                    <select
+                      value={ruleDestId}
+                      onChange={(e) => setRuleDestId(Number(e.target.value))}
+                      disabled={editingRuleId !== null}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                    >
+                      {zones.map(z => (
+                        <option key={z.id} value={z.id}>{z.zoneCode}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Base Fee (LKR)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={ruleBaseFee}
+                      onChange={(e) => setRuleBaseFee(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Rate / Kg (LKR)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={ruleRatePerKg}
+                      onChange={(e) => setRuleRatePerKg(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Size Tier
+                    </label>
+                    <select
+                      value={ruleSize}
+                      onChange={(e) => setRuleSize(e.target.value as 'SMALL' | 'MEDIUM' | 'LARGE')}
+                      disabled={editingRuleId !== null}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                    >
+                      <option value="SMALL">SMALL (1.0x)</option>
+                      <option value="MEDIUM">MEDIUM (1.25x)</option>
+                      <option value="LARGE">LARGE (1.5x)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Multiplier
+                    </label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="1"
+                      required
+                      value={ruleMultiplier}
+                      onChange={(e) => setRuleMultiplier(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={closeRuleModal}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
+                  >
+                    {isSaving ? 'Saving...' : editingRuleId === null ? 'Save Rule' : 'Update Rule'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </AppShell>
   );
 }
-
