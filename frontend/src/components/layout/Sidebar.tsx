@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Package,
   Search,
@@ -17,8 +17,13 @@ import {
   Sliders,
   X,
   Boxes,
+  LogOut,
+  User as UserIcon,
+  Shield,
 } from 'lucide-react';
-import { UserSession } from '@/lib/auth';
+import { UserSession, authStorage } from '@/lib/auth';
+import api from '@/lib/api';
+import { useToast } from './ToastContext';
 
 interface SidebarProps {
   user: UserSession | null;
@@ -34,6 +39,20 @@ interface NavItem {
 
 export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const toast = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await api.post('/api/v1/auth/logout');
+    } catch {
+      // Ignore network errors
+    } finally {
+      authStorage.clearSession();
+      toast.info('Signed out successfully.');
+      router.push('/login');
+    }
+  };
 
   // Role-specific navigation items
   const getNavItems = (): NavItem[] => {
@@ -156,9 +175,52 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           })}
         </nav>
 
+        {/* User Profile & Logout Section (Sidebar Bottom) */}
+        {user ? (
+          <div className="p-3 border-t border-slate-800 bg-slate-950/60">
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-800/80 border border-slate-700/60 shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 border border-blue-400/30 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm">
+                  {user.fullName ? user.fullName.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-white truncate leading-tight">
+                    {user.fullName || user.email}
+                  </span>
+                  <span className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                    {user.email}
+                  </span>
+                  <div className="mt-1">
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                      {user.role ? user.role.replace('ROLE_', '') : 'USER'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 border-t border-slate-800">
+            <Link
+              href="/login"
+              className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition"
+            >
+              Sign In
+            </Link>
+          </div>
+        )}
+
         {/* Footer info */}
-        <div className="p-4 border-t border-slate-800/80 text-[11px] text-slate-500 flex justify-between">
-          <span>Nyxora SwiftDrop v1.0</span>
+        <div className="px-4 py-3 border-t border-slate-800/80 text-[10px] text-slate-500 flex justify-between">
+          <span>Nyxora SwiftDrop</span>
           <span className="font-mono text-slate-400">Sri Lanka</span>
         </div>
       </aside>

@@ -51,6 +51,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST,   "/api/v1/parcels/quote").permitAll()
                 .requestMatchers(HttpMethod.GET,    "/api/v1/parcels/track/**").permitAll()
 
+                // Member 7: Public real-time STOMP WebSocket & SockJS fallback endpoints (Task 1.11 / 4.4)
+                .requestMatchers("/ws-swiftdrop/**").permitAll()
+
                 // Member 4: Customer & Merchant delivery operations
                 .requestMatchers(HttpMethod.POST,   "/api/v1/parcels/book").hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")
                 .requestMatchers(HttpMethod.GET,    "/api/v1/parcels/*/receipt/pdf").hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")
