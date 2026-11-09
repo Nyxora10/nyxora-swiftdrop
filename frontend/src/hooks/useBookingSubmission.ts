@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import axios from 'axios';
 import { authStorage } from '@/lib/auth';
 import { BookingFormData, BookingResponse, DeliveryZone, RateQuoteResponse } from '@/types/booking';
 import { bookParcel } from '@/services/parcelService';
@@ -70,18 +71,25 @@ export function useBookingSubmission({
       setBookingResult(enrichedResult);
       onSuccess();
       toast.success(`Booking Confirmed! Tracking: ${enrichedResult.trackingNumber}`);
-    } catch (err: any) {
-      console.error('Booking submission failed:', err);
-      const fieldErrors = err.response?.data?.errors
-        ? Object.entries(err.response.data.errors)
-            .map(([field, msg]) => `${field}: ${msg}`)
+    } catch (error: unknown) {
+      console.error('Booking submission failed:', error);
+      const errorData = axios.isAxiosError(error)
+        ? error.response?.data as {
+            errors?: Record<string, unknown>;
+            detail?: string;
+            message?: string;
+          } | undefined
+        : undefined;
+      const fieldErrors = errorData?.errors
+        ? Object.entries(errorData.errors)
+            .map(([field, message]) => `${field}: ${String(message)}`)
             .join(', ')
         : null;
 
       const errorMsg =
         fieldErrors ||
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
+        errorData?.detail ||
+        errorData?.message ||
         'Booking submission failed. Please verify parcel details and try again.';
 
       toast.error(errorMsg);
