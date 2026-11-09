@@ -73,7 +73,7 @@ export default function HomePage() {
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/70 text-blue-800 text-xs font-semibold mb-4">
             <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Task 6.0 Shared Architecture Active</span>
+            <span>Cloud-Native Logistics Architecture</span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-950 tracking-tight leading-tight mb-4">
             Next-Gen Courier &amp; Logistics Management
@@ -141,7 +141,7 @@ export default function HomePage() {
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Task 6.0 Architecture Verification</h2>
+              <h2 className="text-sm font-bold text-slate-900">Platform Route Verification</h2>
               <p className="text-xs text-slate-500">Quick links to inspect holding screens and route guards</p>
             </div>
             <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">

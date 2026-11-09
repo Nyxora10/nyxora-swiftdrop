@@ -24,6 +24,7 @@ public class RouteValidator {
             "/api/v1/auth/apple",
             "/api/v1/auth/facebook",
             "/api/v1/parcels/track",
+            "/ws-swiftdrop",
             "/actuator/health",
             "/actuator/info",
             "/v3/api-docs",

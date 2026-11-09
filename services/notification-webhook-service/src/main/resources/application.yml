@@ -1,0 +1,51 @@
+server:
+  port: ${NOTIFICATION_SERVICE_PORT:8083}
+
+spring:
+  application:
+    name: notification-webhook-service
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/notification_db
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgrespassword}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+app:
+  notification:
+    from-email: ${NOTIFICATION_FROM_EMAIL:no-reply@swiftdrop.lk}
+    sms:
+      mock-enabled: ${NOTIFICATION_SMS_MOCK_ENABLED:true}
+  rabbitmq:
+    exchange: swiftdrop.events.topic
+    notification-queue: notification.parcel.events
+    parcel-routing-key: parcel.#
+
+logging:
+  level:
+    root: INFO
+    com.nyxora.swiftdrop: DEBUG
+
