@@ -1,40 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DeliveryZone } from '@/types/booking';
-import { DEFAULT_FALLBACK_ZONES } from '@/constants/booking';
 import { getDeliveryZones } from '@/services/zoneService';
 
 export function useDeliveryZones() {
-  const [zones, setZones] = useState<DeliveryZone[]>(DEFAULT_FALLBACK_ZONES);
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [loadingZones, setLoadingZones] = useState<boolean>(true);
+  const [zoneError, setZoneError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function load() {
-      try {
-        setLoadingZones(true);
-        const data = await getDeliveryZones();
-        if (isMounted) {
-          setZones(data);
-        }
-      } catch (err) {
-        console.warn('Fallback zones in useDeliveryZones:', err);
-      } finally {
-        if (isMounted) {
-          setLoadingZones(false);
-        }
-      }
+  const fetchZones = useCallback(async () => {
+    setLoadingZones(true);
+    setZoneError(null);
+    try {
+      const data = await getDeliveryZones();
+      setZones(data);
+    } catch (err: unknown) {
+      console.error('Failed to retrieve delivery zones from logistics service:', err);
+      setZoneError('Unable to load active delivery zones. Please verify network connectivity.');
+    } finally {
+      setLoadingZones(false);
     }
-
-    load();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
-  return { zones, loadingZones };
-}
+  useEffect(() => {
+    void fetchZones();
+  }, [fetchZones]);
 
+  return { zones, loadingZones, zoneError, refetchZones: fetchZones };
+}

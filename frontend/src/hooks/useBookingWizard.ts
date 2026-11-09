@@ -58,8 +58,8 @@ export function useBookingWizard({ userFullName, zones }: UseBookingWizardOption
     setFormData({
       ...INITIAL_FORM_DATA,
       senderName: userFullName || '',
-      originZoneId: zones[0]?.id || '1',
-      destinationZoneId: zones[1]?.id || '2',
+      originZoneId: zones[0]?.id || '',
+      destinationZoneId: zones[1]?.id || '',
     });
     setCurrentStep(1);
   }, [userFullName, zones]);
