@@ -38,7 +38,7 @@ spring:
         - id: parcel-service-route
           uri: ${PARCEL_SERVICE_URL:http://localhost:8082}
           predicates:
-            - Path=/api/v1/parcels/**,/api/v1/pricing/**,/api/v1/zones/**,/api/v1/couriers/**
+            - Path=/api/v1/parcels/**,/api/v1/pricing/**,/api/v1/zones/**,/api/v1/couriers/**,/api/v1/public/**
 
         # Route 3: Notification Webhook Service (Port 8083 - Prepared)
         - id: notification-service-route
