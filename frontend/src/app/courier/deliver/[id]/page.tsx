@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
@@ -32,7 +32,7 @@ import {
   X,
 } from 'lucide-react';
 
-export default function CourierDeliverPage() {
+function CourierDeliverContent() {
   const router = useRouter();
   const routeParams = useParams();
   const toast = useToast();
@@ -626,5 +626,22 @@ export default function CourierDeliverPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function CourierDeliverPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500">Loading delivery details...</p>
+          </div>
+        </div>
+      }
+    >
+      <CourierDeliverContent />
+    </Suspense>
   );
 }
