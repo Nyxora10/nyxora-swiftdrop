@@ -28,6 +28,8 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -211,10 +213,8 @@ class MerchantParcelControllerTest {
 
     @Test
     @WithMockUser(roles = "MERCHANT")
-    @DisplayName("POST /merchant/orders succeeds with only X-User-Id header as fallback")
-    void createMerchantOrder_OnlyUserIdHeader_Success() throws Exception {
-        UUID userId = UUID.randomUUID();
-
+    @DisplayName("POST /merchant/orders rejects requests carrying only X-User-Id (no merchant claim)")
+    void createMerchantOrder_OnlyUserIdHeader_Returns400() throws Exception {
         MerchantOrderRequest request = MerchantOrderRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -226,21 +226,13 @@ class MerchantParcelControllerTest {
                 .parcelSize(ParcelSize.MEDIUM)
                 .build();
 
-        MerchantOrderResponse response = MerchantOrderResponse.builder()
-                .trackingNumber("SD-20261107-USERONLY")
-                .estimatedFee(new BigDecimal("765.00"))
-                .currentStatus(ParcelStatus.CREATED)
-                .build();
-
-        when(merchantOrderService.createMerchantOrder(any(MerchantOrderRequest.class), eq(userId), eq(userId)))
-                .thenReturn(response);
-
         mockMvc.perform(post("/api/v1/parcels/merchant/orders")
-                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Id", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.trackingNumber").value("SD-20261107-USERONLY"));
+                .andExpect(status().isBadRequest());
+
+        verify(merchantOrderService, never()).createMerchantOrder(any(), any(), any());
     }
 
     @Test

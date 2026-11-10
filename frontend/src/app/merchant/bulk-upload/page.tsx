@@ -57,6 +57,7 @@ export default function MerchantBulkUploadPage() {
   const [fileType, setFileType] = useState<'csv' | 'json' | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [summary, setSummary] = useState<IngestionSummary | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [copiedTracking, setCopiedTracking] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -196,6 +197,7 @@ export default function MerchantBulkUploadPage() {
     if (!file) return;
 
     setSummary(null);
+    setSubmitError(null);
     setFileName(file.name);
 
     const reader = new FileReader();
@@ -218,17 +220,22 @@ export default function MerchantBulkUploadPage() {
     setFileName(null);
     setFileType(null);
     setSummary(null);
+    setSubmitError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Submit Batch to Backend API: POST /api/v1/parcels/bulk
+  // Only client-valid rows are sent: one malformed row would otherwise fail @Valid on the whole batch.
+  // Rows rejected locally are merged back into the result table with their validation errors.
   const handleSubmitBatch = async () => {
-    if (parsedRows.length === 0) return;
+    const validRows = parsedRows.filter((r) => r.isValid);
+    if (validRows.length === 0) return;
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const payload = {
-        orders: parsedRows.map((r) => ({
+        orders: validRows.map((r) => ({
           originZoneId: r.originZoneId,
           destinationZoneId: r.destinationZoneId,
           pickupAddress: r.pickupAddress,
@@ -241,40 +248,36 @@ export default function MerchantBulkUploadPage() {
         })),
       };
 
-      try {
-        const response = await api.post('/api/v1/parcels/bulk', payload);
-        setSummary(response.data);
-      } catch {
-        // Fallback simulated outcome for offline presentation demo
-        const mockResults: IngestionResultItem[] = parsedRows.map((r, i) => {
-          if (!r.isValid) {
-            return {
-              rowNumber: r.rowNumber,
-              trackingNumber: null,
-              estimatedFee: null,
-              status: 'FAILED',
-              merchantOrderReference: r.merchantOrderReference,
-              errors: r.errors,
-            };
-          }
-          return {
-            rowNumber: r.rowNumber,
-            trackingNumber: `SD-20261107-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-            estimatedFee: Math.round(350 + r.weightKg * 60 * 0.85),
-            status: 'SUCCESS',
-            merchantOrderReference: r.merchantOrderReference,
-            errors: [],
-          };
-        });
+      const response = await api.post<IngestionSummary>('/api/v1/parcels/bulk', payload);
+      const serverResults: IngestionResultItem[] = response.data.results.map((item) => ({
+        ...item,
+        // Server numbers rows within the submitted batch; map back to the original file row.
+        rowNumber: validRows[item.rowNumber - 1]?.rowNumber ?? item.rowNumber,
+      }));
+      const locallyRejected: IngestionResultItem[] = parsedRows
+        .filter((r) => !r.isValid)
+        .map((r) => ({
+          rowNumber: r.rowNumber,
+          trackingNumber: null,
+          estimatedFee: null,
+          status: 'FAILED',
+          merchantOrderReference: r.merchantOrderReference,
+          errors: r.errors,
+        }));
+      const results = [...serverResults, ...locallyRejected].sort((a, b) => a.rowNumber - b.rowNumber);
 
-        const successCount = mockResults.filter((r) => r.status === 'SUCCESS').length;
-        setSummary({
-          totalReceived: parsedRows.length,
-          successfulCount: successCount,
-          failedCount: parsedRows.length - successCount,
-          results: mockResults,
-        });
-      }
+      setSummary({
+        totalReceived: parsedRows.length,
+        successfulCount: response.data.successfulCount,
+        failedCount: response.data.failedCount + locallyRejected.length,
+        results,
+      });
+    } catch (err) {
+      // No simulated results: nothing was booked, so say so and let the merchant retry.
+      const data = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
+      setSubmitError(
+        data?.detail || data?.message || 'Upload failed. No orders were created — please check your connection and try again.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -360,6 +363,12 @@ export default function MerchantBulkUploadPage() {
               <span>&bull;</span>
               <span>Up to 100 parcels</span>
             </div>
+          </div>
+        )}
+
+        {submitError && (
+          <div role="alert" className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-800">
+            {submitError}
           </div>
         )}
 
