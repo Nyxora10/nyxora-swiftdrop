@@ -112,6 +112,9 @@ export default function MerchantDashboardPage() {
   const [showCredModal, setShowCredModal] = useState(false);
   const [rotatingSecret, setRotatingSecret] = useState(false);
   const [newClientSecret, setNewClientSecret] = useState<string | null>(null);
+  const [regeneratingWebhookSecret, setRegeneratingWebhookSecret] = useState(false);
+  // Shown once, straight from the regeneration response; never re-fetchable from the profile.
+  const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const applySnapshot = useCallback((snapshot: DashboardSnapshot) => {
@@ -154,6 +157,39 @@ export default function MerchantDashboardPage() {
     } finally {
       setRotatingSecret(false);
     }
+  };
+
+  // Handle webhook HMAC signing secret regeneration
+  const handleRegenerateWebhookSecret = async () => {
+    if (!confirm('Regenerate your webhook signing secret? Webhooks will be signed with the new secret immediately, so update your verification code right away.')) {
+      return;
+    }
+    setRegeneratingWebhookSecret(true);
+    setRotateError(null);
+    try {
+      const res = await api.put<MerchantProfile & { newWebhookSecret?: string }>(
+        '/api/v1/auth/merchant/webhook',
+        { regenerateSecret: true },
+      );
+      const { newWebhookSecret: revealed, ...updatedProfile } = res.data;
+      setProfile(updatedProfile);
+      setNewWebhookSecret(revealed ?? null);
+      if (!revealed) {
+        setRotateError('The webhook secret was regenerated, but the server did not return it. Regenerate again to obtain a usable secret.');
+      }
+    } catch (err) {
+      setNewWebhookSecret(null);
+      setRotateError(apiErrorMessage(err, 'Webhook secret regeneration failed. Your existing webhook secret is unchanged.'));
+    } finally {
+      setRegeneratingWebhookSecret(false);
+    }
+  };
+
+  const closeCredModal = () => {
+    // Drop one-time secrets from memory once the merchant leaves the modal.
+    setNewClientSecret(null);
+    setNewWebhookSecret(null);
+    setShowCredModal(false);
   };
 
   const copyToClipboard = (text: string, keyName: string) => {
@@ -476,7 +512,7 @@ export default function MerchantDashboardPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowCredModal(false)}
+                  onClick={closeCredModal}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                 >
                   &times;
@@ -558,19 +594,56 @@ export default function MerchantDashboardPage() {
                 </div>
               )}
 
-              {/* Rotate Action */}
+              {/* Webhook Secret One-Time Reveal */}
+              {newWebhookSecret && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase">
+                    <CheckCircle2 className="w-4 h-4" /> New Webhook Signing Secret Generated
+                  </div>
+                  <p className="text-xs text-emerald-700">
+                    Use this secret to verify webhook HMAC signatures. It will never be displayed again:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={newWebhookSecret}
+                      className="flex-1 bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs font-mono text-emerald-900 font-bold"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(newWebhookSecret, 'webhookSecret')}
+                      className="p-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition-all"
+                      title="Copy Webhook Secret"
+                    >
+                      {copiedKey === 'webhookSecret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Rotate Actions */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <button
-                  onClick={handleRotateSecret}
-                  disabled={rotatingSecret}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${rotatingSecret ? 'animate-spin' : ''}`} />
-                  {rotatingSecret ? 'Rotating Key...' : 'Rotate Client Secret'}
-                </button>
+                <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={handleRotateSecret}
+                    disabled={rotatingSecret}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${rotatingSecret ? 'animate-spin' : ''}`} />
+                    {rotatingSecret ? 'Rotating Key...' : 'Rotate Client Secret'}
+                  </button>
+                  <button
+                    onClick={handleRegenerateWebhookSecret}
+                    disabled={regeneratingWebhookSecret}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${regeneratingWebhookSecret ? 'animate-spin' : ''}`} />
+                    {regeneratingWebhookSecret ? 'Regenerating...' : 'Regenerate Webhook Secret'}
+                  </button>
+                </div>
 
                 <button
-                  onClick={() => setShowCredModal(false)}
+                  onClick={closeCredModal}
                   className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
                 >
                   Close

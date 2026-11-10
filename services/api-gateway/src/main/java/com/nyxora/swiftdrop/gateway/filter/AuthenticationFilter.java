@@ -22,8 +22,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
+
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Perimeter security filter enforcing stateless JWT verification and Token-to-Header identity relay.
@@ -34,25 +39,62 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthenticationFilter implements GlobalFilter, Ordered {
 
+    public static final String HEADER_USER_ID = "X-User-Id";
+    public static final String HEADER_USER_ROLE = "X-User-Role";
+    public static final String HEADER_USER_EMAIL = "X-User-Email";
+    public static final String HEADER_MERCHANT_ID = "X-Merchant-Id";
+    public static final String HEADER_COURIER_ID = "X-Courier-Id";
+    public static final String HEADER_TOKEN_TYPE = "X-Token-Type";
+    /** Proves to downstream services that identity headers were set by this gateway. */
+    public static final String HEADER_GATEWAY_SECRET = "X-Gateway-Secret";
+
+    /** Every header downstream services treat as trusted identity. Always stripped from callers. */
+    static final List<String> TRUSTED_HEADERS = List.of(
+            HEADER_USER_ID, HEADER_USER_ROLE, HEADER_USER_EMAIL,
+            HEADER_MERCHANT_ID, HEADER_COURIER_ID, HEADER_TOKEN_TYPE, HEADER_GATEWAY_SECRET);
+
+    /** Service-to-service routes that must never be reachable from outside the cluster. */
+    static final String INTERNAL_PATH_PREFIX = "/api/v1/auth/internal";
+
+    static final String TOKEN_TYPE_M2M = "client_credentials";
+    static final String TOKEN_TYPE_USER = "user";
+
+    /**
+     * Machine-to-machine (client_credentials) tokens may only call these method+path pairs:
+     * single order creation and bulk ingestion. Everything else needs an interactive session.
+     */
+    static final List<String> M2M_ALLOWED_ROUTES = List.of(
+            "POST /api/v1/parcels/merchant/orders",
+            "POST /api/v1/parcels/bulk");
+
     private final RouteValidator routeValidator;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+
+    private String gatewaySharedSecret;
+
+    @Value("${app.gateway.shared-secret:}")
+    public void setGatewaySharedSecret(String gatewaySharedSecret) {
+        this.gatewaySharedSecret = gatewaySharedSecret;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().pathWithinApplication().value();
 
+        // 0. Internal service-to-service APIs are not part of the public surface.
+        if (path.equals(INTERNAL_PATH_PREFIX) || path.startsWith(INTERNAL_PATH_PREFIX + "/")) {
+            log.warn("[AuthenticationFilter] Blocked external access to internal path: {}", path);
+            return onError(exchange, "Resource not found.", HttpStatus.NOT_FOUND);
+        }
+
         // 1. Whitelist Check: Public Endpoints
         if (!routeValidator.isSecured.test(request)) {
             log.debug("[AuthenticationFilter] Public path accessed: {}", path);
-            // Anti-spoofing: Remove any forged X-User headers on public paths
+            // Anti-spoofing: Remove any forged identity headers on public paths
             ServerHttpRequest sanitizedRequest = request.mutate()
-                    .headers(h -> {
-                        h.remove("X-User-Id");
-                        h.remove("X-User-Role");
-                        h.remove("X-User-Email");
-                    })
+                    .headers(this::replaceTrustedHeaders)
                     .build();
             return chain.filter(exchange.mutate().request(sanitizedRequest).build());
         }
@@ -85,23 +127,70 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String userId = claims.getSubject();
         String role = claims.get("role", String.class);
         String email = claims.get("email", String.class);
+        String merchantId = uuidClaim(claims, "merchantId");
+        String courierId = uuidClaim(claims, "courierId");
+        boolean m2m = TOKEN_TYPE_M2M.equals(claims.get("token_type", String.class));
 
         log.debug("[AuthenticationFilter] Verified user [{}] with role [{}] for path [{}]",
                 PiiMaskingUtil.maskEmail(email), role, path);
 
+        // 5. M2M tokens are restricted to explicitly authorised automation routes.
+        if (m2m && !isM2mAllowed(request.getMethod(), path)) {
+            log.warn("[AuthenticationFilter] M2M token rejected on non-automation route {} {}", request.getMethod(), path);
+            return onError(exchange,
+                    "Machine-to-machine tokens may only create orders. Sign in to the merchant portal for this action.",
+                    HttpStatus.FORBIDDEN);
+        }
+
         ServerHttpRequest mutatedRequest = request.mutate()
                 .headers(h -> {
-                    // Anti-spoofing: clear any caller-supplied identity headers first
-                    h.remove("X-User-Id");
-                    h.remove("X-User-Role");
-                    h.remove("X-User-Email");
+                    // Anti-spoofing: clear every caller-supplied identity header first,
+                    // then set only values taken from the verified token.
+                    replaceTrustedHeaders(h);
+                    h.set(HEADER_USER_ID, userId != null ? userId : "");
+                    h.set(HEADER_USER_ROLE, role != null ? role : "");
+                    h.set(HEADER_USER_EMAIL, email != null ? email : "");
+                    h.set(HEADER_TOKEN_TYPE, m2m ? TOKEN_TYPE_M2M : TOKEN_TYPE_USER);
+                    if (merchantId != null) {
+                        h.set(HEADER_MERCHANT_ID, merchantId);
+                    }
+                    if (courierId != null) {
+                        h.set(HEADER_COURIER_ID, courierId);
+                    }
                 })
-                .header("X-User-Id", userId != null ? userId : "")
-                .header("X-User-Role", role != null ? role : "")
-                .header("X-User-Email", email != null ? email : "")
                 .build();
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
+    }
+
+    /**
+     * Removes all caller-supplied trusted headers and stamps the gateway secret, so downstream
+     * services can tell gateway traffic from direct (possibly forged) calls.
+     */
+    private void replaceTrustedHeaders(HttpHeaders headers) {
+        TRUSTED_HEADERS.forEach(headers::remove);
+        if (gatewaySharedSecret != null && !gatewaySharedSecret.isBlank()) {
+            headers.set(HEADER_GATEWAY_SECRET, gatewaySharedSecret);
+        }
+    }
+
+    private static boolean isM2mAllowed(HttpMethod method, String path) {
+        String route = (method != null ? method.name() : "") + " " + path;
+        return M2M_ALLOWED_ROUTES.contains(route);
+    }
+
+    /** Returns the claim only if it is a well-formed UUID; never forwards arbitrary strings. */
+    private static String uuidClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.toString()).toString();
+        } catch (IllegalArgumentException e) {
+            log.warn("[AuthenticationFilter] Ignoring malformed {} claim", name);
+            return null;
+        }
     }
 
     /**

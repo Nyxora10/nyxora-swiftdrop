@@ -214,7 +214,7 @@ class MerchantParcelControllerTest {
     @Test
     @WithMockUser(roles = "MERCHANT")
     @DisplayName("POST /merchant/orders rejects requests carrying only X-User-Id (no merchant claim)")
-    void createMerchantOrder_OnlyUserIdHeader_Returns400() throws Exception {
+    void createMerchantOrder_OnlyUserIdHeader_Returns403() throws Exception {
         MerchantOrderRequest request = MerchantOrderRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -230,15 +230,15 @@ class MerchantParcelControllerTest {
                         .header("X-User-Id", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         verify(merchantOrderService, never()).createMerchantOrder(any(), any(), any());
     }
 
     @Test
     @WithMockUser(roles = "MERCHANT")
-    @DisplayName("POST /merchant/orders returns 400 when merchant identification headers are missing")
-    void createMerchantOrder_MissingHeaders_Returns400() throws Exception {
+    @DisplayName("POST /merchant/orders returns 403 when merchant identification headers are missing")
+    void createMerchantOrder_MissingHeaders_Returns403() throws Exception {
         MerchantOrderRequest request = MerchantOrderRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -253,13 +253,13 @@ class MerchantParcelControllerTest {
         mockMvc.perform(post("/api/v1/parcels/merchant/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(roles = "MERCHANT")
-    @DisplayName("POST /bulk returns 400 when merchant identification headers are missing")
-    void createBulkOrders_MissingHeaders_Returns400() throws Exception {
+    @DisplayName("POST /bulk returns 403 when merchant identification headers are missing")
+    void createBulkOrders_MissingHeaders_Returns403() throws Exception {
         MerchantOrderRequest orderReq = MerchantOrderRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -275,7 +275,7 @@ class MerchantParcelControllerTest {
         mockMvc.perform(post("/api/v1/parcels/bulk")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
     }
 
     @Test

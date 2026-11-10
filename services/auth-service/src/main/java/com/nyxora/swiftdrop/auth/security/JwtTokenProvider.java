@@ -31,6 +31,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtTokenProvider {
 
+    /** Claim that tells interactive user sessions apart from machine-to-machine tokens. */
+    public static final String CLAIM_TOKEN_TYPE = "token_type";
+    public static final String CLAIM_SCOPE = "scope";
+    public static final String TOKEN_TYPE_M2M = "client_credentials";
+
+    /** Space-separated OAuth scopes granted to M2M tokens: order creation and bulk ingestion only. */
+    public static final String M2M_SCOPES = "parcels:create parcels:bulk";
+
     private final JwtProperties jwtProperties;
 
     /**
@@ -100,7 +108,9 @@ public class JwtTokenProvider {
 
     /**
      * Issues an OAuth 2.0 Machine-to-Machine (M2M) Bearer JWT for an active Merchant partner.
-     * Contains standard claims plus role=ROLE_MERCHANT and merchantId.
+     * Contains standard claims plus role=ROLE_MERCHANT and merchantId, and is marked with
+     * token_type=client_credentials and limited scopes so it cannot be used for interactive
+     * account management (webhook config, credential rotation).
      */
     public String generateM2mToken(User user, Merchant merchant) {
         Date now = new Date();
@@ -112,6 +122,8 @@ public class JwtTokenProvider {
                 .claim("role", "ROLE_MERCHANT")
                 .claim("merchantId", merchant.getId().toString())
                 .claim("fullName", merchant.getBusinessName())
+                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_M2M)
+                .claim(CLAIM_SCOPE, M2M_SCOPES)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
@@ -140,6 +152,13 @@ public class JwtTokenProvider {
     public String getRoleFromToken(String token) {
         Claims claims = getClaimsFromToken(token);
         return claims.get("role", String.class);
+    }
+
+    /**
+     * True when the verified token was issued through the client_credentials grant.
+     */
+    public static boolean isM2mToken(Claims claims) {
+        return TOKEN_TYPE_M2M.equals(claims.get(CLAIM_TOKEN_TYPE, String.class));
     }
 
     /**

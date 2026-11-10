@@ -21,7 +21,9 @@ import java.util.UUID;
  * Internal REST client for retrieving merchant webhook endpoints and HMAC signing credentials from auth-service.
  *
  * <p>Uses Spring 6 / Spring Boot 3 {@link RestClient}.
- * Connects to internal endpoint: {@code GET /api/v1/auth/internal/merchants/{merchantId}/webhook-config}.</p>
+ * Connects to internal endpoint: {@code GET /api/v1/auth/internal/merchants/{merchantId}/webhook-config},
+ * authenticating with the shared {@code X-Internal-Api-Key} (property {@code app.services.internal-api-key},
+ * env {@code INTERNAL_API_KEY}; must match auth-service's {@code app.internal.api-key}).</p>
  *
  * <p>Security & Caching:
  * <ul>
@@ -35,13 +37,22 @@ public class AuthInternalClient {
 
     private static final Logger log = LoggerFactory.getLogger(AuthInternalClient.class);
 
+    /** Service-to-service credential header checked by auth-service on /api/v1/auth/internal/**. */
+    public static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
+
     private final RestClient restClient;
 
     @Autowired
     public AuthInternalClient(
             @Autowired(required = false) RestClient.Builder restClientBuilder,
-            @Value("${app.services.auth-service-url:http://localhost:8081}") String authServiceBaseUrl) {
+            @Value("${app.services.auth-service-url:http://localhost:8081}") String authServiceBaseUrl,
+            @Value("${app.services.internal-api-key:}") String internalApiKey) {
         RestClient.Builder builder = restClientBuilder != null ? restClientBuilder : RestClient.builder();
+        if (internalApiKey == null || internalApiKey.isBlank()) {
+            log.warn("app.services.internal-api-key is not configured; auth-service will reject webhook config lookups");
+        } else {
+            builder = builder.defaultHeader(INTERNAL_API_KEY_HEADER, internalApiKey.trim());
+        }
         this.restClient = builder
                 .baseUrl(authServiceBaseUrl)
                 .build();
