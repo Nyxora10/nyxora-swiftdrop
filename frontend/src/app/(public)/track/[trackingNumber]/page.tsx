@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Image as ImageIcon, MapPin, Package, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -12,7 +12,7 @@ import { useParcelTracking } from '@/hooks/useParcelTracking';
 import { useParcelWebSocket } from '@/lib/websocket';
 import type { ParcelTrackingResponse, ParcelTrackingUpdate } from '@/types/tracking';
 
-export default function TrackingPage() {
+function TrackingPageContent() {
   const params = useParams<{ trackingNumber: string }>();
   const trackingNumber = decodeURIComponent(params.trackingNumber ?? '');
   const { tracking: initialTracking, loading, error, refetchTracking } = useParcelTracking(trackingNumber);
@@ -20,10 +20,14 @@ export default function TrackingPage() {
   const [proofPhotoUrl, setProofPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    setTracking(initialTracking);
-    if (initialTracking?.currentStatus !== 'DELIVERED') {
-      setProofPhotoUrl(null);
-    }
+    const timeoutId = window.setTimeout(() => {
+      setTracking(initialTracking);
+      if (initialTracking?.currentStatus !== 'DELIVERED') {
+        setProofPhotoUrl(null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [initialTracking]);
 
   const handleLiveUpdate = (update: ParcelTrackingUpdate) => {
@@ -182,5 +186,22 @@ export default function TrackingPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function TrackingPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+          <div className="flex items-center gap-3 text-sm font-semibold text-slate-600">
+            <Spinner size="md" />
+            Loading parcel tracking information...
+          </div>
+        </main>
+      }
+    >
+      <TrackingPageContent />
+    </Suspense>
   );
 }

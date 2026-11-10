@@ -62,7 +62,11 @@ export function useParcelTracking(trackingNumber: string) {
   }, [trackingNumber]);
 
   useEffect(() => {
-    void fetchTracking();
+    const timeoutId = window.setTimeout(() => {
+      void fetchTracking();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchTracking]);
 
   return {

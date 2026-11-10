@@ -14,7 +14,9 @@ export function useParcelWebSocket(
   trackingNumber: string,
   onUpdate: (update: ParcelTrackingUpdate) => void
 ): ParcelWebSocketStatus {
-  const [status, setStatus] = useState<ParcelWebSocketStatus>('DISCONNECTED');
+  const [status, setStatus] = useState<ParcelWebSocketStatus>(() =>
+    trackingNumber.trim() ? 'RECONNECTING' : 'DISCONNECTED'
+  );
   const onUpdateRef = useRef(onUpdate);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export function useParcelWebSocket(
   useEffect(() => {
     const normalizedTrackingNumber = trackingNumber.trim();
     if (!normalizedTrackingNumber) {
-      setStatus('DISCONNECTED');
+      queueMicrotask(() => setStatus('DISCONNECTED'));
       return;
     }
 
@@ -69,7 +71,6 @@ export function useParcelWebSocket(
       },
     });
 
-    setStatus('RECONNECTING');
     client.activate();
 
     return () => {
