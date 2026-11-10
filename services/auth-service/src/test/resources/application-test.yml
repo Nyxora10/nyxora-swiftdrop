@@ -23,3 +23,5 @@ app:
     secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     access-token-expiration-ms: 900000
     refresh-token-expiration-ms: 604800000
+  internal:
+    api-key: test-internal-api-key

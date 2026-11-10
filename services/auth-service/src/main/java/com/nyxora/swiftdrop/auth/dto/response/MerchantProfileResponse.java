@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.auth.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;
@@ -21,6 +22,18 @@ public record MerchantProfileResponse(
         @Schema(description = "Current outbound webhook endpoint URL", example = "https://partner.daraz.lk/webhooks/swiftdrop")
         String webhookUrl,
 
-        @Schema(description = "Masked HMAC webhook signing secret", example = "whsec_****")
-        String webhookSecret
-) {}
+        @Schema(description = "Masked HMAC webhook signing secret", example = "whsec_****1a2b")
+        String webhookSecret,
+
+        @Schema(description = "Full HMAC webhook signing secret. Present only in the response of the request that "
+                + "generated it; never returned by profile lookups. Store it immediately.",
+                example = "whsec_3f9c0d4e5a6b7c8d9e0f1a2b3c4d5e6f")
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String newWebhookSecret
+) {
+    /** Ordinary profile view: masked secret only. */
+    public MerchantProfileResponse(UUID merchantId, String businessName, String registrationNumber,
+                                   String oauthClientId, String webhookUrl, String webhookSecret) {
+        this(merchantId, businessName, registrationNumber, oauthClientId, webhookUrl, webhookSecret, null);
+    }
+}

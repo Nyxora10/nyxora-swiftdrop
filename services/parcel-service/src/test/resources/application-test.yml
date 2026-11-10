@@ -13,3 +13,9 @@ spring:
   h2:
     console:
       enabled: false
+
+app:
+  security:
+    # Existing MockMvc tests send X-User-* headers directly, as the gateway would.
+    # Gateway-secret verification itself is covered by GatewayHeaderAuthFilterTest.
+    gateway-shared-secret: ""

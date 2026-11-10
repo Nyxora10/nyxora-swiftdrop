@@ -38,12 +38,11 @@ public class MerchantOrderServiceImpl implements MerchantOrderService {
     private final RabbitTemplate rabbitTemplate;
 
     /**
-     * Validation and pricing failures (IllegalArgument/IllegalState) are all raised before any
-     * write, so they must not mark the caller's transaction rollback-only. Otherwise one bad row
-     * in {@link BulkOrderServiceImpl} rolls back the entire batch with UnexpectedRollbackException.
+     * Any failure rolls back this order's writes. {@link BulkOrderServiceImpl} calls this inside a
+     * dedicated per-row transaction, so a failed row never affects the other rows of a batch.
      */
     @Override
-    @Transactional(noRollbackFor = {IllegalArgumentException.class, IllegalStateException.class})
+    @Transactional
     public MerchantOrderResponse createMerchantOrder(MerchantOrderRequest request, UUID merchantId, UUID senderUserId) {
         if (merchantId == null) {
             throw new IllegalArgumentException("Merchant ID is required to create a B2B merchant order.");

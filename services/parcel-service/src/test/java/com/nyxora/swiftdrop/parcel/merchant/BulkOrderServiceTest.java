@@ -10,9 +10,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -32,7 +34,9 @@ class BulkOrderServiceTest {
     @Mock
     private MerchantOrderService merchantOrderService;
 
-    @InjectMocks
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private BulkOrderServiceImpl bulkOrderService;
 
     private UUID merchantId;
@@ -40,8 +44,37 @@ class BulkOrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        bulkOrderService = new BulkOrderServiceImpl(merchantOrderService, validator, transactionManager);
         merchantId = UUID.randomUUID();
         senderUserId = UUID.randomUUID();
+    }
+
+    @Test
+    @DisplayName("Invalid rows are reported per row and never reach order creation; valid rows still succeed")
+    void processBulkOrders_InvalidRows_ReportedWithoutRejectingBatch() {
+        MerchantOrderRequest missingPhone = createSampleOrder("REF-BAD-1");
+        missingPhone.setRecipientPhone(null);
+        MerchantOrderRequest badWeight = createSampleOrder("REF-BAD-2");
+        badWeight.setWeightKg(new BigDecimal("0.0"));
+        MerchantOrderRequest valid = createSampleOrder("REF-OK");
+
+        when(merchantOrderService.createMerchantOrder(eq(valid), eq(merchantId), eq(senderUserId)))
+                .thenReturn(MerchantOrderResponse.builder().trackingNumber("SD-OK").build());
+
+        List<MerchantOrderRequest> rows = new ArrayList<>(List.of(missingPhone, valid, badWeight));
+        rows.add(null);
+        BulkOrderResponse response = bulkOrderService.processBulkOrders(new BulkOrderRequest(rows), merchantId, senderUserId);
+
+        assertEquals(4, response.getTotalReceived());
+        assertEquals(1, response.getSuccessfulCount());
+        assertEquals(3, response.getFailedCount());
+        assertEquals("FAILED", response.getResults().get(0).getStatus());
+        assertTrue(response.getResults().get(0).getErrors().stream().anyMatch(e -> e.startsWith("recipientPhone:")));
+        assertEquals("SUCCESS", response.getResults().get(1).getStatus());
+        assertTrue(response.getResults().get(2).getErrors().stream().anyMatch(e -> e.startsWith("weightKg:")));
+        assertEquals(List.of("Order row is empty."), response.getResults().get(3).getErrors());
+        verify(merchantOrderService, times(1)).createMerchantOrder(any(), any(), any());
     }
 
     private MerchantOrderRequest createSampleOrder(String ref) {

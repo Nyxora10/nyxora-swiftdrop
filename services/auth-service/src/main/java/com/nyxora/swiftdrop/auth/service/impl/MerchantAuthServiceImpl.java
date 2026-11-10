@@ -21,6 +21,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
+import java.util.HexFormat;
 import java.util.UUID;
 
 @Slf4j
@@ -29,6 +31,7 @@ import java.util.UUID;
 public class MerchantAuthServiceImpl implements MerchantAuthService {
 
     private static final String GRANT_TYPE_CLIENT_CREDENTIALS = "client_credentials";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final MerchantRepository merchantRepository;
     private final PasswordEncoder passwordEncoder;
@@ -104,13 +107,35 @@ public class MerchantAuthServiceImpl implements MerchantAuthService {
             merchant.setWebhookUrl(request.webhookUrl().trim().isEmpty() ? null : request.webhookUrl().trim());
         }
 
+        String generatedSecret = null;
         if (Boolean.TRUE.equals(request.regenerateSecret())) {
-            merchant.setWebhookSecret("whsec_" + UUID.randomUUID().toString().replace("-", ""));
+            generatedSecret = generateWebhookSecret();
+            merchant.setWebhookSecret(generatedSecret);
+            // Never log the secret itself.
             log.info("[MerchantAuth] Regenerated webhook secret for merchant: {}", merchant.getId());
         }
 
         Merchant saved = merchantRepository.save(merchant);
-        return toProfileResponse(saved);
+        MerchantProfileResponse profile = toProfileResponse(saved);
+        if (generatedSecret == null) {
+            return profile;
+        }
+        // Reveal the plaintext exactly once, in the response to the rotation request.
+        return new MerchantProfileResponse(
+                profile.merchantId(),
+                profile.businessName(),
+                profile.registrationNumber(),
+                profile.oauthClientId(),
+                profile.webhookUrl(),
+                profile.webhookSecret(),
+                generatedSecret
+        );
+    }
+
+    private static String generateWebhookSecret() {
+        byte[] bytes = new byte[32];
+        SECURE_RANDOM.nextBytes(bytes);
+        return "whsec_" + HexFormat.of().formatHex(bytes);
     }
 
     @Override
