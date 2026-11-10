@@ -84,6 +84,7 @@ api.interceptors.response.use(
     isRefreshing = true;
 
     const refreshToken = authStorage.getRefreshToken();
+
     if (!refreshToken) {
       isRefreshing = false;
       authStorage.clearSession();

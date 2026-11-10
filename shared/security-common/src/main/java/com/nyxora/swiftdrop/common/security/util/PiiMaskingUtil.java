@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
  *
  * Conceals:
  * <ul>
+ *   <li>Person/recipient names (e.g., {@code Kamal Perera} &rarr; {@code K***l P***a})</li>
  *   <li>Email addresses (e.g., {@code kamal@gmail.com} &rarr; {@code k***l@gmail.com})</li>
  *   <li>Phone numbers (e.g., {@code +94771234567} &rarr; {@code +94*****4567}, {@code 0771234567} &rarr; {@code 07*****4567})</li>
  *   <li>Physical residential street numbers (e.g., {@code 123/A Galle Road} &rarr; {@code *** Galle Road})</li>
@@ -75,6 +76,51 @@ public final class PiiMaskingUtil {
         }
 
         return maskedLocal + domainPart;
+    }
+
+    /**
+     * Masks person or recipient full names while preserving the outer characters of each name token.
+     *
+     * <ul>
+     *   <li>{@code "Kamal Perera"} &rarr; {@code "K***l P***a"}</li>
+     *   <li>{@code "Alice"} &rarr; {@code "A***e"}</li>
+     *   <li>{@code "Al"} &rarr; {@code "A*"}</li>
+     *   <li>{@code "A"} &rarr; {@code "*"}</li>
+     *   <li>{@code null} / blank &rarr; returns input safely</li>
+     * </ul>
+     *
+     * @param fullName Raw personal name string
+     * @return Privacy-masked name string
+     */
+    public static String maskName(String fullName) {
+        if (fullName == null) {
+            return null;
+        }
+        String trimmed = fullName.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+
+        String[] parts = trimmed.split("\\s+");
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            int len = part.length();
+
+            if (len == 1) {
+                sb.append('*');
+            } else if (len == 2) {
+                sb.append(part.charAt(0)).append('*');
+            } else {
+                sb.append(part.charAt(0)).append("***").append(part.charAt(len - 1));
+            }
+
+            if (i < parts.length - 1) {
+                sb.append(' ');
+            }
+        }
+        return sb.toString();
     }
 
     /**

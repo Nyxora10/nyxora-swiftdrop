@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import AppShell from '@/components/layout/AppShell';
+import api from '@/lib/api';
 import {
   MapPin,
   Layers,
@@ -11,8 +13,6 @@ import {
   AlertCircle,
   ArrowRight,
   Sliders,
-  DollarSign,
-  Sparkles,
   Calculator,
   Scale,
   Box,
@@ -51,27 +51,28 @@ interface QuoteResponse {
   totalFee: number;
 }
 
-const SEED_ZONES: DeliveryZone[] = [
-  { id: 1, zoneCode: 'WP-COL-01', zoneName: 'Colombo Central Metro', district: 'Colombo', baseSurcharge: 0, isActive: true },
-  { id: 2, zoneCode: 'WP-GAM-01', zoneName: 'Gampaha Industrial Hub', district: 'Gampaha', baseSurcharge: 25, isActive: true },
-  { id: 3, zoneCode: 'CP-KAN-01', zoneName: 'Kandy Urban District', district: 'Kandy', baseSurcharge: 50, isActive: true },
-  { id: 4, zoneCode: 'SP-GAL-01', zoneName: 'Galle Coastal Belt', district: 'Galle', baseSurcharge: 40, isActive: true },
-];
-
-const SEED_RULES: PricingRule[] = [
-  { id: 1, originZone: SEED_ZONES[0], destinationZone: SEED_ZONES[2], baseFee: 450, ratePerKg: 120, parcelSize: 'MEDIUM', sizeMultiplier: 1.25 },
-  { id: 2, originZone: SEED_ZONES[0], destinationZone: SEED_ZONES[1], baseFee: 250, ratePerKg: 80, parcelSize: 'SMALL', sizeMultiplier: 1.0 },
-  { id: 3, originZone: SEED_ZONES[0], destinationZone: SEED_ZONES[3], baseFee: 550, ratePerKg: 140, parcelSize: 'LARGE', sizeMultiplier: 1.5 },
-];
+const readApiError = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as {
+      detail?: string;
+      message?: string;
+      title?: string;
+    } | undefined;
+    return payload?.detail || payload?.message || payload?.title || fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
+};
 
 export default function AdminPricingPage() {
-  const [zones, setZones] = useState<DeliveryZone[]>(SEED_ZONES);
-  const [rules, setRules] = useState<PricingRule[]>(SEED_RULES);
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [rules, setRules] = useState<PricingRule[]>([]);
   const [activeTab, setActiveTab] = useState<'SIMULATOR' | 'ZONES' | 'RULES'>('SIMULATOR');
 
   // Modals
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
+  const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
 
   // New Zone Form
   const [newZoneCode, setNewZoneCode] = useState('');
@@ -80,138 +81,300 @@ export default function AdminPricingPage() {
   const [newBaseSurcharge, setNewBaseSurcharge] = useState('25.00');
 
   // New Rule Form
-  const [ruleOriginId, setRuleOriginId] = useState<number>(1);
-  const [ruleDestId, setRuleDestId] = useState<number>(3);
+  const [ruleOriginId, setRuleOriginId] = useState<number>(0);
+  const [ruleDestId, setRuleDestId] = useState<number>(0);
   const [ruleBaseFee, setRuleBaseFee] = useState('400.00');
   const [ruleRatePerKg, setRuleRatePerKg] = useState('100.00');
   const [ruleSize, setRuleSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('MEDIUM');
   const [ruleMultiplier, setRuleMultiplier] = useState('1.25');
 
   // Simulator State
-  const [calcOrigin, setCalcOrigin] = useState<number>(1);
-  const [calcDest, setCalcDest] = useState<number>(3);
+  const [calcOrigin, setCalcOrigin] = useState<number>(0);
+  const [calcDest, setCalcDest] = useState<number>(0);
   const [calcWeight, setCalcWeight] = useState<number>(3.5);
   const [calcSize, setCalcSize] = useState<'SMALL' | 'MEDIUM' | 'LARGE'>('MEDIUM');
   const [calcTier, setCalcTier] = useState<'STANDARD' | 'MERCHANT' | 'EXPRESS'>('EXPRESS');
   const [quoteResult, setQuoteResult] = useState<QuoteResponse | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [pageNotice, setPageNotice] = useState('');
 
-  // Fetch real data if backend available
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [zonesRes, rulesRes] = await Promise.all([
-          fetch('/api/v1/zones', { headers: { 'Authorization': `Bearer ${localStorage.getItem('swiftdrop_access_token') || ''}`, 'X-User-Role': 'ROLE_ADMIN' } }),
-          fetch('/api/v1/pricing/rules', { headers: { 'Authorization': `Bearer ${localStorage.getItem('swiftdrop_access_token') || ''}`, 'X-User-Role': 'ROLE_ADMIN' } })
-        ]);
-        if (zonesRes.ok) {
-          const zData = await zonesRes.json();
-          if (zData && zData.length > 0) setZones(zData);
-        }
-        if (rulesRes.ok) {
-          const rData = await rulesRes.json();
-          if (rData && rData.length > 0) setRules(rData);
-        }
-      } catch {
-        // Fallback to seed data seamlessly
-      }
-    };
-    fetchData();
+  const loadPricingData = useCallback(async () => {
+    const [{ data: zData }, { data: rData }] = await Promise.all([
+      api.get<DeliveryZone[]>('/api/v1/zones'),
+      api.get<PricingRule[]>('/api/v1/pricing/rules'),
+    ]);
+    const nextZones = Array.isArray(zData) ? zData : [];
+    const nextRules = Array.isArray(rData) ? rData : [];
+    const firstZoneId = nextZones[0]?.id ?? 0;
+    const secondZoneId = nextZones[1]?.id ?? firstZoneId;
+
+    setZones(nextZones);
+    setRules(nextRules);
+    setCalcOrigin((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
+    setCalcDest((current) => nextZones.some((zone) => zone.id === current) ? current : secondZoneId);
+    setRuleOriginId((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
+    setRuleDestId((current) => nextZones.some((zone) => zone.id === current) ? current : secondZoneId);
+
+    if (nextZones.length < 2) {
+      setQuoteResult(null);
+      setPageError('');
+    }
   }, []);
 
-  // Recalculate Live Quote whenever parameters change
+  // Load persisted pricing data before enabling the simulator.
   useEffect(() => {
-    runQuoteCalculation();
-  }, [calcOrigin, calcDest, calcWeight, calcSize, calcTier, zones, rules]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this effect synchronizes remote pricing data into the page state.
+    loadPricingData().catch((error) => {
+      setZones([]);
+      setRules([]);
+      setQuoteResult(null);
+      setPageError(readApiError(error, 'Unable to load pricing data.'));
+    });
+  }, [loadPricingData]);
 
-  const runQuoteCalculation = () => {
+  const handleRefreshPricingData = async () => {
+    setIsRefreshing(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      await loadPricingData();
+      setPageNotice('Pricing data refreshed successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to refresh pricing data.'));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const runQuoteCalculation = useCallback(async (signal?: AbortSignal) => {
+    if (zones.length < 2) {
+      setQuoteResult(null);
+      setPageError('');
+      return;
+    }
+
     const origin = zones.find(z => z.id === calcOrigin) || zones[0];
     const dest = zones.find(z => z.id === calcDest) || zones[1] || zones[0];
     if (!origin || !dest) return;
 
-    // Find rule or fallback to sensible default
-    let rule = rules.find(r =>
-      r.originZone.id === origin.id &&
-      r.destinationZone.id === dest.id &&
-      r.parcelSize === calcSize
-    );
-
-    const baseFee = rule ? rule.baseFee : 450;
-    const ratePerKg = rule ? rule.ratePerKg : 120;
-    const sizeMultipliers = { 'SMALL': 1.0, 'MEDIUM': 1.25, 'LARGE': 1.5 };
-    const sizeMult = rule ? rule.sizeMultiplier : sizeMultipliers[calcSize];
-
-    const weightCharge = calcWeight * ratePerKg;
-    const subtotal = (baseFee + weightCharge) * sizeMult;
-    const zoneSurcharges = origin.baseSurcharge + dest.baseSurcharge;
-
-    let discount = 0;
-    let expressSur = 0;
-    let total = subtotal + zoneSurcharges;
-
-    if (calcTier === 'MERCHANT') {
-      discount = (baseFee + weightCharge) * 0.15;
-      total -= discount;
-    } else if (calcTier === 'EXPRESS') {
-      expressSur = subtotal * 0.50;
-      total += expressSur;
+    if (origin.id === dest.id) {
+      setQuoteResult(null);
+      setPageError('Origin and destination zones must be different.');
+      return;
     }
 
-    setQuoteResult({
-      appliedTier: calcTier,
-      baseFee,
-      weightCharge,
-      sizeMultiplier: sizeMult,
-      zoneSurcharge: zoneSurcharges,
-      discountAmount: discount,
-      expressSurcharge: expressSur,
-      totalFee: Math.max(0, total)
-    });
+    try {
+      const response = await api.post<QuoteResponse>('/api/v1/parcels/quote', {
+          originZoneId: origin.id,
+          destinationZoneId: dest.id,
+          weightKg: calcWeight,
+          parcelSize: calcSize,
+          tier: calcTier,
+        }, {
+        signal,
+      });
+
+      setQuoteResult(response.data);
+      setPageError('');
+    } catch (error) {
+      if (axios.isCancel(error)) return;
+      setQuoteResult(null);
+      setPageError(readApiError(error, 'Unable to calculate a live quote.'));
+    }
+  }, [calcDest, calcOrigin, calcSize, calcTier, calcWeight, zones]);
+
+  // Recalculate through the real pricing engine whenever parameters change.
+  useEffect(() => {
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this effect runs the remote quote calculation for current inputs.
+    void runQuoteCalculation(controller.signal);
+    return () => controller.abort();
+  }, [runQuoteCalculation]);
+
+  const handleToggleZone = async (id: number) => {
+    const zone = zones.find((candidate) => candidate.id === id);
+    if (!zone) return;
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      await api.put(`/api/v1/zones/${id}`, { isActive: !zone.isActive });
+      await loadPricingData();
+      setPageNotice(`Zone ${zone.zoneCode} is now ${!zone.isActive ? 'active' : 'inactive'}.`);
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to update the delivery zone.'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleToggleZone = (id: number) => {
-    setZones(prev => prev.map(z => z.id === id ? { ...z, isActive: !z.isActive } : z));
-  };
-
-  const handleCreateZone = (e: React.FormEvent) => {
+  const handleSaveZone = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newZoneCode || !newZoneName) return;
-    const newZone: DeliveryZone = {
-      id: zones.length + 1,
-      zoneCode: newZoneCode.toUpperCase(),
-      zoneName: newZoneName,
-      district: newDistrict || 'General',
-      baseSurcharge: parseFloat(newBaseSurcharge) || 0,
-      isActive: true,
-    };
-    setZones(prev => [...prev, newZone]);
-    setNewZoneCode('');
-    setNewZoneName('');
-    setNewDistrict('');
+    if (!newZoneCode.trim() || !newZoneName.trim() || !newDistrict.trim()) return;
+
+    const baseSurcharge = Number(newBaseSurcharge);
+    if (!Number.isFinite(baseSurcharge) || baseSurcharge < 0) {
+      setPageError('Base surcharge must be a number greater than or equal to zero.');
+      setPageNotice('');
+      return;
+    }
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      const isEditing = editingZoneId !== null;
+      const payload = {
+        zoneCode: newZoneCode.trim().toUpperCase(),
+        zoneName: newZoneName.trim(),
+        district: newDistrict.trim(),
+        baseSurcharge,
+        ...(isEditing ? {} : { isActive: true }),
+      };
+      if (isEditing) {
+        await api.put(`/api/v1/zones/${editingZoneId}`, payload);
+      } else {
+        await api.post('/api/v1/zones', payload);
+      }
+      await loadPricingData();
+      setNewZoneCode('');
+      setNewZoneName('');
+      setNewDistrict('');
+      setEditingZoneId(null);
+      setShowZoneModal(false);
+      setPageNotice(isEditing ? 'Delivery zone updated successfully.' : 'Delivery zone created successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to save the delivery zone.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zones.some((zone) => zone.id === ruleOriginId) || !zones.some((zone) => zone.id === ruleDestId)) return;
+
+    if (ruleOriginId === ruleDestId) {
+      setPageError('Origin and destination zones must be different.');
+      setPageNotice('');
+      return;
+    }
+
+    const baseFee = Number(ruleBaseFee);
+    const ratePerKg = Number(ruleRatePerKg);
+    const sizeMultiplier = Number(ruleMultiplier);
+    if (!Number.isFinite(baseFee) || baseFee <= 0) {
+      setPageError('Base fee must be greater than zero.');
+      setPageNotice('');
+      return;
+    }
+    if (!Number.isFinite(ratePerKg) || ratePerKg <= 0) {
+      setPageError('Rate per kilogram must be greater than zero.');
+      setPageNotice('');
+      return;
+    }
+    if (!Number.isFinite(sizeMultiplier) || sizeMultiplier < 1) {
+      setPageError('Size multiplier must be at least 1.00.');
+      setPageNotice('');
+      return;
+    }
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      const isEditing = editingRuleId !== null;
+      const payload = {
+        baseFee,
+        ratePerKg,
+        sizeMultiplier,
+        ...(isEditing ? {} : {
+          originZoneId: ruleOriginId,
+          destinationZoneId: ruleDestId,
+          parcelSize: ruleSize,
+        }),
+      };
+      if (isEditing) {
+        await api.put(`/api/v1/pricing/rules/${editingRuleId}`, payload);
+      } else {
+        await api.post('/api/v1/pricing/rules', payload);
+      }
+      await loadPricingData();
+      setEditingRuleId(null);
+      setShowRuleModal(false);
+      setPageNotice(isEditing ? 'Pricing rule updated successfully.' : 'Pricing rule created successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to save the pricing rule.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const startEditingZone = (zone: DeliveryZone) => {
+    setEditingZoneId(zone.id);
+    setNewZoneCode(zone.zoneCode);
+    setNewZoneName(zone.zoneName);
+    setNewDistrict(zone.district);
+    setNewBaseSurcharge(zone.baseSurcharge.toFixed(2));
+    setShowZoneModal(true);
+  };
+
+  const startEditingRule = (rule: PricingRule) => {
+    setEditingRuleId(rule.id);
+    setRuleOriginId(rule.originZone.id);
+    setRuleDestId(rule.destinationZone.id);
+    setRuleBaseFee(rule.baseFee.toFixed(2));
+    setRuleRatePerKg(rule.ratePerKg.toFixed(2));
+    setRuleSize(rule.parcelSize);
+    setRuleMultiplier(rule.sizeMultiplier.toFixed(2));
+    setShowRuleModal(true);
+  };
+
+  const closeZoneModal = () => {
+    setEditingZoneId(null);
     setShowZoneModal(false);
   };
 
-  const handleCreateRule = (e: React.FormEvent) => {
-    e.preventDefault();
-    const orig = zones.find(z => z.id === ruleOriginId);
-    const dest = zones.find(z => z.id === ruleDestId);
-    if (!orig || !dest) return;
-
-    const newRule: PricingRule = {
-      id: rules.length + 1,
-      originZone: orig,
-      destinationZone: dest,
-      baseFee: parseFloat(ruleBaseFee) || 300,
-      ratePerKg: parseFloat(ruleRatePerKg) || 100,
-      parcelSize: ruleSize,
-      sizeMultiplier: parseFloat(ruleMultiplier) || 1.0,
-    };
-    setRules(prev => [...prev, newRule]);
+  const closeRuleModal = () => {
+    setEditingRuleId(null);
     setShowRuleModal(false);
+  };
+
+  const openNewZoneModal = () => {
+    setEditingZoneId(null);
+    setNewZoneCode('');
+    setNewZoneName('');
+    setNewDistrict('');
+    setNewBaseSurcharge('25.00');
+    setShowZoneModal(true);
+  };
+
+  const openNewRuleModal = () => {
+    setEditingRuleId(null);
+    setRuleBaseFee('400.00');
+    setRuleRatePerKg('100.00');
+    setRuleSize('MEDIUM');
+    setRuleMultiplier('1.25');
+    setShowRuleModal(true);
   };
 
   return (
     <AppShell>
       <div className="space-y-6">
+
+        {(pageError || pageNotice) && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${pageError
+            ? 'border-red-200 bg-red-50 text-red-700'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+            <div className="flex items-center gap-2">
+              {pageError ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+              <span>{pageError || pageNotice}</span>
+            </div>
+          </div>
+        )}
 
         {/* Page Top Header */}
         <div className="pb-4 border-b border-slate-200">
@@ -227,15 +390,25 @@ export default function AdminPricingPage() {
 
             <div className="flex items-center gap-2.5">
               <button
-                onClick={() => setShowZoneModal(true)}
+                onClick={() => void handleRefreshPricingData()}
+                disabled={isRefreshing || isSaving}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh data'}</span>
+              </button>
+              <button
+                onClick={openNewZoneModal}
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Zone</span>
               </button>
               <button
-                onClick={() => setShowRuleModal(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
+                onClick={openNewRuleModal}
+                disabled={zones.length < 2}
+                title={zones.length < 2 ? 'Create at least two delivery zones first.' : undefined}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Pricing Rule</span>
@@ -282,7 +455,7 @@ export default function AdminPricingPage() {
             </div>
             <div>
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Suite Health</div>
-              <div className="text-xl font-bold text-slate-900">82 Tests Pass</div>
+              <div className="text-xl font-bold text-slate-900">Automated</div>
             </div>
           </div>
         </div>
@@ -329,6 +502,12 @@ export default function AdminPricingPage() {
         {/* Tab 1: Live Strategy Simulator (Act 2A Demo) */}
         {activeTab === 'SIMULATOR' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            {zones.length < 2 && (
+              <div role="status" className="lg:col-span-12 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Add at least two delivery zones before creating pricing rules or calculating a quote.
+              </div>
+            )}
 
             {/* Left Controls Card */}
             <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
@@ -590,7 +769,9 @@ export default function AdminPricingPage() {
                     <span className="text-xs uppercase tracking-wider font-semibold text-slate-300 block">
                       Grand Total Fee (LKR)
                     </span>
-                    <span className="text-[11px] text-slate-400">Guaranteed Quote for Booking</span>
+                    <span className="text-[11px] text-slate-400">
+                      Live PricingEngine quote
+                    </span>
                   </div>
                   <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
                     LKR {quoteResult.totalFee.toFixed(2)}
@@ -612,7 +793,7 @@ export default function AdminPricingPage() {
                 <p className="text-xs text-slate-500">Maps directly to the PostgreSQL delivery_zones table</p>
               </div>
               <button
-                onClick={() => setShowZoneModal(true)}
+                onClick={openNewZoneModal}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -654,7 +835,16 @@ export default function AdminPricingPage() {
                       </td>
                       <td className="px-5 py-3 text-right">
                         <button
+                          onClick={() => startEditingZone(z)}
+                          disabled={isSaving}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
                           onClick={() => handleToggleZone(z.id)}
+                          disabled={isSaving}
+                          aria-label={`${z.isActive ? 'Deactivate' : 'Activate'} ${z.zoneCode}`}
                           className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
                         >
                           {z.isActive ? 'Deactivate' : 'Activate'}
@@ -677,7 +867,7 @@ export default function AdminPricingPage() {
                 <p className="text-xs text-slate-500">Unique constraint across (origin_zone_id, destination_zone_id, parcel_size)</p>
               </div>
               <button
-                onClick={() => setShowRuleModal(true)}
+                onClick={openNewRuleModal}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -694,7 +884,7 @@ export default function AdminPricingPage() {
                     <th className="px-5 py-3">Base Fee</th>
                     <th className="px-5 py-3">Rate / Kg</th>
                     <th className="px-5 py-3">Multiplier</th>
-                    <th className="px-5 py-3 text-right">Database Constraint</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -714,7 +904,13 @@ export default function AdminPricingPage() {
                       <td className="px-5 py-3 font-mono font-semibold text-slate-800">LKR {r.ratePerKg.toFixed(2)}</td>
                       <td className="px-5 py-3 font-mono text-slate-900 font-bold">{r.sizeMultiplier.toFixed(2)}×</td>
                       <td className="px-5 py-3 text-right">
-                        <span className="text-[11px] font-medium text-slate-400">uk_pricing_rule OK</span>
+                        <button
+                          onClick={() => startEditingRule(r)}
+                          disabled={isSaving}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -729,13 +925,13 @@ export default function AdminPricingPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
             <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 className="text-base font-bold text-slate-900">Add Sri Lankan Delivery Zone</h3>
-                <button onClick={() => setShowZoneModal(false)} className="text-slate-400 hover:text-slate-600">
+                <h3 className="text-base font-bold text-slate-900">{editingZoneId === null ? 'Add' : 'Edit'} Sri Lankan Delivery Zone</h3>
+                <button onClick={closeZoneModal} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateZone} className="space-y-3.5">
+              <form onSubmit={handleSaveZone} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Zone Code (e.g. NP-JAF-01)
@@ -746,6 +942,7 @@ export default function AdminPricingPage() {
                     onChange={(e) => setNewZoneCode(e.target.value)}
                     placeholder="e.g. NP-JAF-01"
                     required
+                    disabled={editingZoneId !== null}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -773,6 +970,7 @@ export default function AdminPricingPage() {
                     value={newDistrict}
                     onChange={(e) => setNewDistrict(e.target.value)}
                     placeholder="e.g. Jaffna"
+                    required
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -784,6 +982,7 @@ export default function AdminPricingPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={newBaseSurcharge}
                     onChange={(e) => setNewBaseSurcharge(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -793,16 +992,17 @@ export default function AdminPricingPage() {
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setShowZoneModal(false)}
+                    onClick={closeZoneModal}
                     className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
+                    disabled={isSaving}
                     className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
                   >
-                    Save Zone
+                    {isSaving ? 'Saving...' : editingZoneId === null ? 'Save Zone' : 'Update Zone'}
                   </button>
                 </div>
               </form>
@@ -815,13 +1015,13 @@ export default function AdminPricingPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
             <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 className="text-base font-bold text-slate-900">Add Pricing Matrix Rule</h3>
-                <button onClick={() => setShowRuleModal(false)} className="text-slate-400 hover:text-slate-600">
+                <h3 className="text-base font-bold text-slate-900">{editingRuleId === null ? 'Add' : 'Edit'} Pricing Matrix Rule</h3>
+                <button onClick={closeRuleModal} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateRule} className="space-y-3.5">
+              <form onSubmit={handleSaveRule} className="space-y-3.5">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -830,6 +1030,7 @@ export default function AdminPricingPage() {
                     <select
                       value={ruleOriginId}
                       onChange={(e) => setRuleOriginId(Number(e.target.value))}
+                      disabled={editingRuleId !== null}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
                     >
                       {zones.map(z => (
@@ -844,6 +1045,7 @@ export default function AdminPricingPage() {
                     <select
                       value={ruleDestId}
                       onChange={(e) => setRuleDestId(Number(e.target.value))}
+                      disabled={editingRuleId !== null}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
                     >
                       {zones.map(z => (
@@ -861,6 +1063,8 @@ export default function AdminPricingPage() {
                     <input
                       type="number"
                       step="0.01"
+                      min="0.01"
+                      required
                       value={ruleBaseFee}
                       onChange={(e) => setRuleBaseFee(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
@@ -873,6 +1077,8 @@ export default function AdminPricingPage() {
                     <input
                       type="number"
                       step="0.01"
+                      min="0.01"
+                      required
                       value={ruleRatePerKg}
                       onChange={(e) => setRuleRatePerKg(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
@@ -888,6 +1094,7 @@ export default function AdminPricingPage() {
                     <select
                       value={ruleSize}
                       onChange={(e) => setRuleSize(e.target.value as 'SMALL' | 'MEDIUM' | 'LARGE')}
+                      disabled={editingRuleId !== null}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
                     >
                       <option value="SMALL">SMALL (1.0x)</option>
@@ -902,6 +1109,8 @@ export default function AdminPricingPage() {
                     <input
                       type="number"
                       step="0.05"
+                      min="1"
+                      required
                       value={ruleMultiplier}
                       onChange={(e) => setRuleMultiplier(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
@@ -912,16 +1121,17 @@ export default function AdminPricingPage() {
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setShowRuleModal(false)}
+                    onClick={closeRuleModal}
                     className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
+                    disabled={isSaving}
                     className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
                   >
-                    Save Rule
+                    {isSaving ? 'Saving...' : editingRuleId === null ? 'Save Rule' : 'Update Rule'}
                   </button>
                 </div>
               </form>

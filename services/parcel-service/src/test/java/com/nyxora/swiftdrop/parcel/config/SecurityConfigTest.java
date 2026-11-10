@@ -41,7 +41,7 @@ class SecurityConfigTest {
     void shouldPermitUnauthenticatedTrackingRoute() throws Exception {
         // Reaches CustomerParcelController directly (not blocked by Spring Security 401/403)
         mockMvc.perform(get("/api/v1/parcels/track/SWIFT-NONEXISTENT"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
     }
 
     @Test

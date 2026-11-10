@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SwiftDrop | Courier & Parcel Management System",
   description: "Cloud-native parcel delivery, tracking, and courier dispatching platform.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -30,6 +31,26 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col text-slate-900 bg-slate-50">
         <ToastProvider>{children}</ToastProvider>
+
+        {/* PWA Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(reg) {
+                      console.log('[PWA] ServiceWorker registration successful with scope: ', reg.scope);
+                    },
+                    function(err) {
+                      console.warn('[PWA] ServiceWorker registration failed: ', err);
+                    }
+                  );
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
