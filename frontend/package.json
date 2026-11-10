@@ -9,15 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.0.0",
     "@tailwindcss/oxide-linux-x64-gnu": "^4.3.5",
     "axios": "^1.21.0",
     "lucide-react": "^1.69.0",
     "next": "16.4.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/sockjs-client": "^1.5.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
