@@ -10,6 +10,7 @@ import com.nyxora.swiftdrop.auth.dto.request.FacebookAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.GoogleAuthRequest;
 import com.nyxora.swiftdrop.auth.dto.request.LoginRequest;
 import com.nyxora.swiftdrop.auth.dto.request.MerchantRegisterRequest;
+import com.nyxora.swiftdrop.auth.dto.request.RefreshTokenRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AuthResponse;
 import com.nyxora.swiftdrop.auth.dto.response.RegistrationResponse;
 import com.nyxora.swiftdrop.auth.entity.Courier;
@@ -757,5 +758,216 @@ class AuthServiceTest {
 
         AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.authenticateFacebook(request));
         assertTrue(ex.getMessage().contains("Vehicle registration document expired."));
+    }
+
+    @Test
+    @DisplayName("Merchant registration fails when email is already registered")
+    void registerMerchant_DuplicateEmail_ThrowsException() {
+        MerchantRegisterRequest request = new MerchantRegisterRequest(
+                "Daraz LK", "merchant@daraz.lk", "Password123!", "+94771112233",
+                "Daraz Online Pvt Ltd", "PV00123456", "https://daraz.lk/webhook"
+        );
+        when(userRepository.existsByEmail("merchant@daraz.lk")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> authService.registerMerchant(request));
+    }
+
+    @Test
+    @DisplayName("Merchant registration fails when business registration number is already registered")
+    void registerMerchant_DuplicateRegistrationNumber_ThrowsException() {
+        MerchantRegisterRequest request = new MerchantRegisterRequest(
+                "Daraz LK", "merchant@daraz.lk", "Password123!", "+94771112233",
+                "Daraz Online Pvt Ltd", "PV00123456", "https://daraz.lk/webhook"
+        );
+        when(userRepository.existsByEmail("merchant@daraz.lk")).thenReturn(false);
+        when(merchantRepository.existsByRegistrationNumber("PV00123456")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> authService.registerMerchant(request));
+    }
+
+    @Test
+    @DisplayName("Courier registration fails when email is already registered")
+    void registerCourier_DuplicateEmail_ThrowsException() {
+        CourierRegisterRequest request = new CourierRegisterRequest(
+                "Kasun Rider", "courier@swiftdrop.lk", "Password123!", "+94770001122",
+                VehicleType.MOTORCYCLE, "BBD-1234", 1
+        );
+        when(userRepository.existsByEmail("courier@swiftdrop.lk")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> authService.registerCourier(request));
+    }
+
+    @Test
+    @DisplayName("Courier registration fails when license plate is already registered")
+    void registerCourier_DuplicateLicensePlate_ThrowsException() {
+        CourierRegisterRequest request = new CourierRegisterRequest(
+                "Kasun Rider", "courier@swiftdrop.lk", "Password123!", "+94770001122",
+                VehicleType.MOTORCYCLE, "BBD-1234", 1
+        );
+        when(userRepository.existsByEmail("courier@swiftdrop.lk")).thenReturn(false);
+        when(courierRepository.existsByLicensePlate("BBD-1234")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> authService.registerCourier(request));
+    }
+
+    @Test
+    @DisplayName("Login with ROLE_COURIER loads courierId into AuthResponse")
+    void login_CourierUser_LoadsCourierId() {
+        LoginRequest request = new LoginRequest("courier@swiftdrop.lk", "Password123!");
+        UUID userId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+
+        User user = User.builder()
+                .id(userId)
+                .email("courier@swiftdrop.lk")
+                .fullName("Courier User")
+                .role(courierRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        Courier courier = Courier.builder().id(courierId).user(user).build();
+
+        when(authenticationManager.authenticate(any())).thenReturn(mock(Authentication.class));
+        when(userRepository.findByEmail("courier@swiftdrop.lk")).thenReturn(Optional.of(user));
+        when(courierRepository.findByUserId(userId)).thenReturn(Optional.of(courier));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("access-token-courier");
+        when(refreshTokenService.createRefreshToken(user)).thenReturn("refresh-token-courier");
+
+        AuthResponse response = authService.login(request);
+        assertNotNull(response);
+        assertEquals("ROLE_COURIER", response.role());
+    }
+
+    @Test
+    @DisplayName("Login with ROLE_MERCHANT loads merchantId into AuthResponse")
+    void login_MerchantUser_LoadsMerchantId() {
+        LoginRequest request = new LoginRequest("merchant@swiftdrop.lk", "Password123!");
+        UUID userId = UUID.randomUUID();
+        UUID merchantId = UUID.randomUUID();
+
+        User user = User.builder()
+                .id(userId)
+                .email("merchant@swiftdrop.lk")
+                .fullName("Merchant User")
+                .role(merchantRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        Merchant merchant = Merchant.builder().id(merchantId).user(user).build();
+
+        when(authenticationManager.authenticate(any())).thenReturn(mock(Authentication.class));
+        when(userRepository.findByEmail("merchant@swiftdrop.lk")).thenReturn(Optional.of(user));
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("access-token-merchant");
+        when(refreshTokenService.createRefreshToken(user)).thenReturn("refresh-token-merchant");
+
+        AuthResponse response = authService.login(request);
+        assertNotNull(response);
+        assertEquals("ROLE_MERCHANT", response.role());
+    }
+
+    @Test
+    @DisplayName("Login rejected user with null statusReason uses default rejection message")
+    void login_Rejected_NullReason_UsesDefaultMessage() {
+        LoginRequest request = new LoginRequest("rejected@swiftdrop.lk", "Password123!");
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("rejected@swiftdrop.lk")
+                .role(courierRole)
+                .status(UserStatus.REJECTED)
+                .statusReason(null)
+                .build();
+
+        when(authenticationManager.authenticate(any())).thenReturn(mock(Authentication.class));
+        when(userRepository.findByEmail("rejected@swiftdrop.lk")).thenReturn(Optional.of(user));
+
+        AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.login(request));
+        assertTrue(ex.getMessage().contains("Application rejected by administrator."));
+    }
+
+    @Test
+    @DisplayName("refreshToken for Courier and Merchant users issues new tokens")
+    void refreshToken_ActiveCourierAndMerchant_Success() {
+        RefreshTokenRequest refreshReq = new RefreshTokenRequest("valid-refresh-token");
+        UUID courierUserId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+
+        User courierUser = User.builder()
+                .id(courierUserId)
+                .email("courier.refresh@swiftdrop.lk")
+                .role(courierRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        when(refreshTokenService.verifyAndRotate("valid-refresh-token"))
+                .thenReturn(new RefreshTokenService.RotatedToken(courierUser, "new-refresh"));
+        when(courierRepository.findByUserId(courierUserId)).thenReturn(Optional.of(Courier.builder().id(courierId).build()));
+        when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900000L);
+        when(jwtTokenProvider.generateAccessToken(any(UserPrincipal.class))).thenReturn("new-access");
+
+        AuthResponse resp = authService.refreshToken(refreshReq);
+        assertNotNull(resp);
+        assertEquals("new-access", resp.accessToken());
+        assertEquals("new-refresh", resp.refreshToken());
+
+        // Merchant user
+        UUID merchantUserId = UUID.randomUUID();
+        User merchantUser = User.builder()
+                .id(merchantUserId)
+                .email("merchant.refresh@swiftdrop.lk")
+                .role(merchantRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        when(refreshTokenService.verifyAndRotate("merchant-token"))
+                .thenReturn(new RefreshTokenService.RotatedToken(merchantUser, "new-m-refresh"));
+        when(merchantRepository.findByUserId(merchantUserId)).thenReturn(Optional.of(Merchant.builder().id(UUID.randomUUID()).build()));
+
+        AuthResponse respM = authService.refreshToken(new RefreshTokenRequest("merchant-token"));
+        assertNotNull(respM);
+        assertEquals("new-m-refresh", respM.refreshToken());
+    }
+
+    @Test
+    @DisplayName("refreshToken for inactive user throws AccountPendingApprovalException")
+    void refreshToken_InactiveUser_ThrowsException() {
+        RefreshTokenRequest refreshReq = new RefreshTokenRequest("valid-refresh-token");
+        User inactiveUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("pending@swiftdrop.lk")
+                .role(customerRole)
+                .status(UserStatus.PENDING_APPROVAL)
+                .build();
+
+        when(refreshTokenService.verifyAndRotate("valid-refresh-token"))
+                .thenReturn(new RefreshTokenService.RotatedToken(inactiveUser, "new-refresh"));
+
+        assertThrows(AccountPendingApprovalException.class, () -> authService.refreshToken(refreshReq));
+    }
+
+    @Test
+    @DisplayName("Google authentication with REJECTED user and null statusReason uses default rejection message")
+    void authenticateGoogle_Rejected_NullReason_UsesDefaultMessage() {
+        GoogleAuthRequest request = new GoogleAuthRequest("token");
+        SocialUserProfile profile = new SocialUserProfile(AuthProvider.GOOGLE, "sub-rej", "rej@gmail.com", "Rej");
+        when(googleTokenVerifier.verify("token")).thenReturn(profile);
+
+        User rejectedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("rej@gmail.com")
+                .role(customerRole)
+                .status(UserStatus.REJECTED)
+                .statusReason(null)
+                .authProvider(AuthProvider.GOOGLE)
+                .providerId("sub-rej")
+                .build();
+
+        when(userRepository.findByAuthProviderAndProviderId(AuthProvider.GOOGLE, "sub-rej"))
+                .thenReturn(Optional.of(rejectedUser));
+
+        AccountRejectedException ex = assertThrows(AccountRejectedException.class, () -> authService.authenticateGoogle(request));
+        assertTrue(ex.getMessage().contains("Application rejected by administrator."));
     }
 }
