@@ -25,8 +25,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <argLine></argLine>
-        <jacoco.line.minimum>0.55</jacoco.line.minimum>
-        <jacoco.branch.minimum>0.35</jacoco.branch.minimum>
+        <jacoco.line.minimum>0.80</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.80</jacoco.branch.minimum>
     </properties>
 
     <dependencies>
