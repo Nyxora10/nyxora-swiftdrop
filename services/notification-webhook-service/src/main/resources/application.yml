@@ -35,6 +35,10 @@ spring:
             enable: false
 
 app:
+  services:
+    auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+    # Shared key for auth-service internal endpoints; must equal auth-service's INTERNAL_API_KEY.
+    internal-api-key: ${INTERNAL_API_KEY:dev-internal-api-key-change-me}
   notification:
     from-email: ${NOTIFICATION_FROM_EMAIL:no-reply@swiftdrop.lk}
     sms:

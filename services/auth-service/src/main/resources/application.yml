@@ -48,6 +48,17 @@ app:
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
     access-token-expiration-ms: 900000       # 15 minutes (in milliseconds)
     refresh-token-expiration-ms: 604800000   # 7 days (in milliseconds)
+  internal:
+    # Shared service-to-service key for /api/v1/auth/internal/** (sent as X-Internal-Api-Key).
+    # Must match notification-webhook-service. Override via INTERNAL_API_KEY outside local development.
+    api-key: ${INTERNAL_API_KEY:dev-internal-api-key-change-me}
+  seed:
+    # Demo customer/courier/merchant accounts with well-known passwords and OAuth secrets.
+    # Never seeded when the 'prod' profile is active, whatever this value says.
+    demo-data: ${SEED_DEMO_DATA:true}
+    # Optional bootstrap admin for environments without demo data (e.g. production).
+    admin-email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    admin-password: ${ADMIN_BOOTSTRAP_PASSWORD:}
   google:
     client-id: ${GOOGLE_CLIENT_ID:mock-google-client-id.apps.googleusercontent.com}
     mock-enabled: ${GOOGLE_MOCK_ENABLED:true}

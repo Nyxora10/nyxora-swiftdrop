@@ -1,0 +1,9 @@
+# Production profile: no development fallbacks for secrets, no demo accounts.
+# Startup fails if JWT_SECRET or INTERNAL_API_KEY are missing.
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+  internal:
+    api-key: ${INTERNAL_API_KEY}
+  seed:
+    demo-data: false

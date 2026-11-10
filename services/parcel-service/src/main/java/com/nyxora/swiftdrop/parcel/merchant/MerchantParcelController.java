@@ -90,14 +90,11 @@ public class MerchantParcelController {
     }
 
     /**
-     * The merchant must come from the gateway-injected X-Merchant-Id (JWT merchantId claim).
+     * The merchant must come from the gateway-injected X-Merchant-Id (verified JWT merchantId claim).
      * Falling back to X-User-Id would stamp parcels with a user UUID that is not a merchant ID,
-     * hiding them from the merchant's own order history and webhooks.
+     * hiding them from the merchant's own order history and webhooks. Missing identity → 403.
      */
     private UUID resolveMerchantId(String merchantIdHeader) {
-        if (merchantIdHeader != null && !merchantIdHeader.isBlank()) {
-            return UUID.fromString(merchantIdHeader.trim());
-        }
-        throw new IllegalArgumentException("Merchant context is missing. X-Merchant-Id header must be provided.");
+        return MerchantIdentity.require(merchantIdHeader);
     }
 }

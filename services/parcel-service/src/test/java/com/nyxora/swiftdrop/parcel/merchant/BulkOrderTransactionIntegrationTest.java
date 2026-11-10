@@ -24,6 +24,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
+
 /**
  * Exercises {@link BulkOrderService} against a real Spring transaction manager (H2),
  * which the Mockito unit tests cannot do.
@@ -87,6 +89,34 @@ class BulkOrderTransactionIntegrationTest {
         assertThat(response.getResults().get(1).getStatus()).isEqualTo("FAILED");
         assertThat(response.getResults().get(1).getErrors()).isNotEmpty();
         assertThat(parcelRepository.countByMerchantId(merchantId)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("A database failure on one row rolls back only that row; earlier and later rows stay committed")
+    void databaseFailureOnOneRow_rollsBackOnlyThatRow() {
+        UUID merchantId = UUID.randomUUID();
+        // Passes Bean Validation (no @Size on the DTO) but violates the VARCHAR(150) column,
+        // so the failure comes from the database itself when the row's transaction flushes.
+        MerchantOrderRequest tooLongForColumn = order(colombo.getId(), kandy.getId(), "DB-2");
+        tooLongForColumn.setRecipientName("N".repeat(200));
+
+        BulkOrderResponse response = bulkOrderService.processBulkOrders(
+                BulkOrderRequest.builder().orders(List.of(
+                        order(colombo.getId(), kandy.getId(), "DB-1"),
+                        tooLongForColumn,
+                        order(colombo.getId(), kandy.getId(), "DB-3"))).build(),
+                merchantId, merchantId);
+
+        assertThat(response.getSuccessfulCount()).isEqualTo(2);
+        assertThat(response.getFailedCount()).isEqualTo(1);
+        assertThat(response.getResults().get(0).getStatus()).isEqualTo("SUCCESS");
+        assertThat(response.getResults().get(1).getStatus()).isEqualTo("FAILED");
+        assertThat(response.getResults().get(2).getStatus()).isEqualTo("SUCCESS");
+        // No SQL/driver details leak to the merchant.
+        assertThat(response.getResults().get(1).getErrors())
+                .singleElement().asString().doesNotContainIgnoringCase("sql").doesNotContain("RECIPIENT_NAME");
+        // Exactly rows 1 and 3 persist; row 2 left nothing behind.
+        assertThat(parcelRepository.countByMerchantId(merchantId)).isEqualTo(2);
     }
 
     private MerchantOrderRequest order(Integer originZoneId, Integer destinationZoneId, String reference) {

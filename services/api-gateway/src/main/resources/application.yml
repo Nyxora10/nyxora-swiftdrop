@@ -62,6 +62,10 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  gateway:
+    # Sent downstream as X-Gateway-Secret; parcel-service only trusts identity headers carrying it.
+    # Must match parcel-service's GATEWAY_SHARED_SECRET. Override outside local development.
+    shared-secret: ${GATEWAY_SHARED_SECRET:dev-gateway-shared-secret-change-me}
 
 management:
   endpoints:

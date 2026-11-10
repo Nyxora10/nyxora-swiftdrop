@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -46,7 +47,8 @@ public class MerchantProfileController {
 
     @PutMapping("/webhook")
     @PreAuthorize("hasRole('ROLE_MERCHANT')")
-    @Operation(summary = "Update Webhook Configuration", description = "Updates outbound webhook endpoint URL and optionally regenerates the shared HMAC secret")
+    @Operation(summary = "Update Webhook Configuration", description = "Updates outbound webhook endpoint URL and optionally regenerates the shared HMAC secret. "
+            + "When regenerateSecret=true, the new plaintext secret is returned once in newWebhookSecret and is never shown again.")
     @ApiResponse(responseCode = "200", description = "Webhook configuration updated successfully")
     @ApiResponse(responseCode = "400", description = "Invalid URL format")
     @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_MERCHANT")
@@ -56,7 +58,10 @@ public class MerchantProfileController {
     ) {
         UUID userId = resolveUserId(principal);
         log.info("[MerchantProfileController] Updating webhook for merchant user: {}", userId);
-        return ResponseEntity.ok(merchantAuthService.updateWebhook(userId, request));
+        // May carry a freshly generated secret: never let proxies or browsers cache it.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(merchantAuthService.updateWebhook(userId, request));
     }
 
     @PostMapping("/credentials/rotate")
@@ -67,7 +72,9 @@ public class MerchantProfileController {
     public ResponseEntity<RotateCredentialsResponse> rotateCredentials(@AuthenticationPrincipal UserPrincipal principal) {
         UUID userId = resolveUserId(principal);
         log.info("[MerchantProfileController] Rotating OAuth client secret for merchant user: {}", userId);
-        return ResponseEntity.ok(merchantAuthService.rotateCredentials(userId));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(merchantAuthService.rotateCredentials(userId));
     }
 
     private UUID resolveUserId(UserPrincipal principal) {
