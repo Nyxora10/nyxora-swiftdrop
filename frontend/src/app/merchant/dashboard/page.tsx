@@ -7,7 +7,6 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   UploadCloud,
   Key,
   RefreshCw,
@@ -16,18 +15,17 @@ import {
   DollarSign,
   Copy,
   Check,
-  Eye,
   ShieldAlert,
 } from 'lucide-react';
 import AppShell from '@/components/layout/AppShell';
 import { api } from '@/lib/api';
 
+// Mirrors parcel-service OrderSummaryDto (GET /api/v1/parcels/merchant/orders → orders.content[])
 interface MerchantOrder {
-  id: string;
+  parcelId: string;
   trackingNumber: string;
   recipientName: string;
   recipientPhone: string;
-  pickupAddress: string;
   dropoffAddress: string;
   originZoneName?: string;
   destinationZoneName?: string;
@@ -36,6 +34,21 @@ interface MerchantOrder {
   estimatedFee: number;
   currentStatus: 'CREATED' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED' | 'RETURNED_TO_SENDER';
   createdAt: string;
+}
+
+// Mirrors parcel-service MerchantOrderHistoryResponse lifetime counters
+interface MerchantOrderSummary {
+  totalOrders: number;
+  inTransitCount: number;
+  deliveredCount: number;
+  failedCount: number;
+}
+
+const ORDER_PAGE_SIZE = 50; // parcel-service caps page size at 50
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const data = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
+  return data?.detail || data?.message || fallback;
 }
 
 interface MerchantProfile {
@@ -47,10 +60,51 @@ interface MerchantProfile {
   webhookSecret: string;
 }
 
+interface DashboardSnapshot {
+  profile: MerchantProfile | null;
+  orders: MerchantOrder[];
+  summary: MerchantOrderSummary | null;
+  errors: string[];
+}
+
+// Loads profile and orders in parallel; each failure becomes a visible error instead of fake data.
+async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
+  const [profileResult, ordersResult] = await Promise.allSettled([
+    api.get<MerchantProfile>('/api/v1/auth/merchant/profile'),
+    api.get('/api/v1/parcels/merchant/orders', { params: { page: 0, size: ORDER_PAGE_SIZE } }),
+  ]);
+
+  const snapshot: DashboardSnapshot = { profile: null, orders: [], summary: null, errors: [] };
+
+  if (profileResult.status === 'fulfilled') {
+    snapshot.profile = profileResult.value.data;
+  } else {
+    snapshot.errors.push(apiErrorMessage(profileResult.reason, 'Could not load your merchant profile and API credentials.'));
+  }
+
+  if (ordersResult.status === 'fulfilled') {
+    const data = ordersResult.value.data;
+    snapshot.orders = data?.orders?.content ?? [];
+    snapshot.summary = {
+      totalOrders: data?.totalOrders ?? 0,
+      inTransitCount: data?.inTransitCount ?? 0,
+      deliveredCount: data?.deliveredCount ?? 0,
+      failedCount: data?.failedCount ?? 0,
+    };
+  } else {
+    snapshot.errors.push(apiErrorMessage(ordersResult.reason, 'Could not load your orders.'));
+  }
+
+  return snapshot;
+}
+
 export default function MerchantDashboardPage() {
   const [orders, setOrders] = useState<MerchantOrder[]>([]);
+  const [summary, setSummary] = useState<MerchantOrderSummary | null>(null);
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [rotateError, setRotateError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -60,108 +114,28 @@ export default function MerchantDashboardPage() {
   const [newClientSecret, setNewClientSecret] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 1. Fetch merchant profile and API credentials
-      try {
-        const profileRes = await api.get('/api/v1/auth/merchant/profile');
-        if (profileRes.data) {
-          setProfile(profileRes.data);
-        }
-      } catch {
-        // Fallback default demo profile for standalone presentation
-        setProfile({
-          merchantId: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-          businessName: 'Daraz Sri Lanka (Pvt) Ltd',
-          registrationNumber: 'PV-DARAZ-001',
-          oauthClientId: 'mch_daraz_client_01',
-          webhookUrl: 'https://partner.daraz.lk/webhooks/swiftdrop',
-          webhookSecret: 'whsec_****7a2b',
-        });
-      }
-
-      // 2. Fetch merchant orders
-      try {
-        const ordersRes = await api.get('/api/v1/parcels/merchant/orders');
-        if (ordersRes.data?.content) {
-          setOrders(ordersRes.data.content);
-        } else if (Array.isArray(ordersRes.data)) {
-          setOrders(ordersRes.data);
-        }
-      } catch {
-        // Fallback demo dataset for live presentation resilience
-        setOrders([
-          {
-            id: 'ord-101',
-            trackingNumber: 'SD-20261107-A91B2C',
-            recipientName: 'Kasun Jayawardena',
-            recipientPhone: '+94771234567',
-            pickupAddress: 'Peliyagoda Central Warehouse',
-            dropoffAddress: 'No. 42 Peradeniya Road, Kandy',
-            originZoneName: 'Colombo Central (WP-COL-01)',
-            destinationZoneName: 'Kandy Metro (CP-KDY-01)',
-            weightKg: 2.5,
-            parcelSize: 'MEDIUM',
-            estimatedFee: 765.0,
-            currentStatus: 'IN_TRANSIT',
-            createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-          },
-          {
-            id: 'ord-102',
-            trackingNumber: 'SD-20261107-D84E7F',
-            recipientName: 'Anura Senanayake',
-            recipientPhone: '+94719876543',
-            pickupAddress: 'Peliyagoda Central Warehouse',
-            dropoffAddress: 'Galle Fort Road, Galle',
-            originZoneName: 'Colombo Central (WP-COL-01)',
-            destinationZoneName: 'Galle Coastal (SP-GAL-01)',
-            weightKg: 1.2,
-            parcelSize: 'SMALL',
-            estimatedFee: 425.0,
-            currentStatus: 'DELIVERED',
-            createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-          },
-          {
-            id: 'ord-103',
-            trackingNumber: 'SD-20261107-F12C34',
-            recipientName: 'Dilini Wickramasinghe',
-            recipientPhone: '+94785556677',
-            pickupAddress: 'Peliyagoda Central Warehouse',
-            dropoffAddress: 'Negombo Road, Kurunegala',
-            originZoneName: 'Colombo Central (WP-COL-01)',
-            destinationZoneName: 'Kurunegala Town (NW-KUR-01)',
-            weightKg: 4.8,
-            parcelSize: 'LARGE',
-            estimatedFee: 1190.0,
-            currentStatus: 'CREATED',
-            createdAt: new Date(Date.now() - 3600000 * 1).toISOString(),
-          },
-          {
-            id: 'ord-104',
-            trackingNumber: 'SD-20261107-B55G99',
-            recipientName: 'Mahesh Gunathilaka',
-            recipientPhone: '+94701112233',
-            pickupAddress: 'Peliyagoda Central Warehouse',
-            dropoffAddress: 'Hospital Road, Jaffna',
-            originZoneName: 'Colombo Central (WP-COL-01)',
-            destinationZoneName: 'Jaffna City (NP-JAF-01)',
-            weightKg: 1.0,
-            parcelSize: 'SMALL',
-            estimatedFee: 595.0,
-            currentStatus: 'OUT_FOR_DELIVERY',
-            createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-          },
-        ]);
-      }
-    } finally {
-      setLoading(false);
-    }
+  const applySnapshot = useCallback((snapshot: DashboardSnapshot) => {
+    setProfile(snapshot.profile);
+    setOrders(snapshot.orders);
+    setSummary(snapshot.summary);
+    setLoadErrors(snapshot.errors);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    let cancelled = false;
+    fetchDashboardSnapshot().then((snapshot) => {
+      if (!cancelled) applySnapshot(snapshot);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applySnapshot]);
+
+  const refreshDashboard = () => {
+    setLoading(true);
+    fetchDashboardSnapshot().then(applySnapshot);
+  };
 
   // Handle OAuth Client Secret Rotation
   const handleRotateSecret = async () => {
@@ -169,13 +143,14 @@ export default function MerchantDashboardPage() {
       return;
     }
     setRotatingSecret(true);
+    setRotateError(null);
     try {
       const res = await api.post('/api/v1/auth/merchant/credentials/rotate');
       setNewClientSecret(res.data.oauthClientSecret);
-    } catch {
-      // Mock rotation for demo
-      const mockSecret = 'cs_live_' + Math.random().toString(36).substring(2, 18) + Math.random().toString(36).substring(2, 18);
-      setNewClientSecret(mockSecret);
+    } catch (err) {
+      // Never show a made-up secret: the old secret is still valid if rotation failed.
+      setNewClientSecret(null);
+      setRotateError(apiErrorMessage(err, 'Secret rotation failed. Your existing client secret is unchanged.'));
     } finally {
       setRotatingSecret(false);
     }
@@ -188,20 +163,19 @@ export default function MerchantDashboardPage() {
   };
 
   // Metrics Calculations
+  // Lifetime counters come from the server; savings are estimated from the loaded page of orders.
   const metrics = useMemo(() => {
-    const total = orders.length;
-    const delivered = orders.filter((o) => o.currentStatus === 'DELIVERED').length;
-    const inTransit = orders.filter((o) =>
-      ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.currentStatus)
-    ).length;
-    const failed = orders.filter((o) => ['FAILED', 'RETURNED_TO_SENDER'].includes(o.currentStatus)).length;
+    const total = summary?.totalOrders ?? 0;
+    const delivered = summary?.deliveredCount ?? 0;
+    const inTransit = summary?.inTransitCount ?? 0;
+    const failed = summary?.failedCount ?? 0;
     const rate = total > 0 ? Math.round((delivered / total) * 100) : 0;
-    const totalFee = orders.reduce((sum, o) => sum + (o.estimatedFee || 0), 0);
+    const totalFee = orders.reduce((sum, o) => sum + (Number(o.estimatedFee) || 0), 0);
     // 15% corporate discount saved = totalFee / 0.85 * 0.15
     const corporateSavings = totalFee > 0 ? Math.round((totalFee / 0.85) * 0.15) : 0;
 
     return { total, delivered, inTransit, failed, rate, totalFee, corporateSavings };
-  }, [orders]);
+  }, [orders, summary]);
 
   // Filtered Orders
   const filteredOrders = useMemo(() => {
@@ -262,6 +236,23 @@ export default function MerchantDashboardPage() {
           </div>
         </div>
 
+        {loadErrors.length > 0 && (
+          <div role="alert" className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-800">
+            <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              {loadErrors.map((msg) => (
+                <p key={msg}>{msg}</p>
+              ))}
+            </div>
+            <button
+              onClick={refreshDashboard}
+              className="text-xs font-semibold text-rose-700 hover:text-rose-900 underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Top Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -319,7 +310,9 @@ export default function MerchantDashboardPage() {
               <span className="text-xs font-bold text-slate-500">LKR</span>
               <span className="text-3xl font-extrabold text-indigo-600">{metrics.corporateSavings.toLocaleString()}</span>
             </div>
-            <p className="mt-1 text-xs text-indigo-500 font-medium">Saved via B2B Corporate Tier</p>
+            <p className="mt-1 text-xs text-indigo-500 font-medium">
+              Saved via B2B Corporate Tier{summary && summary.totalOrders > orders.length ? ` (latest ${orders.length} orders)` : ''}
+            </p>
           </div>
         </div>
 
@@ -365,7 +358,7 @@ export default function MerchantDashboardPage() {
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900">Shipments & Delivery Matrix</h2>
             <button
-              onClick={fetchDashboardData}
+              onClick={refreshDashboard}
               disabled={loading}
               className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
               title="Refresh"
@@ -415,7 +408,7 @@ export default function MerchantDashboardPage() {
                     };
 
                     return (
-                      <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr key={order.parcelId} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-4 px-6 font-mono font-bold text-blue-600">
                           {order.trackingNumber}
                         </td>
@@ -437,7 +430,7 @@ export default function MerchantDashboardPage() {
                         </td>
                         <td className="py-4 px-4">
                           <div className="font-bold text-slate-900">
-                            LKR {order.estimatedFee?.toFixed(2)}
+                            LKR {Number(order.estimatedFee ?? 0).toFixed(2)}
                           </div>
                           <div className="text-2xs text-emerald-600 font-medium">15% saved</div>
                         </td>
@@ -497,11 +490,12 @@ export default function MerchantDashboardPage() {
                   <input
                     type="text"
                     readOnly
-                    value={profile?.oauthClientId || 'mch_daraz_client_01'}
+                    value={profile?.oauthClientId || 'Unavailable'}
                     className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800"
                   />
                   <button
-                    onClick={() => copyToClipboard(profile?.oauthClientId || 'mch_daraz_client_01', 'clientId')}
+                    onClick={() => profile?.oauthClientId && copyToClipboard(profile.oauthClientId, 'clientId')}
+                    disabled={!profile?.oauthClientId}
                     className="p-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
                     title="Copy Client ID"
                   >
@@ -531,6 +525,12 @@ export default function MerchantDashboardPage() {
                   </Link>
                 </div>
               </div>
+
+              {rotateError && (
+                <div role="alert" className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800">
+                  {rotateError}
+                </div>
+              )}
 
               {/* Secret Rotation Alert Box */}
               {newClientSecret && (

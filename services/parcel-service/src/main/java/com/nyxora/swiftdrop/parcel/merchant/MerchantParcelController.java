@@ -52,7 +52,7 @@ public class MerchantParcelController {
             @Parameter(hidden = true) @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @Valid @RequestBody MerchantOrderRequest request
     ) {
-        UUID merchantId = resolveMerchantId(merchantIdHeader, userIdHeader);
+        UUID merchantId = resolveMerchantId(merchantIdHeader);
         UUID senderUserId = userIdHeader != null ? UUID.fromString(userIdHeader) : merchantId;
 
         log.info("[MerchantParcelController] Received M2M order request from merchantId={}", merchantId);
@@ -79,7 +79,7 @@ public class MerchantParcelController {
             @Parameter(hidden = true) @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @Valid @RequestBody BulkOrderRequest request
     ) {
-        UUID merchantId = resolveMerchantId(merchantIdHeader, userIdHeader);
+        UUID merchantId = resolveMerchantId(merchantIdHeader);
         UUID senderUserId = userIdHeader != null ? UUID.fromString(userIdHeader) : merchantId;
 
         log.info("[MerchantParcelController] Received bulk ingestion request for {} orders from merchantId={}",
@@ -89,12 +89,14 @@ public class MerchantParcelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    private UUID resolveMerchantId(String merchantIdHeader, String userIdHeader) {
+    /**
+     * The merchant must come from the gateway-injected X-Merchant-Id (JWT merchantId claim).
+     * Falling back to X-User-Id would stamp parcels with a user UUID that is not a merchant ID,
+     * hiding them from the merchant's own order history and webhooks.
+     */
+    private UUID resolveMerchantId(String merchantIdHeader) {
         if (merchantIdHeader != null && !merchantIdHeader.isBlank()) {
             return UUID.fromString(merchantIdHeader.trim());
-        }
-        if (userIdHeader != null && !userIdHeader.isBlank()) {
-            return UUID.fromString(userIdHeader.trim());
         }
         throw new IllegalArgumentException("Merchant context is missing. X-Merchant-Id header must be provided.");
     }
