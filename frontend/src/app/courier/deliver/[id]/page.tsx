@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
@@ -32,7 +32,7 @@ import {
   X,
 } from 'lucide-react';
 
-export default function CourierDeliverPage() {
+function CourierDeliverPageContent() {
   const router = useRouter();
   const routeParams = useParams();
   const toast = useToast();
@@ -60,6 +60,7 @@ export default function CourierDeliverPage() {
       if (data.recipientName && !recipientName) {
         setRecipientName(data.recipientName);
       }
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load parcel details.';
       toast.error(msg);
@@ -626,5 +627,13 @@ export default function CourierDeliverPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function CourierDeliverPage() {
+  return (
+    <Suspense fallback={null}>
+      <CourierDeliverPageContent />
+    </Suspense>
   );
 }
