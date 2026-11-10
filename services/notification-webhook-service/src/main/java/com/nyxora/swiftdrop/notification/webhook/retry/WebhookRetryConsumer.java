@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.notification.webhook.retry;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.config.WebhookRabbitConfig;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookDispatchResult;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryLog;
@@ -155,7 +156,7 @@ public class WebhookRetryConsumer {
                 retryPublisher.scheduleRetry(deliveryLog);
             } catch (Exception ex) {
                 log.error("Failed to publish next retry message to RabbitMQ DLX for deliveryLogId={}: {}",
-                        deliveryLog.getId(), ex.getMessage(), ex);
+                        deliveryLog.getId(), PiiMaskingUtil.maskText(ex.getMessage()), ex);
                 // Reject without requeueing to avoid fast immediate retry storm on RabbitMQ
                 // broker
                 throw new AmqpRejectAndDontRequeueException(
