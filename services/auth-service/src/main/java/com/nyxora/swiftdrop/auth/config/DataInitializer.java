@@ -1,11 +1,14 @@
 package com.nyxora.swiftdrop.auth.config;
 
+import com.nyxora.swiftdrop.auth.entity.Courier;
 import com.nyxora.swiftdrop.auth.entity.Merchant;
 import com.nyxora.swiftdrop.auth.entity.Role;
 import com.nyxora.swiftdrop.auth.entity.User;
 import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
 import com.nyxora.swiftdrop.auth.entity.enums.UserStatus;
+import com.nyxora.swiftdrop.auth.entity.enums.VehicleType;
+import com.nyxora.swiftdrop.auth.repository.CourierRepository;
 import com.nyxora.swiftdrop.auth.repository.MerchantRepository;
 import com.nyxora.swiftdrop.auth.repository.RoleRepository;
 import com.nyxora.swiftdrop.auth.repository.UserRepository;
@@ -20,6 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Startup Data Initializer that primes the auth_db with:
  * 1. Default RBAC Roles (ROLE_CUSTOMER, ROLE_MERCHANT, ROLE_COURIER, ROLE_ADMIN)
  * 2. Default Platform Administrator Account
+ * 3. Default Demo Customer Account
+ * 4. Default Demo Courier Account (Task 2.5)
+ * 5. Default Demo Merchant Account
  */
 @Slf4j
 @Component
@@ -28,14 +34,22 @@ public class DataInitializer implements CommandLineRunner {
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final CourierRepository courierRepository;
     private final MerchantRepository merchantRepository;
     private final PasswordEncoder passwordEncoder;
 
     private static final String DEFAULT_ADMIN_EMAIL = "admin@swiftdrop.lk";
     private static final String DEFAULT_ADMIN_PASSWORD = "Admin@SwiftDrop2026!";
 
+    private static final String DEFAULT_CUSTOMER_EMAIL = "customer.kasun@swiftdrop.lk";
+    private static final String DEFAULT_CUSTOMER_PASSWORD = "Customer@123";
+
+    private static final String DEFAULT_COURIER_EMAIL = "courier.kamal@swiftdrop.lk";
+    private static final String DEFAULT_COURIER_PASSWORD = "Courier@123";
+
     public static final String DEFAULT_MERCHANT_EMAIL = "merchant.daraz@swiftdrop.lk";
-    public static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@SwiftDrop2026!";
+    public static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@123";
+    // Member 2 (Task 2.3): demo OAuth 2.0 client_credentials for headless M2M order creation
     public static final String DEFAULT_MERCHANT_CLIENT_ID = "mch_daraz_client_01";
     public static final String DEFAULT_MERCHANT_CLIENT_SECRET = "sec_daraz_secret_2026";
     public static final String DEFAULT_MERCHANT_WEBHOOK_SECRET = "whsec_daraz_hmac_secret_2026";
@@ -46,6 +60,8 @@ public class DataInitializer implements CommandLineRunner {
         log.info("[DataInitializer] Verifying database seeding for auth_db...");
         seedRoles();
         seedDefaultAdmin();
+        seedDefaultCustomer();
+        seedDefaultCourier();
         seedDefaultMerchant();
         log.info("[DataInitializer] Database verification complete.");
     }
@@ -90,6 +106,61 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
+    private void seedDefaultCustomer() {
+        if (!userRepository.existsByEmail(DEFAULT_CUSTOMER_EMAIL)) {
+            Role customerRole = roleRepository.findByName(RoleName.ROLE_CUSTOMER)
+                    .orElseThrow(() -> new IllegalStateException("ROLE_CUSTOMER not found during customer seeding"));
+
+            User customer = User.builder()
+                    .role(customerRole)
+                    .email(DEFAULT_CUSTOMER_EMAIL)
+                    .passwordHash(passwordEncoder.encode(DEFAULT_CUSTOMER_PASSWORD))
+                    .fullName("Kasun Perera")
+                    .phoneNumber("+94771234567")
+                    .status(UserStatus.ACTIVE)
+                    .authProvider(AuthProvider.LOCAL)
+                    .build();
+
+            userRepository.save(customer);
+            log.info("[DataInitializer] Successfully created default customer account: {}", DEFAULT_CUSTOMER_EMAIL);
+        } else {
+            log.info("[DataInitializer] Default customer account already exists.");
+        }
+    }
+
+    private void seedDefaultCourier() {
+        if (!userRepository.existsByEmail(DEFAULT_COURIER_EMAIL)) {
+            Role courierRole = roleRepository.findByName(RoleName.ROLE_COURIER)
+                    .orElseThrow(() -> new IllegalStateException("ROLE_COURIER not found during courier seeding"));
+
+            User courierUser = User.builder()
+                    .role(courierRole)
+                    .email(DEFAULT_COURIER_EMAIL)
+                    .passwordHash(passwordEncoder.encode(DEFAULT_COURIER_PASSWORD))
+                    .fullName("Kamal Perera")
+                    .phoneNumber("+94777654321")
+                    .status(UserStatus.ACTIVE)
+                    .authProvider(AuthProvider.LOCAL)
+                    .build();
+
+            User savedUser = userRepository.save(courierUser);
+
+            Courier courier = Courier.builder()
+                    .user(savedUser)
+                    .vehicleType(VehicleType.MOTORCYCLE)
+                    .licensePlate("WP-BAM-1234")
+                    .assignedZoneId(1)
+                    .isAvailable(true)
+                    .activeDeliveryCount(0)
+                    .build();
+
+            courierRepository.save(courier);
+            log.info("[DataInitializer] Successfully created default courier account: {}", DEFAULT_COURIER_EMAIL);
+        } else {
+            log.info("[DataInitializer] Default courier account already exists.");
+        }
+    }
+
     private void seedDefaultMerchant() {
         if (!userRepository.existsByEmail(DEFAULT_MERCHANT_EMAIL)) {
             Role merchantRole = roleRepository.findByName(RoleName.ROLE_MERCHANT)
@@ -99,7 +170,7 @@ public class DataInitializer implements CommandLineRunner {
                     .role(merchantRole)
                     .email(DEFAULT_MERCHANT_EMAIL)
                     .passwordHash(passwordEncoder.encode(DEFAULT_MERCHANT_PASSWORD))
-                    .fullName("Daraz Merchant Operations")
+                    .fullName("Daraz Logistics Hub")
                     .phoneNumber("+94112345678")
                     .status(UserStatus.ACTIVE)
                     .authProvider(AuthProvider.LOCAL)
@@ -109,20 +180,38 @@ public class DataInitializer implements CommandLineRunner {
 
             Merchant merchant = Merchant.builder()
                     .user(savedUser)
-                    .businessName("Daraz Sri Lanka")
-                    .registrationNumber("PV-DARAZ-001")
-                    .oauthClientId(DEFAULT_MERCHANT_CLIENT_ID)
-                    .oauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET))
+                    .businessName("Daraz Sri Lanka PVT LTD")
+                    .registrationNumber("PV-123456")
                     .webhookUrl("http://localhost:8083/api/v1/webhooks/demo-receiver")
                     .webhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET)
+                    .oauthClientId(DEFAULT_MERCHANT_CLIENT_ID)
+                    .oauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET))
                     .build();
 
             merchantRepository.save(merchant);
-            log.info("[DataInitializer] Successfully seeded default demo merchant: {} (client_id: {})",
+            log.info("[DataInitializer] Successfully created default merchant account: {} (client_id: {})",
                     DEFAULT_MERCHANT_EMAIL, DEFAULT_MERCHANT_CLIENT_ID);
         } else {
-            log.info("[DataInitializer] Default demo merchant account already exists.");
+            backfillDemoMerchantCredentials();
+            log.info("[DataInitializer] Default merchant account already exists.");
         }
     }
-}
 
+    /**
+     * Databases seeded by an earlier build may hold the demo merchant without OAuth
+     * client credentials, which breaks the client_credentials grant. Fill them in once.
+     */
+    private void backfillDemoMerchantCredentials() {
+        userRepository.findByEmail(DEFAULT_MERCHANT_EMAIL)
+                .flatMap(user -> merchantRepository.findByUserId(user.getId()))
+                .filter(merchant -> merchant.getOauthClientSecretHash() == null)
+                .ifPresent(merchant -> {
+                    merchant.setOauthClientId(DEFAULT_MERCHANT_CLIENT_ID);
+                    merchant.setOauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET));
+                    merchant.setWebhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET);
+                    merchantRepository.save(merchant);
+                    log.info("[DataInitializer] Backfilled OAuth client credentials for demo merchant (client_id: {})",
+                            DEFAULT_MERCHANT_CLIENT_ID);
+                });
+    }
+}

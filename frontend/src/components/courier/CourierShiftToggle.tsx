@@ -1,34 +1,118 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Truck, CheckCircle2, Moon, Loader2 } from 'lucide-react';
+import api from '@/lib/api';
+import { useToast } from '@/components/layout/ToastContext';
+
+interface CourierProfile {
+  vehicleType?: string;
+  licensePlate?: string;
+  isAvailable?: boolean;
+  activeDeliveryCount?: number;
+  assignedZoneId?: number;
+}
 
 export default function CourierShiftToggle() {
-  const [isOnDuty, setIsOnDuty] = useState(false);
+  const toast = useToast();
+  const [profile, setProfile] = useState<CourierProfile | null>(null);
+  const [isAvailable, setIsAvailable] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [fetching, setFetching] = useState<boolean>(true);
 
-  const toggleShift = () => {
-    setIsOnDuty(!isOnDuty);
+  // Fetch initial courier status
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchCourierProfile() {
+      try {
+        const response = await api.get('/api/v1/auth/courier/profile');
+        if (isMounted && response.data) {
+          setProfile(response.data);
+          setIsAvailable(response.data.isAvailable ?? true);
+        }
+      } catch {
+        // Fallback default state for offline / initial testing
+        if (isMounted) {
+          setIsAvailable(true);
+        }
+      } finally {
+        if (isMounted) setFetching(false);
+      }
+    }
+
+    fetchCourierProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleToggle = async () => {
+    const nextState = !isAvailable;
+    setIsAvailable(nextState);
+    setLoading(true);
+
+    try {
+      await api.patch('/api/v1/auth/courier/availability', {
+        isAvailable: nextState,
+      });
+
+      if (nextState) {
+        toast.success('Shift Status: ON DUTY. Ready to receive dispatch assignments.');
+      } else {
+        toast.info('Shift Status: OFF DUTY. Paused new dispatch assignments.');
+      }
+    } catch {
+      // Revert optimistic state on failure
+      setIsAvailable(!nextState);
+      toast.error('Failed to update courier shift status. Check gateway connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  if (fetching) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 text-xs font-medium">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <span>Loading Shift...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-slate-600 hidden sm:inline">
-        Shift: <strong className={isOnDuty ? "text-emerald-600" : "text-slate-400"}>
-          {isOnDuty ? 'ON DUTY' : 'OFF DUTY'}
-        </strong>
-      </span>
+    <div className="flex items-center gap-2 sm:gap-3">
+      {/* Workload badge */}
+      {profile?.activeDeliveryCount !== undefined && (
+        <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+          <Truck className="w-3 h-3 mr-1 text-slate-500" />
+          Load: {profile.activeDeliveryCount}/20
+        </span>
+      )}
+
+      {/* Interactive Shift Toggle Switch */}
       <button
-        type="button"
-        onClick={toggleShift}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-          isOnDuty ? 'bg-emerald-500' : 'bg-slate-300'
+        onClick={handleToggle}
+        disabled={loading}
+        title={`Click to set ${isAvailable ? 'Off Duty' : 'On Duty'}`}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border shadow-xs cursor-pointer ${
+          isAvailable
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+            : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
         }`}
-        role="switch"
-        aria-checked={isOnDuty}
-        title="Toggle Courier Shift Availability"
       >
+        {loading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+        ) : isAvailable ? (
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        ) : (
+          <Moon className="w-3.5 h-3.5 text-slate-500" />
+        )}
+
+        <span>{isAvailable ? 'On Duty' : 'Off Duty'}</span>
+
         <span
-          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-            isOnDuty ? 'translate-x-4' : 'translate-x-0'
+          className={`w-2 h-2 rounded-full ${
+            isAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
           }`}
         />
       </button>
