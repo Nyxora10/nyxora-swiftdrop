@@ -1,18 +1,54 @@
-# docker-compose.yml
-version: '3.8'
+# SwiftDrop – full local stack (Task 7.2)
+#   docker compose up -d --build      start everything (first run builds all images)
+#   docker compose ps                 status
+#   docker compose logs -f <service>  follow one service's logs
+#   docker compose down               stop (add -v to also delete the database volume)
+#
+# Inside this network, services reach each other by service name (postgres, rabbitmq,
+# auth-service, ...) and container ports (Postgres 5432). Host ports are only for your browser/tools.
+# Secrets: values like ${JWT_SECRET} come from an optional, git-ignored .env file;
+# if it's missing, the same public dev defaults as in .env.example are used.
+
+x-java-common: &java-common
+  restart: on-failure
+  networks:
+    - swiftdrop-net
+
+x-db-env: &db-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: guest
+  RABBITMQ_PASS: guest
+  JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+
+x-depends-infra: &depends-infra
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
 
 services:
+  # ---------- Infrastructure ----------
   postgres:
     image: postgres:15-alpine
     container_name: swiftdrop-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-multi-db.sql:/docker-entrypoint-initdb.d/init-multi-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - swiftdrop-net
 
@@ -25,11 +61,118 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    networks:
+      - swiftdrop-net
+
+  # ---------- Backend services (built from the repo root) ----------
+  auth-service:
+    <<: *java-common
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    image: swiftdrop/auth-service:local
+    container_name: swiftdrop-auth
+    environment:
+      <<: *db-env
+    ports:
+      - "8081:8081"
+    depends_on: *depends-infra
+
+  parcel-service:
+    <<: *java-common
+    build:
+      context: .
+      dockerfile: services/parcel-service/Dockerfile
+    image: swiftdrop/parcel-service:local
+    container_name: swiftdrop-parcel
+    environment:
+      <<: *db-env
+      STORAGE_TYPE: local
+      PROOFS_DIR: /app/uploads/proofs
+    volumes:
+      - swiftdrop-uploads:/app/uploads
+    ports:
+      - "8082:8082"
+    depends_on: *depends-infra
+
+  notification-webhook-service:
+    <<: *java-common
+    build:
+      context: .
+      dockerfile: services/notification-webhook-service/Dockerfile
+    image: swiftdrop/notification-webhook-service:local
+    container_name: swiftdrop-notification
+    environment:
+      <<: *db-env
+    ports:
+      - "8083:8083"
+    depends_on: *depends-infra
+
+  ai-assistant-service:
+    <<: *java-common
+    build:
+      context: .
+      dockerfile: services/ai-assistant-service/Dockerfile
+    image: swiftdrop/ai-assistant-service:local
+    container_name: swiftdrop-ai
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GATEWAY_URL: http://api-gateway:8080
+      AUTH_SERVICE_URL: http://auth-service:8081
+      PARCEL_SERVICE_URL: http://parcel-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-webhook-service:8083
+    ports:
+      - "8084:8084"
+
+  api-gateway:
+    <<: *java-common
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    image: swiftdrop/api-gateway:local
+    container_name: swiftdrop-gateway
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      PARCEL_SERVICE_URL: http://parcel-service:8082
+      PARCEL_SERVICE_WS_URL: ws://parcel-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-webhook-service:8083
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - parcel-service
+      - notification-webhook-service
+
+  # ---------- Frontend ----------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the browser bundle: must be reachable from YOUR BROWSER, so localhost
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_WEBSOCKET_URL: http://localhost:8080/ws-swiftdrop
+    image: swiftdrop/frontend:local
+    container_name: swiftdrop-frontend
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
     networks:
       - swiftdrop-net
 
 volumes:
   postgres_data:
+  swiftdrop-uploads:
 
 networks:
   swiftdrop-net:
