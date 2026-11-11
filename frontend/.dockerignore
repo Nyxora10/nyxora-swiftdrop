@@ -1,0 +1,13 @@
+# Build context = ./frontend
+node_modules
+.next
+out
+build
+coverage
+.git
+.env
+.env.*
+npm-debug.log*
+*.tsbuildinfo
+Dockerfile
+.dockerignore
