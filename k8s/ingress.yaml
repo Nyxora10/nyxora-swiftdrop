@@ -1,0 +1,41 @@
+# NGINX Ingress (Task 7.3): one entry point on http://localhost
+#   /api/...          -> api-gateway (which routes to auth / parcel / notification)
+#   /ws-swiftdrop/... -> api-gateway (WebSocket / SockJS)
+#   /                 -> frontend
+# Requires the ingress-nginx controller (see k8s/README.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swiftdrop
+  namespace: swiftdrop
+  annotations:
+    # Long-lived WebSocket connections (live parcel tracking)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /ws-swiftdrop
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
