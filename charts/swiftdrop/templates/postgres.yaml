@@ -8,6 +8,11 @@ metadata:
 data:
   init-multi-db.sql: |
     {{- required "Pass the DB init script: --set-file postgres.initSql=docker/postgres/init-multi-db.sql" .Values.postgres.initSql | nindent 4 }}
+  {{- if .Values.postgres.seedSql }}
+  # Demo seed data (Module 10), runs after init-multi-db.sql (alphabetical order)
+  seed-data.sql: |
+    {{- .Values.postgres.seedSql | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service

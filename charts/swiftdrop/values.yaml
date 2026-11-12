@@ -85,6 +85,9 @@ postgres:
   # Contents of init-multi-db.sql, passed at install time with:
   #   --set-file postgres.initSql=docker/postgres/init-multi-db.sql
   initSql: ""
+  # Optional demo seed data (Module 10):
+  #   --set-file postgres.seedSql=docker/postgres/seed-data.sql
+  seedSql: ""
 
 rabbitmq:
   image: rabbitmq:3.11-management-alpine

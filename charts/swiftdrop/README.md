@@ -13,7 +13,8 @@ Same resources as the plain manifests in `k8s/`, but configurable per environmen
 ```powershell
 helm upgrade --install swiftdrop charts/swiftdrop -n swiftdrop --create-namespace `
   -f charts/swiftdrop/values-dev.yaml `
-  --set-file postgres.initSql=docker/postgres/init-multi-db.sql
+  --set-file postgres.initSql=docker/postgres/init-multi-db.sql `
+  --set-file postgres.seedSql=docker/postgres/seed-data.sql
 kubectl get pods,svc,ingress,hpa -n swiftdrop
 ```
 `--set-file` passes the real `docker/postgres/init-multi-db.sql`, so the script is not copied into the chart.
