@@ -1,0 +1,71 @@
+# auth-service – Deployment + Service (Task 7.3)
+# Probes check the TCP port: this service has no Actuator yet (/actuator/health).
+# Switch to httpGet /actuator/health once spring-boot-starter-actuator is added.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: swiftdrop
+  labels:
+    app: auth-service
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: swiftdrop
+  labels:
+    app: auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      # Don't inject Kubernetes "service link" env vars (e.g. PARCEL_SERVICE_PORT=tcp://...),
+      # they clash with the apps' own PARCEL_SERVICE_PORT etc. Services use DNS names instead.
+      enableServiceLinks: false
+      containers:
+        - name: auth-service
+          image: swiftdrop/auth-service:local
+          imagePullPolicy: IfNotPresent # images are built locally, not pulled from a registry
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: swiftdrop-config
+            - secretRef:
+                name: swiftdrop-secrets
+          # Slow JVM start: allow up to 3 minutes before liveness checks begin
+          startupProbe:
+            tcpSocket:
+                port: 8081
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            tcpSocket:
+                port: 8081
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+                port: 8081
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
