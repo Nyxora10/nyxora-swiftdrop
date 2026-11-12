@@ -30,7 +30,7 @@ docker compose build
 docker build -t swiftdrop/frontend:k8s --build-arg NEXT_PUBLIC_API_URL=http://localhost --build-arg NEXT_PUBLIC_WEBSOCKET_URL=http://localhost/ws-swiftdrop ./frontend
 
 kubectl apply -f k8s/namespace.yaml
-kubectl create configmap postgres-init -n swiftdrop --from-file=docker/postgres/init-multi-db.sql
+kubectl create configmap postgres-init -n swiftdrop --from-file=docker/postgres/init-multi-db.sql --from-file=docker/postgres/seed-data.sql
 kubectl create secret generic swiftdrop-gemini -n swiftdrop --from-literal=GEMINI_API_KEY=<your key>   # optional
 kubectl apply -f k8s/
 
