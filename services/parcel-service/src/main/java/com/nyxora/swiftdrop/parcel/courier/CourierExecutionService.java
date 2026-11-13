@@ -1,9 +1,6 @@
 package com.nyxora.swiftdrop.parcel.courier;
 
-import com.nyxora.swiftdrop.parcel.courier.dto.CourierParcelCardDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.CourierRunsheetResponseDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.ParcelStatusUpdateResponseDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.UpdateParcelStatusRequestDto;
+import com.nyxora.swiftdrop.parcel.courier.dto.*;
 
 import java.util.UUID;
 
@@ -43,4 +40,12 @@ public interface CourierExecutionService {
      * @return ParcelStatusUpdateResponseDto containing status change summary
      */
     ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request);
+
+    /**
+     * Retrieves the historical completed, failed, and returned deliveries for the given courier.
+     *
+     * @param courierId Unique UUID of the authenticated courier
+     * @return CourierHistoryResponseDto containing delivery metrics and historical parcel records
+     */
+    CourierHistoryResponseDto getCourierHistory(UUID courierId);
 }

@@ -1,10 +1,7 @@
 package com.nyxora.swiftdrop.parcel.courier;
 
 import com.nyxora.swiftdrop.parcel.booking.config.RabbitMqConfig;
-import com.nyxora.swiftdrop.parcel.courier.dto.CourierParcelCardDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.CourierRunsheetResponseDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.ParcelStatusUpdateResponseDto;
-import com.nyxora.swiftdrop.parcel.courier.dto.UpdateParcelStatusRequestDto;
+import com.nyxora.swiftdrop.parcel.courier.dto.*;
 import com.nyxora.swiftdrop.parcel.courier.event.ParcelStatusUpdatedEvent;
 import com.nyxora.swiftdrop.parcel.domain.entity.Parcel;
 import com.nyxora.swiftdrop.parcel.domain.entity.ParcelStatusHistory;
@@ -178,6 +175,79 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                 .updatedAt(Instant.now())
                 .message(String.format("Parcel %s successfully transitioned from %s to %s.",
                         parcel.getTrackingNumber(), previousStatus, targetStatus))
+                .build();
+    }
+
+    @Override
+    public CourierHistoryResponseDto getCourierHistory(UUID courierId) {
+        if (courierId == null) {
+            throw new IllegalArgumentException("Courier ID cannot be null.");
+        }
+
+        List<Parcel> assignedParcels = parcelRepository.findByAssignedCourierId(courierId);
+        List<CourierDeliveryHistoryItemDto> historyItems = new ArrayList<>();
+        int deliveredCount = 0;
+        int failedCount = 0;
+        int returnedCount = 0;
+
+        for (Parcel parcel : assignedParcels) {
+            ParcelStatus status = parcel.getCurrentStatus();
+
+            // Only consider terminal or completed deliveries for history
+            if (status != ParcelStatus.DELIVERED && status != ParcelStatus.FAILED && status != ParcelStatus.RETURNED_TO_SENDER) {
+                continue;
+            }
+
+            if (status == ParcelStatus.DELIVERED) {
+                deliveredCount++;
+            } else if (status == ParcelStatus.FAILED) {
+                failedCount++;
+            } else if (status == ParcelStatus.RETURNED_TO_SENDER) {
+                returnedCount++;
+            }
+
+            // Retrieve latest audit record to extract proof URL, signature, and timestamp
+            List<ParcelStatusHistory> history = parcelStatusHistoryRepository.findByParcel_IdOrderByCreatedAtAsc(parcel.getId());
+            ParcelStatusHistory latest = history.isEmpty() ? null : history.get(history.size() - 1);
+
+            CourierDeliveryHistoryItemDto item = CourierDeliveryHistoryItemDto.builder()
+                    .parcelId(parcel.getId())
+                    .trackingNumber(parcel.getTrackingNumber())
+                    .finalStatus(status)
+                    .recipientName(parcel.getRecipientName())
+                    .recipientPhone(parcel.getRecipientPhone())
+                    .dropoffAddress(parcel.getDropoffAddress())
+                    .destinationZoneName(parcel.getDestinationZone() != null ? parcel.getDestinationZone().getZoneName() : null)
+                    .weightKg(parcel.getWeightKg())
+                    .parcelSize(parcel.getParcelSize())
+                    .estimatedFee(parcel.getEstimatedFee())
+                    .recipientSignatureName(latest != null ? latest.getRecipientSignatureName() : null)
+                    .proofPhotoUrl(latest != null ? latest.getProofPhotoUrl() : null)
+                    .deliveryNote(latest != null ? latest.getDeliveryNote() : null)
+                    .failureReason(latest != null ? latest.getFailureReason() : null)
+                    .completedAt(latest != null && latest.getCreatedAt() != null ? latest.getCreatedAt() : parcel.getUpdatedAt())
+                    .build();
+
+            historyItems.add(item);
+        }
+
+        // Sort descending by completion time (most recent deliveries first)
+        historyItems.sort((a, b) -> {
+            if (a.getCompletedAt() == null || b.getCompletedAt() == null) return 0;
+            return b.getCompletedAt().compareTo(a.getCompletedAt());
+        });
+
+        log.info("Loaded delivery history for courier {}: {} items (delivered: {}, failed: {}, returned: {})",
+                courierId, historyItems.size(), deliveredCount, failedCount, returnedCount);
+
+        return CourierHistoryResponseDto.builder()
+                .courierId(courierId)
+                .totalCompleted(historyItems.size())
+                .deliveredCount(deliveredCount)
+                .failedCount(failedCount)
+                .returnedCount(returnedCount)
+                .history(historyItems)
+                .generatedAt(Instant.now())
                 .build();
     }
 
