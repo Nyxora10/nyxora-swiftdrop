@@ -8,6 +8,7 @@ import { authStorage } from '@/lib/auth';
 import {
   CourierParcelCard,
   CourierRunsheetResponse,
+  CourierHistoryResponse,
   ParcelStatusUpdateResponse,
   ProofUploadResponse,
   UpdateParcelStatusRequest,
@@ -86,5 +87,15 @@ export async function uploadDeliveryProof(
       },
     }
   );
+  return res.data;
+}
+
+/**
+ * Retrieves the historical completed, failed, and returned deliveries for the logged-in courier.
+ */
+export async function getCourierHistory(): Promise<CourierHistoryResponse> {
+  const res = await api.get<CourierHistoryResponse>('/api/v1/parcels/courier/history', {
+    headers: getCourierHeaders(),
+  });
   return res.data;
 }

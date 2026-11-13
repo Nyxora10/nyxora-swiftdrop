@@ -73,3 +73,31 @@ export interface ProofUploadResponse {
   proofPhotoUrl: string;
   uploadedAt: string;
 }
+
+export interface CourierDeliveryHistoryItem {
+  parcelId: string;
+  trackingNumber: string;
+  finalStatus: ParcelStatus;
+  recipientName: string;
+  recipientPhone: string;
+  dropoffAddress: string;
+  destinationZoneName?: string | null;
+  weightKg: number;
+  parcelSize: ParcelSize;
+  estimatedFee: number;
+  recipientSignatureName?: string | null;
+  proofPhotoUrl?: string | null;
+  deliveryNote?: string | null;
+  failureReason?: string | null;
+  completedAt?: string | null;
+}
+
+export interface CourierHistoryResponse {
+  courierId: string;
+  totalCompleted: number;
+  deliveredCount: number;
+  failedCount: number;
+  returnedCount: number;
+  history: CourierDeliveryHistoryItem[];
+  generatedAt: string;
+}

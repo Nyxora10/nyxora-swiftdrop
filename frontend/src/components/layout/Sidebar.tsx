@@ -77,6 +77,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
     if (role === 'ROLE_COURIER') {
       return [
         { name: 'Active Runsheet', href: '/courier/runsheet', icon: Truck },
+        { name: 'Delivery History', href: '/courier/history', icon: History },
       ];
     }
 
