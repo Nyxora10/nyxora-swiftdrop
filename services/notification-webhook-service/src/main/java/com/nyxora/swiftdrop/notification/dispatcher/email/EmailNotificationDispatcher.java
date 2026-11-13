@@ -102,7 +102,7 @@ public class EmailNotificationDispatcher {
         } catch (Exception ex) {
             log.error("Failed to dispatch HTML email to recipient={}: {}",
                     maskedEmail,
-                    ex.getMessage(),
+                    PiiMaskingUtil.maskText(ex.getMessage()),
                     ex);
             return false;
         }

@@ -149,4 +149,11 @@ class CourierControllerTest {
                         .content("{}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("GET /profile — throws BadCredentialsException when unauthenticated")
+    void getMyProfile_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/courier/profile"))
+                .andExpect(status().isUnauthorized());
+    }
 }

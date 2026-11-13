@@ -1,0 +1,6 @@
+apiVersion: v2
+name: swiftdrop
+description: SwiftDrop courier platform – 5 Spring Boot microservices, Next.js frontend, PostgreSQL and RabbitMQ (Task 7.4)
+type: application
+version: 0.1.0
+appVersion: "0.0.1"

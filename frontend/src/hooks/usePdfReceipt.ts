@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { authStorage } from '@/lib/auth';
 import { BookingResponse } from '@/types/booking';
-import { downloadReceiptPdf, generateDemoPdf } from '@/services/parcelService';
+import { downloadReceiptPdf } from '@/services/parcelService';
 
 export interface UsePdfReceiptOptions {
   toast: {
@@ -19,27 +18,6 @@ export function usePdfReceipt({ toast }: UsePdfReceiptOptions) {
     async (bookingResult: BookingResponse | null) => {
       if (!bookingResult?.parcelId) return;
       setDownloadingPdf(true);
-
-      const token = authStorage.getAccessToken();
-      const isMock =
-        !token ||
-        token.startsWith('mock-') ||
-        bookingResult.parcelId.startsWith('00000000');
-
-      if (isMock) {
-        setTimeout(() => {
-          try {
-            const blob = generateDemoPdf(bookingResult);
-            triggerBlobDownload(blob, `SwiftDrop-Receipt-${bookingResult.trackingNumber}.pdf`);
-            toast.success('Digital PDF delivery receipt downloaded successfully!');
-          } catch {
-            toast.error('Failed to generate mock PDF.');
-          } finally {
-            setDownloadingPdf(false);
-          }
-        }, 500);
-        return;
-      }
 
       try {
         const blob = await downloadReceiptPdf(bookingResult.parcelId);

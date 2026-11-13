@@ -1,0 +1,102 @@
+# SwiftDrop Helm chart – default values (Task 7.4).
+# Environment overrides: values-dev.yaml (local laptop) and values-prod.yaml.
+# Install (from the repo root):
+#   helm upgrade --install swiftdrop charts/swiftdrop -n swiftdrop --create-namespace \
+#     -f charts/swiftdrop/values-dev.yaml --set-file postgres.initSql=docker/postgres/init-multi-db.sql
+
+image:
+  repository: swiftdrop          # images are named <repository>/<service>:<tag>
+  tag: local
+  pullPolicy: IfNotPresent
+
+# Backend microservices. Each gets a Deployment, a Service and (if enabled) an HPA.
+# probe: "http" uses /actuator/health, "tcp" checks the port (services without Actuator yet).
+services:
+  api-gateway:
+    port: 8080
+    probe: http
+  auth-service:
+    port: 8081
+    probe: tcp
+  parcel-service:
+    port: 8082
+    probe: tcp
+    uploads: true                # mounts the shared uploads volume at /app/uploads
+  notification-webhook-service:
+    port: 8083
+    probe: tcp
+  ai-assistant-service:
+    port: 8084
+    probe: tcp
+    gemini: true                 # reads GEMINI_API_KEY from the gemini secret (optional)
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 384Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+# Shared, non-secret settings (become the swiftdrop-config ConfigMap)
+config:
+  CORS_ALLOWED_ORIGINS: http://localhost,http://localhost:3000,http://127.0.0.1:3000
+  STORAGE_TYPE: local
+  PROOFS_DIR: /app/uploads/proofs
+  GEMINI_MODEL: gemini-3.5-flash-lite
+  JAVA_OPTS: -XX:MaxRAMPercentage=75.0
+
+# Secrets. create: true makes the chart create them from the values below (local dev only).
+# For shared/prod clusters set create: false and create the secret yourself:
+#   kubectl create secret generic swiftdrop-secrets -n swiftdrop --from-literal=POSTGRES_PASSWORD=... \
+#     --from-literal=RABBITMQ_USER=... --from-literal=RABBITMQ_PASS=... --from-literal=JWT_SECRET=...
+secrets:
+  create: true
+  name: swiftdrop-secrets
+  # Public development defaults (same as .env.example) – NOT real secrets
+  POSTGRES_PASSWORD: postgrespassword
+  RABBITMQ_USER: guest
+  RABBITMQ_PASS: guest
+  JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+
+# Gemini key is never in values or Git:
+#   kubectl create secret generic swiftdrop-gemini -n swiftdrop --from-literal=GEMINI_API_KEY=<key>
+gemini:
+  secretName: swiftdrop-gemini
+
+frontend:
+  enabled: true
+  # Built with NEXT_PUBLIC_API_URL=http://localhost (see k8s/README.md)
+  tag: k8s
+  port: 3000
+  replicaCount: 1
+
+postgres:
+  image: postgres:15-alpine
+  storage: 2Gi
+  # Contents of init-multi-db.sql, passed at install time with:
+  #   --set-file postgres.initSql=docker/postgres/init-multi-db.sql
+  initSql: ""
+  # Optional demo seed data (Module 10):
+  #   --set-file postgres.seedSql=docker/postgres/seed-data.sql
+  seedSql: ""
+
+rabbitmq:
+  image: rabbitmq:3.11-management-alpine
+  storage: 1Gi
+
+uploads:
+  storage: 1Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: localhost

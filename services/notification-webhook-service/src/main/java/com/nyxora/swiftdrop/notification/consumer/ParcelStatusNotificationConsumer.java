@@ -65,7 +65,7 @@ public class ParcelStatusNotificationConsumer {
         } catch (Exception ex) {
             log.error("Unhandled exception while dispatching notification for trackingNumber={}: {}",
                     event.getTrackingNumber(),
-                    ex.getMessage(),
+                    PiiMaskingUtil.maskText(ex.getMessage()),
                     ex);
         }
     }

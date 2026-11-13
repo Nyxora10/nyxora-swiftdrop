@@ -1,0 +1,28 @@
+# Non-secret settings shared by the backend services (Task 7.3).
+# Services find each other by Kubernetes Service name (DNS) inside the namespace.
+# The Postgres init script is a separate ConfigMap created from the real file
+# (single source of truth), see k8s/README.md:
+#   kubectl create configmap postgres-init -n swiftdrop --from-file=docker/postgres/init-multi-db.sql
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftdrop-config
+  namespace: swiftdrop
+data:
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: postgres
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  AUTH_SERVICE_URL: http://auth-service:8081
+  PARCEL_SERVICE_URL: http://parcel-service:8082
+  PARCEL_SERVICE_WS_URL: ws://parcel-service:8082
+  NOTIFICATION_SERVICE_URL: http://notification-webhook-service:8083
+  GATEWAY_URL: http://api-gateway:8080
+  # Browser origins allowed by the gateway (the Ingress serves the app on http://localhost)
+  CORS_ALLOWED_ORIGINS: http://localhost,http://localhost:3000,http://127.0.0.1:3000
+  # parcel-service: store delivery proofs on the shared uploads volume (no AWS)
+  STORAGE_TYPE: local
+  PROOFS_DIR: /app/uploads/proofs
+  GEMINI_MODEL: gemini-3.5-flash-lite
+  JAVA_OPTS: -XX:MaxRAMPercentage=75.0

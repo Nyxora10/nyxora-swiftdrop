@@ -1,0 +1,62 @@
+# frontend (Next.js) – Deployment + Service (Task 7.3)
+# The image must be built for the Ingress URL (API on the same origin, http://localhost):
+#   docker build -t swiftdrop/frontend:k8s --build-arg NEXT_PUBLIC_API_URL=http://localhost --build-arg NEXT_PUBLIC_WEBSOCKET_URL=http://localhost/ws-swiftdrop ./frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: swiftdrop
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: swiftdrop
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      # Don't inject Kubernetes "service link" env vars (e.g. PARCEL_SERVICE_PORT=tcp://...),
+      # they clash with the apps' own PARCEL_SERVICE_PORT etc. Services use DNS names instead.
+      enableServiceLinks: false
+      containers:
+        - name: frontend
+          image: swiftdrop/frontend:k8s
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
