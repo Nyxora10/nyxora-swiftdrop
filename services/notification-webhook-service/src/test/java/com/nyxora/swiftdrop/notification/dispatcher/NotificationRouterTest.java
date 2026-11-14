@@ -164,6 +164,19 @@ class NotificationRouterTest {
     }
 
     @Test
+    @DisplayName("Should skip email and SMS when OUT_FOR_DELIVERY contacts are blank")
+    void shouldHandleBlankContactsOnOutForDelivery() {
+        ParcelStatusUpdatedEvent event = createSampleEvent("OUT_FOR_DELIVERY")
+                .withRecipientEmail(" ")
+                .withRecipientPhone(" ");
+
+        router.dispatch(event);
+
+        verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
+        verify(smsSender, never()).sendSms(any(), any());
+    }
+
+    @Test
     @DisplayName("Should route DELIVERED status to both HTML email and SMS confirmation")
     void shouldRouteDeliveredStatus() {
         ParcelStatusUpdatedEvent event = createSampleEvent("DELIVERED");
@@ -205,6 +218,19 @@ class NotificationRouterTest {
 
         verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
         verify(smsSender).sendSms(eq("+94771234567"), any());
+    }
+
+    @Test
+    @DisplayName("Should skip email and SMS when DELIVERED contacts are blank")
+    void shouldHandleBlankContactsOnDelivered() {
+        ParcelStatusUpdatedEvent event = createSampleEvent("DELIVERED")
+                .withRecipientEmail(" ")
+                .withRecipientPhone(" ");
+
+        router.dispatch(event);
+
+        verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
+        verify(smsSender, never()).sendSms(any(), any());
     }
 
     @Test

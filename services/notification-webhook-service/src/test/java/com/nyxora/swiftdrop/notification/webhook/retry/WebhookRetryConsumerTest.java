@@ -82,6 +82,14 @@ class WebhookRetryConsumerTest {
     }
 
     @Test
+    @DisplayName("Should discard null or malformed retry messages")
+    void shouldDiscardNullOrMalformedMessage() {
+        retryConsumer.handleRetryMessage(null);
+        retryConsumer.handleRetryMessage(new WebhookRetryMessage(
+                UUID.randomUUID(), merchantId, parcelId, "parcel.status.updated", "{}", 1));
+    }
+
+    @Test
     @DisplayName("Should schedule subsequent retry when transient 5xx error occurs and retries remain")
     void shouldScheduleNextRetryOnRetryableFailure() {
         when(logRepository.findById(logId)).thenReturn(Optional.of(sampleLog));
