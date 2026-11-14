@@ -26,5 +26,7 @@ public class UpdateParcelStatusRequestDto {
 
     private String proofPhotoUrl;
 
+    private String signatureImageUrl;
+
     private String failureReason;
 }
