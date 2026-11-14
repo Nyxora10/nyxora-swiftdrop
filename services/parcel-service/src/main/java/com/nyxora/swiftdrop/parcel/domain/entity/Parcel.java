@@ -75,6 +75,10 @@ public class Parcel extends BaseAuditableEntity {
     @Column(name = "estimated_fee", nullable = false, precision = 10, scale = 2)
     private BigDecimal estimatedFee;
 
+    // Merchant tier discount applied to estimatedFee; null for retail bookings and older parcels.
+    @Column(name = "discount_amount", precision = 10, scale = 2)
+    private BigDecimal discountAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "current_status", nullable = false, length = 40)
     @Builder.Default

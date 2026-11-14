@@ -5,8 +5,11 @@ import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +47,10 @@ public interface ParcelRepository extends JpaRepository<Parcel, UUID> {
 
     /** Count orders for a merchant by status. */
     long countByMerchantIdAndCurrentStatus(UUID merchantId, ParcelStatus currentStatus);
+
+    /** Sum of merchant discounts recorded across all of a merchant's orders (0 when none). */
+    @Query("SELECT COALESCE(SUM(p.discountAmount), 0) FROM Parcel p WHERE p.merchantId = :merchantId")
+    BigDecimal sumDiscountAmountByMerchantId(@Param("merchantId") UUID merchantId);
 
     /**
      * Returns active deliveries assigned to a specific courier.

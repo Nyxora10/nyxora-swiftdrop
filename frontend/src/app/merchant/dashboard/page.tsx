@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Package,
@@ -10,103 +10,32 @@ import {
   UploadCloud,
   Key,
   RefreshCw,
-  Search,
-  ExternalLink,
   DollarSign,
   Copy,
   Check,
   ShieldAlert,
+  ArrowRight,
 } from 'lucide-react';
 import AppShell from '@/components/layout/AppShell';
+import MerchantOrdersTable from '@/components/merchant/MerchantOrdersTable';
+import { useMerchantOrders } from '@/hooks/useMerchantOrders';
 import { api } from '@/lib/api';
+import { apiErrorMessage, formatLkr } from '@/lib/merchant/format';
+import type { MerchantProfile } from '@/types/merchant';
 
-// Mirrors parcel-service OrderSummaryDto (GET /api/v1/parcels/merchant/orders → orders.content[])
-interface MerchantOrder {
-  parcelId: string;
-  trackingNumber: string;
-  recipientName: string;
-  recipientPhone: string;
-  dropoffAddress: string;
-  originZoneName?: string;
-  destinationZoneName?: string;
-  weightKg: number;
-  parcelSize: 'SMALL' | 'MEDIUM' | 'LARGE';
-  estimatedFee: number;
-  currentStatus: 'CREATED' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED' | 'RETURNED_TO_SENDER';
-  createdAt: string;
-}
-
-// Mirrors parcel-service MerchantOrderHistoryResponse lifetime counters
-interface MerchantOrderSummary {
-  totalOrders: number;
-  inTransitCount: number;
-  deliveredCount: number;
-  failedCount: number;
-}
-
-const ORDER_PAGE_SIZE = 50; // parcel-service caps page size at 50
-
-function apiErrorMessage(err: unknown, fallback: string): string {
-  const data = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
-  return data?.detail || data?.message || fallback;
-}
-
-interface MerchantProfile {
-  merchantId: string;
-  businessName: string;
-  registrationNumber: string;
-  oauthClientId: string;
-  webhookUrl: string;
-  webhookSecret: string;
-}
-
-interface DashboardSnapshot {
-  profile: MerchantProfile | null;
-  orders: MerchantOrder[];
-  summary: MerchantOrderSummary | null;
-  errors: string[];
-}
-
-// Loads profile and orders in parallel; each failure becomes a visible error instead of fake data.
-async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const [profileResult, ordersResult] = await Promise.allSettled([
-    api.get<MerchantProfile>('/api/v1/auth/merchant/profile'),
-    api.get('/api/v1/parcels/merchant/orders', { params: { page: 0, size: ORDER_PAGE_SIZE } }),
-  ]);
-
-  const snapshot: DashboardSnapshot = { profile: null, orders: [], summary: null, errors: [] };
-
-  if (profileResult.status === 'fulfilled') {
-    snapshot.profile = profileResult.value.data;
-  } else {
-    snapshot.errors.push(apiErrorMessage(profileResult.reason, 'Could not load your merchant profile and API credentials.'));
-  }
-
-  if (ordersResult.status === 'fulfilled') {
-    const data = ordersResult.value.data;
-    snapshot.orders = data?.orders?.content ?? [];
-    snapshot.summary = {
-      totalOrders: data?.totalOrders ?? 0,
-      inTransitCount: data?.inTransitCount ?? 0,
-      deliveredCount: data?.deliveredCount ?? 0,
-      failedCount: data?.failedCount ?? 0,
-    };
-  } else {
-    snapshot.errors.push(apiErrorMessage(ordersResult.reason, 'Could not load your orders.'));
-  }
-
-  return snapshot;
-}
+const RECENT_ORDER_COUNT = 10;
 
 export default function MerchantDashboardPage() {
-  const [orders, setOrders] = useState<MerchantOrder[]>([]);
-  const [summary, setSummary] = useState<MerchantOrderSummary | null>(null);
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [rotateError, setRotateError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    data: history,
+    loading: ordersLoading,
+    error: ordersError,
+    reload: reloadOrders,
+  } = useMerchantOrders({ page: 0, size: RECENT_ORDER_COUNT });
 
   // Credentials Modal
   const [showCredModal, setShowCredModal] = useState(false);
@@ -117,28 +46,31 @@ export default function MerchantDashboardPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const applySnapshot = useCallback((snapshot: DashboardSnapshot) => {
-    setProfile(snapshot.profile);
-    setOrders(snapshot.orders);
-    setSummary(snapshot.summary);
-    setLoadErrors(snapshot.errors);
-    setLoading(false);
-  }, []);
-
+  // Profile and orders load independently, so one failing never hides the other.
   useEffect(() => {
     let cancelled = false;
-    fetchDashboardSnapshot().then((snapshot) => {
-      if (!cancelled) applySnapshot(snapshot);
-    });
+    api
+      .get<MerchantProfile>('/api/v1/auth/merchant/profile')
+      .then((res) => {
+        if (cancelled) return;
+        setProfile(res.data);
+        setProfileError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setProfileError(apiErrorMessage(err, 'Could not load your merchant profile and API credentials.'));
+      });
     return () => {
       cancelled = true;
     };
-  }, [applySnapshot]);
+  }, [profileReloadKey]);
 
-  const refreshDashboard = () => {
-    setLoading(true);
-    fetchDashboardSnapshot().then(applySnapshot);
-  };
+  const refreshDashboard = useCallback(() => {
+    setProfileReloadKey((k) => k + 1);
+    reloadOrders();
+  }, [reloadOrders]);
+
+  const loadErrors = [profileError, ordersError].filter((e): e is string => Boolean(e));
+  const orders = history?.orders?.content ?? [];
 
   // Handle OAuth Client Secret Rotation
   const handleRotateSecret = async () => {
@@ -198,42 +130,16 @@ export default function MerchantDashboardPage() {
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
-  // Metrics Calculations
-  // Lifetime counters come from the server; savings are estimated from the loaded page of orders.
-  const metrics = useMemo(() => {
-    const total = summary?.totalOrders ?? 0;
-    const delivered = summary?.deliveredCount ?? 0;
-    const inTransit = summary?.inTransitCount ?? 0;
-    const failed = summary?.failedCount ?? 0;
-    const rate = total > 0 ? Math.round((delivered / total) * 100) : 0;
-    const totalFee = orders.reduce((sum, o) => sum + (Number(o.estimatedFee) || 0), 0);
-    // 15% corporate discount saved = totalFee / 0.85 * 0.15
-    const corporateSavings = totalFee > 0 ? Math.round((totalFee / 0.85) * 0.15) : 0;
-
-    return { total, delivered, inTransit, failed, rate, totalFee, corporateSavings };
-  }, [orders, summary]);
-
-  // Filtered Orders
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const matchesStatus =
-        statusFilter === 'ALL'
-          ? true
-          : statusFilter === 'ACTIVE'
-          ? ['CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.currentStatus)
-          : o.currentStatus === statusFilter;
-
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        o.trackingNumber.toLowerCase().includes(q) ||
-        o.recipientName.toLowerCase().includes(q) ||
-        o.recipientPhone.includes(q) ||
-        (o.destinationZoneName && o.destinationZoneName.toLowerCase().includes(q));
-
-      return matchesStatus && matchesSearch;
-    });
-  }, [orders, statusFilter, searchQuery]);
+  // Lifetime figures straight from the server, so they cover every order, not just this page.
+  const total = history?.totalOrders ?? 0;
+  const delivered = history?.deliveredCount ?? 0;
+  const metrics = {
+    total,
+    delivered,
+    inTransit: history?.inTransitCount ?? 0,
+    rate: total > 0 ? Math.round((delivered / total) * 100) : 0,
+    savings: history?.totalSavings ?? 0,
+  };
 
   return (
     <AppShell>
@@ -307,7 +213,7 @@ export default function MerchantDashboardPage() {
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">In Transit / Active</span>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">In Transit</span>
               <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
                 <Clock className="w-5 h-5" />
               </div>
@@ -316,7 +222,7 @@ export default function MerchantDashboardPage() {
               <span className="text-3xl font-extrabold text-slate-900">{metrics.inTransit}</span>
               <span className="text-xs text-amber-600 font-medium">on route</span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">Pickups & deliveries active</p>
+            <p className="mt-1 text-xs text-slate-400">In transit or out for delivery</p>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -343,158 +249,44 @@ export default function MerchantDashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-1">
-              <span className="text-xs font-bold text-slate-500">LKR</span>
-              <span className="text-3xl font-extrabold text-indigo-600">{metrics.corporateSavings.toLocaleString()}</span>
+              <span className="text-3xl font-extrabold text-indigo-600">{formatLkr(metrics.savings)}</span>
             </div>
-            <p className="mt-1 text-xs text-indigo-500 font-medium">
-              Saved via B2B Corporate Tier{summary && summary.totalOrders > orders.length ? ` (latest ${orders.length} orders)` : ''}
-            </p>
+            <p className="mt-1 text-xs text-indigo-500 font-medium">Total discount across all orders</p>
           </div>
         </div>
 
-        {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[
-              { label: 'All Orders', value: 'ALL' },
-              { label: 'Active', value: 'ACTIVE' },
-              { label: 'Created', value: 'CREATED' },
-              { label: 'In Transit', value: 'IN_TRANSIT' },
-              { label: 'Delivered', value: 'DELIVERED' },
-              { label: 'Failed', value: 'FAILED' },
-            ].map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setStatusFilter(tab.value)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === tab.value
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative min-w-[260px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search tracking, recipient..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-800"
-            />
-          </div>
-        </div>
-
-        {/* Orders Table */}
+        {/* Recent Orders */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900">Shipments & Delivery Matrix</h2>
-            <button
-              onClick={refreshDashboard}
-              disabled={loading}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-            </button>
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+            <h2 className="text-base font-bold text-slate-900">Recent Shipments</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={refreshDashboard}
+                disabled={ordersLoading}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
+                title="Refresh"
+                aria-label="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin text-blue-600' : ''}`} />
+              </button>
+              <Link
+                href="/merchant/orders"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800"
+              >
+                View all orders <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/75 border-b border-slate-100 text-slate-500 text-xs uppercase font-semibold">
-                  <th className="py-3 px-6">Tracking Number</th>
-                  <th className="py-3 px-6">Recipient</th>
-                  <th className="py-3 px-6">Destination</th>
-                  <th className="py-3 px-4">Size & Weight</th>
-                  <th className="py-3 px-4">Discounted Fee</th>
-                  <th className="py-3 px-6">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
-                      Loading merchant parcels...
-                    </td>
-                  </tr>
-                ) : filteredOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
-                      No parcels match the selected status or search term.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredOrders.map((order) => {
-                    const statusColors: Record<string, string> = {
-                      CREATED: 'bg-slate-100 text-slate-700 border-slate-200',
-                      ASSIGNED: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-                      PICKED_UP: 'bg-blue-50 text-blue-700 border-blue-200',
-                      IN_TRANSIT: 'bg-amber-50 text-amber-700 border-amber-200',
-                      OUT_FOR_DELIVERY: 'bg-purple-50 text-purple-700 border-purple-200',
-                      DELIVERED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                      FAILED: 'bg-rose-50 text-rose-700 border-rose-200',
-                      RETURNED_TO_SENDER: 'bg-orange-50 text-orange-700 border-orange-200',
-                    };
-
-                    return (
-                      <tr key={order.parcelId} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-4 px-6 font-mono font-bold text-blue-600">
-                          {order.trackingNumber}
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="font-semibold text-slate-900">{order.recipientName}</div>
-                          <div className="text-xs text-slate-400 font-mono">{order.recipientPhone}</div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="text-slate-800 text-xs font-medium truncate max-w-[200px]" title={order.dropoffAddress}>
-                            {order.dropoffAddress}
-                          </div>
-                          <div className="text-2xs text-slate-400">{order.destinationZoneName || 'Island-wide'}</div>
-                        </td>
-                        <td className="py-4 px-4 text-xs text-slate-600">
-                          <span className="font-medium">{order.weightKg} kg</span> &bull;{' '}
-                          <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-2xs font-semibold">
-                            {order.parcelSize}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="font-bold text-slate-900">
-                            LKR {Number(order.estimatedFee ?? 0).toFixed(2)}
-                          </div>
-                          <div className="text-2xs text-emerald-600 font-medium">15% saved</div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                              statusColors[order.currentStatus] || 'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {order.currentStatus.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-right">
-                          <Link
-                            href={`/track/${order.trackingNumber}`}
-                            target="_blank"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
-                          >
-                            Track <ExternalLink className="w-3.5 h-3.5" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <MerchantOrdersTable
+            orders={orders}
+            loading={ordersLoading}
+            emptyMessage="No orders yet. Upload a batch or connect your store through the API to book your first parcel."
+          />
+          {!ordersLoading && metrics.total > orders.length && (
+            <div className="px-6 py-3 border-t border-slate-100 text-xs text-slate-500">
+              Showing the latest {orders.length} of {metrics.total} orders.
+            </div>
+          )}
         </div>
 
         {/* API Credentials & Webhook Modal */}

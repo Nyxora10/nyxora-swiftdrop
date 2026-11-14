@@ -138,6 +138,8 @@ class ParcelHistoryServiceTest {
         when(parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.OUT_FOR_DELIVERY)).thenReturn(2L);
         when(parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.DELIVERED)).thenReturn(18L);
         when(parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.FAILED)).thenReturn(1L);
+        when(parcelRepository.sumDiscountAmountByMerchantId(merchantId)).thenReturn(new BigDecimal("1830.00"));
+        mockParcel.setDiscountAmount(new BigDecimal("91.50"));
 
         MerchantOrderHistoryResponse response = historyService.getMerchantOrders(merchantId, null, pageable);
 
@@ -146,8 +148,10 @@ class ParcelHistoryServiceTest {
         assertThat(response.getInTransitCount()).isEqualTo(6L); // 4 IN_TRANSIT + 2 OUT_FOR_DELIVERY
         assertThat(response.getDeliveredCount()).isEqualTo(18L);
         assertThat(response.getFailedCount()).isEqualTo(1L);
+        assertThat(response.getTotalSavings()).isEqualByComparingTo("1830.00");
         assertThat(response.getOrders().getContent()).hasSize(1);
         assertThat(response.getOrders().getContent().get(0).getTrackingNumber()).isEqualTo("SD-20261107-7K9P2X");
+        assertThat(response.getOrders().getContent().get(0).getDiscountAmount()).isEqualByComparingTo("91.50");
 
         verify(parcelRepository, times(1)).findByMerchantId(merchantId, pageable);
         verify(parcelRepository, times(1)).countByMerchantId(merchantId);
@@ -168,6 +172,9 @@ class ParcelHistoryServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getOrders().getContent().get(0).getOriginZoneName()).isNull();
         assertThat(response.getOrders().getContent().get(0).getDestinationZoneName()).isNull();
+        // No recorded discounts: savings default to zero and the row discount stays null.
+        assertThat(response.getTotalSavings()).isEqualByComparingTo("0");
+        assertThat(response.getOrders().getContent().get(0).getDiscountAmount()).isNull();
     }
 }
 

@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 /**
  * Merchant order history response enriched with aggregate KPI counters
  * for dashboard visualization and bulk shipment monitoring.
@@ -30,6 +32,9 @@ public class MerchantOrderHistoryResponse {
 
     @Schema(description = "Number of failed or returned deliveries", example = "5")
     private long failedCount;
+
+    @Schema(description = "Total merchant discount saved across all orders in LKR", example = "10980.00")
+    private BigDecimal totalSavings;
 
     @Schema(description = "Paginated list of orders matching the active filter")
     private PagedOrderResponse<OrderSummaryDto> orders;

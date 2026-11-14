@@ -91,6 +91,7 @@ public class MerchantOrderServiceImpl implements MerchantOrderService {
                 .weightKg(request.getWeightKg())
                 .parcelSize(request.getParcelSize())
                 .estimatedFee(quote.getTotalFee())
+                .discountAmount(quote.getDiscountAmount())
                 .currentStatus(ParcelStatus.CREATED)
                 .build();
 
