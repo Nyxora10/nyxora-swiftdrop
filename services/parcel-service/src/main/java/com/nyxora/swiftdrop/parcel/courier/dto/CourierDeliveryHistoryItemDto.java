@@ -35,6 +35,7 @@ public class CourierDeliveryHistoryItemDto {
     private BigDecimal estimatedFee;
     private String recipientSignatureName;
     private String proofPhotoUrl;
+    private String signatureImageUrl;
     private String deliveryNote;
     private String failureReason;
     private Instant completedAt;
