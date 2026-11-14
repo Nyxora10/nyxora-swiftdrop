@@ -52,6 +52,7 @@ class ZonePricingServiceTest {
                 .zoneCode("WP-COL-01")
                 .zoneName("Colombo Fort")
                 .district("Colombo")
+                .hubLocation("No. 120, Baseline Road, Colombo 09")
                 .baseSurcharge(BigDecimal.ZERO)
                 .isActive(true)
                 .build();
@@ -61,6 +62,7 @@ class ZonePricingServiceTest {
                 .zoneCode("WP-GAM-01")
                 .zoneName("Gampaha Town")
                 .district("Gampaha")
+                .hubLocation("No. 45, Colombo Road, Gampaha")
                 .baseSurcharge(new BigDecimal("30.00"))
                 .isActive(true)
                 .build();
@@ -115,6 +117,7 @@ class ZonePricingServiceTest {
                 .zoneCode("NP-JAF-01")
                 .zoneName("Jaffna Central")
                 .district("Jaffna")
+                .hubLocation("No. 64, KKS Road, Jaffna")
                 .baseSurcharge(new BigDecimal("120.00"))
                 .build();
 
@@ -129,6 +132,7 @@ class ZonePricingServiceTest {
 
         assertThat(saved.getId()).isEqualTo(3);
         assertThat(saved.getZoneCode()).isEqualTo("NP-JAF-01");
+        assertThat(saved.getHubLocation()).isEqualTo("No. 64, KKS Road, Jaffna");
         assertThat(saved.getIsActive()).isTrue();
     }
 
@@ -139,6 +143,7 @@ class ZonePricingServiceTest {
                 .zoneCode("WP-COL-01")
                 .zoneName("Duplicate Colombo")
                 .district("Colombo")
+                .hubLocation("No. 1, Duplicate Road, Colombo")
                 .baseSurcharge(BigDecimal.ZERO)
                 .build();
 
@@ -157,6 +162,7 @@ class ZonePricingServiceTest {
 
         UpdateZoneRequest update = UpdateZoneRequest.builder()
                 .zoneName("Colombo Fort Updated")
+                .hubLocation("No. 150, Baseline Road, Colombo 09")
                 .baseSurcharge(new BigDecimal("15.00"))
                 .isActive(false)
                 .build();
@@ -164,6 +170,7 @@ class ZonePricingServiceTest {
         DeliveryZone result = zonePricingService.updateZone(1, update);
 
         assertThat(result.getZoneName()).isEqualTo("Colombo Fort Updated");
+        assertThat(result.getHubLocation()).isEqualTo("No. 150, Baseline Road, Colombo 09");
         assertThat(result.getBaseSurcharge()).isEqualByComparingTo("15.00");
         assertThat(result.getIsActive()).isFalse();
     }

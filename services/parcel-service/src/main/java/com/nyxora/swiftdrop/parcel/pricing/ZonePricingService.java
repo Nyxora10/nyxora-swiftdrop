@@ -64,6 +64,7 @@ public class ZonePricingService {
                 .zoneCode(request.getZoneCode())
                 .zoneName(request.getZoneName())
                 .district(request.getDistrict())
+                .hubLocation(request.getHubLocation())
                 .baseSurcharge(request.getBaseSurcharge())
                 .isActive(true)
                 .build();
@@ -79,12 +80,14 @@ public class ZonePricingService {
         DeliveryZone zone = getZoneById(id);
         if (request.getZoneName() == null
                 && request.getDistrict() == null
+                && request.getHubLocation() == null
                 && request.getBaseSurcharge() == null
                 && request.getIsActive() == null) {
             throw new IllegalArgumentException("At least one zone field must be provided for update");
         }
         if (request.getZoneName()      != null) zone.setZoneName(request.getZoneName());
         if (request.getDistrict()      != null) zone.setDistrict(request.getDistrict());
+        if (request.getHubLocation()   != null) zone.setHubLocation(request.getHubLocation());
         if (request.getBaseSurcharge() != null) zone.setBaseSurcharge(request.getBaseSurcharge());
         if (request.getIsActive()      != null) zone.setIsActive(request.getIsActive());
         return zoneRepository.save(zone);

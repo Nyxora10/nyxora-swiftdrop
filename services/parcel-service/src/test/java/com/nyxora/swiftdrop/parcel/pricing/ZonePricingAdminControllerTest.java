@@ -64,6 +64,7 @@ class ZonePricingAdminControllerTest {
                 .zoneCode("WP-COL-01")
                 .zoneName("Colombo Central")
                 .district("Colombo")
+                .hubLocation("No. 120, Baseline Road, Colombo 09")
                 .baseSurcharge(BigDecimal.ZERO)
                 .isActive(true)
                 .build();
@@ -75,7 +76,8 @@ class ZonePricingAdminControllerTest {
                         .header("X-User-Role", "ROLE_ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].zoneCode").value("WP-COL-01"))
-                .andExpect(jsonPath("$[0].district").value("Colombo"));
+                .andExpect(jsonPath("$[0].district").value("Colombo"))
+                .andExpect(jsonPath("$[0].hubLocation").value("No. 120, Baseline Road, Colombo 09"));
     }
 
     @Test
@@ -85,6 +87,7 @@ class ZonePricingAdminControllerTest {
                 .zoneCode("WP-COL-02")
                 .zoneName("Colombo Suburbs")
                 .district("Colombo")
+                .hubLocation("No. 88, High Level Road, Nugegoda")
                 .baseSurcharge(new BigDecimal("20.00"))
                 .build();
 
@@ -93,6 +96,7 @@ class ZonePricingAdminControllerTest {
                 .zoneCode("WP-COL-02")
                 .zoneName("Colombo Suburbs")
                 .district("Colombo")
+                .hubLocation("No. 88, High Level Road, Nugegoda")
                 .baseSurcharge(new BigDecimal("20.00"))
                 .isActive(true)
                 .build();
@@ -106,7 +110,8 @@ class ZonePricingAdminControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(2))
-                .andExpect(jsonPath("$.zoneCode").value("WP-COL-02"));
+                .andExpect(jsonPath("$.zoneCode").value("WP-COL-02"))
+                .andExpect(jsonPath("$.hubLocation").value("No. 88, High Level Road, Nugegoda"));
     }
 
     @Test
@@ -114,6 +119,7 @@ class ZonePricingAdminControllerTest {
     void updateZone_withAdminRole_returns200() throws Exception {
         UpdateZoneRequest request = UpdateZoneRequest.builder()
                 .zoneName("Colombo Central Renovated")
+                .hubLocation("No. 150, Baseline Road, Colombo 09")
                 .baseSurcharge(new BigDecimal("10.00"))
                 .build();
 
@@ -122,6 +128,7 @@ class ZonePricingAdminControllerTest {
                 .zoneCode("WP-COL-01")
                 .zoneName("Colombo Central Renovated")
                 .district("Colombo")
+                .hubLocation("No. 150, Baseline Road, Colombo 09")
                 .baseSurcharge(new BigDecimal("10.00"))
                 .isActive(true)
                 .build();
@@ -134,7 +141,8 @@ class ZonePricingAdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.zoneName").value("Colombo Central Renovated"));
+                .andExpect(jsonPath("$.zoneName").value("Colombo Central Renovated"))
+                .andExpect(jsonPath("$.hubLocation").value("No. 150, Baseline Road, Colombo 09"));
     }
 
     @Test
@@ -157,6 +165,7 @@ class ZonePricingAdminControllerTest {
                 .zoneCode("WP-COL-02")
                 .zoneName("Duplicate Colombo")
                 .district("Colombo")
+                .hubLocation("No. 1, Duplicate Road, Colombo")
                 .baseSurcharge(BigDecimal.ZERO)
                 .build();
 

@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
     zone_code VARCHAR(20) UNIQUE NOT NULL, -- e.g. 'WP-COL-01'
     zone_name VARCHAR(100) NOT NULL,
     district VARCHAR(50) NOT NULL,
+    hub_location VARCHAR(255),
     base_surcharge DECIMAL(10,2) DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE
 );
