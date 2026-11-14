@@ -3,9 +3,11 @@ package com.nyxora.swiftdrop.parcel.dispatch.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.AssignCourierRequest;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.AssignCourierResponse;
+import com.nyxora.swiftdrop.parcel.dispatch.dto.OperationalSummaryResponse;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.UnassignedParcelResponse;
 import com.nyxora.swiftdrop.parcel.dispatch.exception.CourierWorkloadExceededException;
 import com.nyxora.swiftdrop.parcel.dispatch.exception.InvalidParcelStateException;
+import com.nyxora.swiftdrop.parcel.dispatch.service.DispatchAnalyticsService;
 import com.nyxora.swiftdrop.parcel.dispatch.service.DispatchService;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
@@ -21,6 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -47,6 +51,9 @@ class DispatchReportControllerTest {
 
     @MockBean
     private DispatchService dispatchService;
+
+    @MockBean
+    private DispatchAnalyticsService dispatchAnalyticsService;
 
     private static final String ADMIN_USER_ID = "00000000-0000-0000-0000-000000000001";
     private static final String CUSTOMER_USER_ID = "00000000-0000-0000-0000-000000000002";
@@ -219,7 +226,7 @@ class DispatchReportControllerTest {
     @Test
     @DisplayName("assignCourier method directly with null userIdHeader passes null adminUserId to service")
     void assignCourier_nullHeaderDirect_passesNullAdminId() {
-        DispatchReportController controller = new DispatchReportController(dispatchService);
+        DispatchReportController controller = new DispatchReportController(dispatchService, dispatchAnalyticsService);
         UUID parcelId = UUID.randomUUID();
         UUID courierId = UUID.randomUUID();
         AssignCourierRequest request = new AssignCourierRequest(courierId);
@@ -286,5 +293,89 @@ class DispatchReportControllerTest {
                 .andExpect(jsonPath("$.status").value("ASSIGNED"));
 
         verify(dispatchService).assignCourier(eq(parcelId), any(AssignCourierRequest.class), isNull());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/reports/summary requires authentication - returns 403 when unauthenticated")
+    void getOperationalSummary_unauthenticated_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/reports/summary"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/reports/summary with ROLE_CUSTOMER returns 403 Forbidden")
+    void getOperationalSummary_withCustomerRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/reports/summary")
+                        .header("X-User-Id", CUSTOMER_USER_ID)
+                        .header("X-User-Role", "ROLE_CUSTOMER"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/reports/summary with ROLE_COURIER returns 403 Forbidden")
+    void getOperationalSummary_withCourierRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/reports/summary")
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .header("X-User-Role", "ROLE_COURIER"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/reports/summary with ROLE_ADMIN returns 200 OK and summary payload")
+    void getOperationalSummary_withAdminRole_returns200Ok() throws Exception {
+        LocalDate from = LocalDate.of(2026, 11, 1);
+        LocalDate to = LocalDate.of(2026, 11, 7);
+
+        OperationalSummaryResponse mockResponse = OperationalSummaryResponse.builder()
+                .fromDate(from)
+                .toDate(to)
+                .totalBookings(100L)
+                .deliveredCount(85L)
+                .failedCount(5L)
+                .inTransitCount(8L)
+                .pendingCount(2L)
+                .successRatePercentage(94.44)
+                .avgDeliveryDurationMinutes(180L)
+                .avgDeliveryDurationFormatted("3h 0m")
+                .dailyMetrics(Collections.emptyList())
+                .failureBreakdown(Collections.emptyList())
+                .zonePerformance(Collections.emptyList())
+                .build();
+
+        when(dispatchAnalyticsService.getOperationalSummary(from, to)).thenReturn(mockResponse);
+
+        mockMvc.perform(get("/api/v1/parcels/reports/summary")
+                        .param("from", "2026-11-01")
+                        .param("to", "2026-11-07")
+                        .header("X-User-Id", ADMIN_USER_ID)
+                        .header("X-User-Role", "ROLE_ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalBookings").value(100))
+                .andExpect(jsonPath("$.deliveredCount").value(85))
+                .andExpect(jsonPath("$.failedCount").value(5))
+                .andExpect(jsonPath("$.successRatePercentage").value(94.44))
+                .andExpect(jsonPath("$.avgDeliveryDurationMinutes").value(180))
+                .andExpect(jsonPath("$.avgDeliveryDurationFormatted").value("3h 0m"));
+
+        verify(dispatchAnalyticsService).getOperationalSummary(from, to);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/reports/summary with invalid date range returns 400 Bad Request")
+    void getOperationalSummary_withInvalidDateRange_returns400BadRequest() throws Exception {
+        LocalDate from = LocalDate.of(2026, 11, 10);
+        LocalDate to = LocalDate.of(2026, 11, 1);
+
+        when(dispatchAnalyticsService.getOperationalSummary(from, to))
+                .thenThrow(new IllegalArgumentException("'from' date cannot be after 'to' date."));
+
+        mockMvc.perform(get("/api/v1/parcels/reports/summary")
+                        .param("from", "2026-11-10")
+                        .param("to", "2026-11-01")
+                        .header("X-User-Id", ADMIN_USER_ID)
+                        .header("X-User-Role", "ROLE_ADMIN"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid Request Parameters"))
+                .andExpect(jsonPath("$.detail").value("'from' date cannot be after 'to' date."));
     }
 }
