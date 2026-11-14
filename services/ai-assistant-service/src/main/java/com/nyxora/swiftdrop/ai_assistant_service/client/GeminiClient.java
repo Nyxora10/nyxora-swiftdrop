@@ -6,6 +6,7 @@ import com.nyxora.swiftdrop.ai_assistant_service.exception.GeminiServiceExceptio
 import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -29,6 +30,7 @@ public class GeminiClient {
     private final String apiKey;
     private final String model;
 
+    @Autowired
     public GeminiClient(
             @Value("${gemini.api.key:}") String apiKey,
             @Value("${gemini.model:gemini-2.0-flash}") String model,
@@ -52,6 +54,16 @@ public class GeminiClient {
                 .build();
 
         log.info("Gemini client initialized. Model: {}", model);
+    }
+
+    /**
+     * Package-private constructor for testing with a mock or pre-configured RestClient.
+     */
+    GeminiClient(String apiKey, String model, RestClient restClient, ObjectMapper objectMapper) {
+        this.apiKey = apiKey;
+        this.model = model;
+        this.restClient = restClient;
+        this.objectMapper = objectMapper;
     }
 
     /**

@@ -124,8 +124,165 @@ class ParcelTrackingToolTest {
         // Verify delivery note sanitization
         String sanitizedNote = result.timeline().get(1).deliveryNote();
         assertThat(sanitizedNote).doesNotContain("0771234567");
-        assertThat(sanitizedNote).contains("07*****4567");
+        assertThat(sanitizedNote).contains("07****4567");
         assertThat(sanitizedNote).doesNotContain("driver@nyxora.com");
         assertThat(sanitizedNote).contains("d***r@nyxora.com");
+    }
+
+    @Test
+    @DisplayName("Should sanitize international phone numbers and embedded emails in delivery notes")
+    void shouldSanitizeInternationalPhoneAndEmailInDeliveryNote() {
+        TrackingTimelineEventDto milestone = new TrackingTimelineEventDto(
+                "OUT_FOR_DELIVERY",
+                Instant.parse("2026-11-07T14:00:00Z"),
+                "Courier assigned: Sunil (+94771234567, sunil.courier@nyxora.com). Delivering parcel safely."
+        );
+
+        ParcelTrackingResponseDto backendResponse = new ParcelTrackingResponseDto(
+                "SD-20261107-7K9P2X",
+                "OUT_FOR_DELIVERY",
+                "WP-COL-01",
+                "Colombo Central",
+                "CP-KAN-01",
+                "Kandy Metro",
+                "K***l P***a",
+                "+94*****4567",
+                "*** Main Street, Kandy",
+                new BigDecimal("2.50"),
+                "MEDIUM",
+                Instant.parse("2026-11-07T09:00:00Z"),
+                List.of(milestone)
+        );
+
+        when(parcelServiceClient.getTracking("SD-20261107-7K9P2X")).thenReturn(Optional.of(backendResponse));
+
+        ParcelTrackingResult result = parcelTrackingTool.getParcelTracking("SD-20261107-7K9P2X");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+        String note = result.timeline().get(0).deliveryNote();
+        assertThat(note).doesNotContain("+94771234567");
+        assertThat(note).contains("+94*****4567");
+        assertThat(note).doesNotContain("sunil.courier@nyxora.com");
+        assertThat(note).contains("s***r@nyxora.com");
+    }
+
+    @Test
+    @DisplayName("Should provide fallback delivery note when note is null or blank")
+    void shouldProvideFallbackDeliveryNoteWhenNoteIsNullOrEmpty() {
+        TrackingTimelineEventDto nullNoteEvent = new TrackingTimelineEventDto(
+                "DELIVERED",
+                Instant.parse("2026-11-07T16:00:00Z"),
+                null
+        );
+        TrackingTimelineEventDto blankNoteEvent = new TrackingTimelineEventDto(
+                "RECEIVED",
+                Instant.parse("2026-11-07T10:00:00Z"),
+                "   "
+        );
+
+        ParcelTrackingResponseDto backendResponse = new ParcelTrackingResponseDto(
+                "SD-20261107-7K9P2X",
+                "DELIVERED",
+                null,
+                "WP-COL-01",
+                null,
+                "CP-KAN-01",
+                null,
+                null,
+                null,
+                new BigDecimal("1.00"),
+                "SMALL",
+                Instant.parse("2026-11-07T09:00:00Z"),
+                List.of(nullNoteEvent, blankNoteEvent)
+        );
+
+        when(parcelServiceClient.getTracking("SD-20261107-7K9P2X")).thenReturn(Optional.of(backendResponse));
+
+        ParcelTrackingResult result = parcelTrackingTool.getParcelTracking("SD-20261107-7K9P2X");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+        assertThat(result.originZone()).isEqualTo("WP-COL-01"); // fallback to zone code when name is null
+        assertThat(result.destinationZone()).isEqualTo("CP-KAN-01");
+        assertThat(result.timeline().get(0).deliveryNote()).isEqualTo("Status updated to DELIVERED");
+        assertThat(result.timeline().get(1).deliveryNote()).isEqualTo("Status updated to RECEIVED");
+    }
+
+    @Test
+    @DisplayName("Should handle null timeline in parcel response gracefully")
+    void shouldHandleNullTimelineGracefully() {
+        ParcelTrackingResponseDto backendResponse = new ParcelTrackingResponseDto(
+                "SD-20261107-7K9P2X",
+                "CREATED",
+                "Colombo",
+                "WP-COL-01",
+                "Kandy",
+                "CP-KAN-01",
+                null,
+                null,
+                null,
+                new BigDecimal("1.00"),
+                "SMALL",
+                Instant.parse("2026-11-07T09:00:00Z"),
+                null
+        );
+
+        when(parcelServiceClient.getTracking("SD-20261107-7K9P2X")).thenReturn(Optional.of(backendResponse));
+
+        ParcelTrackingResult result = parcelTrackingTool.getParcelTracking("SD-20261107-7K9P2X");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+        assertThat(result.timeline()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should return UNAVAILABLE when ParcelServiceClient is null")
+    void shouldReturnUnavailableWhenClientIsNull() {
+        ParcelTrackingTool toolWithoutClient = new ParcelTrackingTool(null);
+        ParcelTrackingResult result = toolWithoutClient.getParcelTracking("SD-20261107-7K9P2X");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Should log and proceed when caller identity is present in UserContextHolder")
+    void shouldLogAndProceedWhenCallerIdentityPresent() {
+        com.nyxora.swiftdrop.ai_assistant_service.security.UserContextHolder.setContext(
+                new com.nyxora.swiftdrop.ai_assistant_service.security.UserIdentity("user-1", "CUSTOMER", "user@test.com")
+        );
+        try {
+            when(parcelServiceClient.getTracking("SD-20261107-7K9P2X")).thenReturn(Optional.empty());
+            ParcelTrackingResult result = parcelTrackingTool.getParcelTracking("SD-20261107-7K9P2X");
+            assertThat(result.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+        } finally {
+            com.nyxora.swiftdrop.ai_assistant_service.security.UserContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("Should handle null status when delivery note is null")
+    void shouldHandleNullStatusWhenDeliveryNoteNull() {
+        ParcelTrackingResponseDto backendResponse = new ParcelTrackingResponseDto(
+                "SD-20261107-7K9P2X",
+                "PENDING",
+                "Colombo",
+                "WP-COL-01",
+                "   ",
+                "CP-KAN-01",
+                null,
+                null,
+                null,
+                new BigDecimal("1.00"),
+                "SMALL",
+                Instant.parse("2026-11-07T09:00:00Z"),
+                List.of(new TrackingTimelineEventDto(null, Instant.now(), null))
+        );
+
+        when(parcelServiceClient.getTracking("SD-20261107-7K9P2X")).thenReturn(Optional.of(backendResponse));
+
+        ParcelTrackingResult result = parcelTrackingTool.getParcelTracking("SD-20261107-7K9P2X");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+        assertThat(result.destinationZone()).isEqualTo("CP-KAN-01");
+        assertThat(result.timeline().get(0).deliveryNote()).isEqualTo("Status updated to UNKNOWN");
     }
 }
