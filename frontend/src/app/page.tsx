@@ -15,6 +15,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useUserSession } from '@/lib/auth';
+import AiDeliveryAssistantWidget from '@/components/AiDeliveryAssistantWidget';
 
 export default function HomePage() {
   const user = useUserSession();
@@ -264,6 +265,7 @@ export default function HomePage() {
         <span>SwiftDrop Platform &bull; nyxora-swiftdrop</span>
         <span>Spring Boot 3 + Next.js + PostgreSQL + RabbitMQ</span>
       </footer>
+      <AiDeliveryAssistantWidget />
     </div>
   );
 }
