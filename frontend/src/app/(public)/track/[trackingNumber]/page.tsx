@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Image as ImageIcon, MapPin, Package, RefreshCw } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import TrackingMilestoneStepper from '@/components/tracking/TrackingMilestoneStepper';
@@ -176,9 +177,12 @@ function TrackingPageContent() {
                 <ImageIcon className="h-4 w-4 text-emerald-600" />
                 <h2 className="text-sm font-bold text-slate-900">Delivery proof</h2>
               </div>
-              <img
+              <Image
                 src={displayProofPhotoUrl}
                 alt="Delivery proof"
+                width={1200}
+                height={800}
+                unoptimized
                 className="max-h-[28rem] w-full rounded-xl object-contain bg-slate-50"
               />
             </section>

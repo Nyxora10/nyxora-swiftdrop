@@ -112,7 +112,7 @@ class MerchantAuthServiceTest {
         assertEquals("mocked.jwt.token", response.accessToken());
         assertEquals("Bearer", response.tokenType());
         assertEquals(900, response.expiresIn());
-        assertEquals("merchant:orders", response.scope());
+        assertEquals(JwtTokenProvider.M2M_SCOPES, response.scope());
         assertEquals(merchantId, response.merchantId());
     }
 

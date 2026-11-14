@@ -24,7 +24,11 @@ export function useDeliveryZones() {
   }, []);
 
   useEffect(() => {
-    void fetchZones();
+    const timeoutId = window.setTimeout(() => {
+      void fetchZones();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchZones]);
 
   return { zones, loadingZones, zoneError, refetchZones: fetchZones };
