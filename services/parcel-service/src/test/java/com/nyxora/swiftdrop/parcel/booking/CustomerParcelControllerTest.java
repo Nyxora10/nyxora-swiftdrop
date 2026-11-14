@@ -30,6 +30,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -469,13 +471,26 @@ class CustomerParcelControllerTest {
 
         when(parcelHistoryService.getMerchantOrders(eq(merchantId), any(), any())).thenReturn(merchantResponse);
 
+        // History is scoped by the merchant entity UUID (X-Merchant-Id), not the user account UUID.
         mockMvc.perform(get("/api/v1/parcels/merchant/orders")
-                        .header("X-User-Id", merchantId.toString())
-                        .header("X-User-Role", "ROLE_MERCHANT"))
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .header("X-User-Role", "ROLE_MERCHANT")
+                        .header("X-Merchant-Id", merchantId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalOrders").value(50))
                 .andExpect(jsonPath("$.inTransitCount").value(10))
                 .andExpect(jsonPath("$.deliveredCount").value(38))
                 .andExpect(jsonPath("$.failedCount").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/merchant/orders returns 403 when no verified merchant identity is present")
+    void getMerchantOrders_withoutMerchantId_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/merchant/orders")
+                        .header("X-User-Id", UUID.randomUUID().toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isForbidden());
+
+        verify(parcelHistoryService, never()).getMerchantOrders(any(), any(), any());
     }
 }

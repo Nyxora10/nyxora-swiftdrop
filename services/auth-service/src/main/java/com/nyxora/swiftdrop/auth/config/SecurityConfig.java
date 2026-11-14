@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.auth.config;
 
 import com.nyxora.swiftdrop.auth.security.JwtAuthenticationEntryPoint;
+import com.nyxora.swiftdrop.auth.security.InternalApiKeyFilter;
 import com.nyxora.swiftdrop.auth.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -33,6 +34,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
@@ -50,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/register/**",
                                 "/api/v1/auth/login",
+                                "/api/v1/auth/oauth/token",
                                 "/api/v1/auth/google",
                                 "/api/v1/auth/facebook",
                                 "/api/v1/auth/apple",
@@ -60,12 +63,16 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/error")
                         .permitAll()
+                        // Service-to-service only: authenticated by InternalApiKeyFilter, never by a user JWT
+                        .requestMatchers("/api/v1/auth/internal/**")
+                        .hasAuthority(InternalApiKeyFilter.ROLE_INTERNAL_SERVICE)
                         .requestMatchers(
                                 "/api/v1/auth/me",
                                 "/api/v1/auth/logout")
                         .authenticated()
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(internalApiKeyFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

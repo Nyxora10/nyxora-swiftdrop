@@ -34,6 +34,7 @@ jobs:
           - auth-service
           - api-gateway
           - parcel-service
+          - ai-assistant-service
       fail-fast: false
 
     services:

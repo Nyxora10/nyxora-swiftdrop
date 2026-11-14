@@ -6,6 +6,7 @@ import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.Courier;
+import com.nyxora.swiftdrop.auth.entity.Merchant;
 import com.nyxora.swiftdrop.auth.entity.Role;
 import com.nyxora.swiftdrop.auth.entity.User;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
@@ -27,6 +28,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +53,9 @@ class AdminServiceTest {
 
     @Mock
     private RefreshTokenService refreshTokenService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AdminServiceImpl adminService;
@@ -156,6 +161,42 @@ class AdminServiceTest {
         assertNull(response.statusReason());
         assertEquals(userId, response.userId());
         verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    @DisplayName("approveUser on pending merchant initializes missing OAuth credentials and webhook secret")
+    void approveUser_PendingMerchant_InitializesMissingCredentials() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("store@daraz.lk")
+                .role(merchantRole)
+                .status(UserStatus.PENDING_APPROVAL)
+                .build();
+
+        Merchant merchant = Merchant.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .businessName("Daraz Sri Lanka")
+                .registrationNumber("PV-DARAZ-001")
+                .build(); // oauthClientId, oauthClientSecretHash, webhookSecret are null
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+        when(passwordEncoder.encode(any(CharSequence.class))).thenReturn("$2a$12$hashedSecretMock");
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AdminDecisionResponse response = adminService.approveUser(userId);
+
+        assertNotNull(response);
+        assertEquals(UserStatus.ACTIVE, response.status());
+        assertNotNull(merchant.getOauthClientId());
+        assertTrue(merchant.getOauthClientId().startsWith("mer_"));
+        assertEquals("$2a$12$hashedSecretMock", merchant.getOauthClientSecretHash());
+        assertNotNull(merchant.getWebhookSecret());
+        assertTrue(merchant.getWebhookSecret().startsWith("whsec_"));
+        verify(merchantRepository, times(1)).save(merchant);
     }
 
     @Test
