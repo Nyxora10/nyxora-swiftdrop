@@ -89,11 +89,15 @@ public class CourierExecutionController {
             @PathVariable("id") UUID parcelId,
             @Valid @RequestBody UpdateParcelStatusRequestDto request,
             @RequestHeader(value = "X-Courier-Id", required = false) UUID xCourierId,
-            @RequestHeader(value = "X-User-Id", required = false) UUID xUserId) {
+            @RequestHeader(value = "X-User-Id", required = false) UUID xUserId,
+            @RequestHeader(value = "X-Courier-Name", required = false) String courierName,
+            @RequestHeader(value = "X-Courier-Phone", required = false) String courierPhone) {
 
         UUID courierId = resolveCourierId(xCourierId, xUserId);
         log.info("Courier {} updating status for parcel {} to {}", courierId, parcelId, request.getTargetStatus());
-        ParcelStatusUpdateResponseDto response = courierExecutionService.updateParcelStatus(courierId, parcelId, request);
+        ParcelStatusUpdateResponseDto response = (courierName == null && courierPhone == null)
+                ? courierExecutionService.updateParcelStatus(courierId, parcelId, request)
+                : courierExecutionService.updateParcelStatus(courierId, parcelId, request, courierName, courierPhone);
         return ResponseEntity.ok(response);
     }
 
