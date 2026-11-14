@@ -1,0 +1,73 @@
+# api-gateway – Deployment + Service (Task 7.3)
+# Probes use /actuator/health (Actuator is in this service).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: swiftdrop
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: swiftdrop
+  labels:
+    app: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      # Don't inject Kubernetes "service link" env vars (e.g. PARCEL_SERVICE_PORT=tcp://...),
+      # they clash with the apps' own PARCEL_SERVICE_PORT etc. Services use DNS names instead.
+      enableServiceLinks: false
+      containers:
+        - name: api-gateway
+          image: swiftdrop/api-gateway:local
+          imagePullPolicy: IfNotPresent # images are built locally, not pulled from a registry
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: swiftdrop-config
+            - secretRef:
+                name: swiftdrop-secrets
+          # Slow JVM start: allow up to 3 minutes before liveness checks begin
+          startupProbe:
+            httpGet:
+                path: /actuator/health
+                port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+                path: /actuator/health
+                port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+                path: /actuator/health
+                port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi

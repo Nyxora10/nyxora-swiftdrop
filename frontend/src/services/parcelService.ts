@@ -7,11 +7,29 @@ import {
   ParcelQuotePayload,
   RateQuoteResponse,
 } from '@/types/booking';
+import { ParcelTrackingResponse } from '@/types/tracking';
 import {
   CustomerOrderQuery,
   OrderSummary,
   PagedOrderResponse,
 } from '@/types/order';
+
+/**
+ * Retrieves the public tracking snapshot for a parcel.
+ * Calls GET /api/v1/parcels/track/{trackingNumber}.
+ */
+export async function getParcelTracking(trackingNumber: string): Promise<ParcelTrackingResponse> {
+  const normalizedTrackingNumber = trackingNumber.trim();
+
+  if (!normalizedTrackingNumber) {
+    throw new Error('A tracking number is required.');
+  }
+
+  const response = await api.get<ParcelTrackingResponse>(
+    `/api/v1/parcels/track/${encodeURIComponent(normalizedTrackingNumber)}`
+  );
+  return response.data;
+}
 
 /**
  * Helper to build authenticated customer identity headers.

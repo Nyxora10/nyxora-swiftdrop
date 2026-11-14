@@ -352,5 +352,81 @@ class AdminServiceTest {
         );
         assertTrue(ex.getMessage().contains("administrator account"));
     }
+
+    @Test
+    @DisplayName("getUserDetails for Courier loads courier profile details")
+    void getUserDetails_Courier_LoadsProfile() {
+        UUID courierUserId = UUID.randomUUID();
+        User courierUser = User.builder()
+                .id(courierUserId)
+                .email("courier@swiftdrop.lk")
+                .fullName("Courier Test")
+                .role(courierRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        Courier courier = Courier.builder()
+                .id(UUID.randomUUID())
+                .user(courierUser)
+                .vehicleType(VehicleType.MOTORCYCLE)
+                .licensePlate("WP-BBD-1234")
+                .isAvailable(true)
+                .activeDeliveryCount(2)
+                .build();
+
+        when(userRepository.findById(courierUserId)).thenReturn(Optional.of(courierUser));
+        when(courierRepository.findByUserId(courierUserId)).thenReturn(Optional.of(courier));
+
+        AdminUserDetailResponse response = adminService.getUserDetails(courierUserId);
+        assertNotNull(response);
+        assertNotNull(response.courierProfile());
+        assertEquals("WP-BBD-1234", response.courierProfile().licensePlate());
+        assertNull(response.merchantProfile());
+    }
+
+    @Test
+    @DisplayName("getUserDetails for Merchant loads merchant profile details")
+    void getUserDetails_Merchant_LoadsProfile() {
+        UUID merchantUserId = UUID.randomUUID();
+        User merchantUser = User.builder()
+                .id(merchantUserId)
+                .email("merchant@daraz.lk")
+                .fullName("Daraz Merchant")
+                .role(merchantRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        com.nyxora.swiftdrop.auth.entity.Merchant merchant = com.nyxora.swiftdrop.auth.entity.Merchant.builder()
+                .id(UUID.randomUUID())
+                .user(merchantUser)
+                .businessName("Daraz Online Pvt Ltd")
+                .registrationNumber("PV00099887")
+                .build();
+
+        when(userRepository.findById(merchantUserId)).thenReturn(Optional.of(merchantUser));
+        when(merchantRepository.findByUserId(merchantUserId)).thenReturn(Optional.of(merchant));
+
+        AdminUserDetailResponse response = adminService.getUserDetails(merchantUserId);
+        assertNotNull(response);
+        assertNotNull(response.merchantProfile());
+        assertEquals("Daraz Online Pvt Ltd", response.merchantProfile().businessName());
+        assertNull(response.courierProfile());
+    }
+
+    @Test
+    @DisplayName("suspendUser throws IllegalStateException when user is already SUSPENDED")
+    void suspendUser_AlreadySuspended_ThrowsException() {
+        UUID adminId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User suspendedUser = User.builder()
+                .id(userId)
+                .role(courierRole)
+                .status(UserStatus.SUSPENDED)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(suspendedUser));
+
+        assertThrows(IllegalStateException.class, () -> adminService.suspendUser(adminId, userId, new AdminDecisionRequest("Reason")));
+    }
 }
 
