@@ -48,6 +48,10 @@ logging:
 
 # Delivery Proof Storage (Member 6: Task 1.8)
 app:
+  security:
+    # Identity headers (X-User-*, X-Merchant-Id) are trusted only with this X-Gateway-Secret.
+    # Must match api-gateway's GATEWAY_SHARED_SECRET. Override outside local development.
+    gateway-shared-secret: ${GATEWAY_SHARED_SECRET:dev-gateway-shared-secret-change-me}
   storage:
     type: ${STORAGE_TYPE:s3}
     proofs-dir: ${PROOFS_DIR:uploads/proofs}

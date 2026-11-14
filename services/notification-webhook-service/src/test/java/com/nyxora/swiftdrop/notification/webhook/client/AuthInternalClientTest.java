@@ -110,8 +110,30 @@ class AuthInternalClientTest {
     @Test
     @DisplayName("Should instantiate via Spring Autowired constructor with fallback builder")
     void shouldInstantiateWithFallbackBuilder() {
-        AuthInternalClient client = new AuthInternalClient(null, "http://localhost:8081");
+        AuthInternalClient client = new AuthInternalClient(null, "http://localhost:8081", "test-key");
         assertNotNull(client);
+    }
+
+    @Test
+    @DisplayName("Should send the internal service API key with every webhook config lookup")
+    void shouldSendInternalApiKeyHeader() {
+        UUID id = UUID.randomUUID();
+        RestClient.Builder builder = RestClient.builder();
+        org.springframework.test.web.client.MockRestServiceServer server =
+                org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                        "http://auth.internal/api/v1/auth/internal/merchants/" + id + "/webhook-config"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header(
+                        AuthInternalClient.INTERNAL_API_KEY_HEADER, "s2s-secret"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+                        "{\"merchantId\":\"" + id + "\",\"webhookUrl\":\"https://example.com/hook\","
+                                + "\"webhookSecret\":\"whsec_x\",\"isActive\":true}",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+
+        AuthInternalClient client = new AuthInternalClient(builder, "http://auth.internal", "s2s-secret");
+
+        assertTrue(client.getMerchantWebhookConfig(id).isPresent());
+        server.verify();
     }
 }
 

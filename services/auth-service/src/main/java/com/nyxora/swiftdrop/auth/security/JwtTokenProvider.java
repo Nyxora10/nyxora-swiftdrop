@@ -1,6 +1,8 @@
 package com.nyxora.swiftdrop.auth.security;
 
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
+import com.nyxora.swiftdrop.auth.entity.Merchant;
+import com.nyxora.swiftdrop.auth.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -15,7 +17,9 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -26,6 +30,14 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 public class JwtTokenProvider {
+
+    /** Claim that tells interactive user sessions apart from machine-to-machine tokens. */
+    public static final String CLAIM_TOKEN_TYPE = "token_type";
+    public static final String CLAIM_SCOPE = "scope";
+    public static final String TOKEN_TYPE_M2M = "client_credentials";
+
+    /** Space-separated OAuth scopes granted to M2M tokens: order creation and bulk ingestion only. */
+    public static final String M2M_SCOPES = "parcels:create parcels:bulk";
 
     private final JwtProperties jwtProperties;
 
@@ -56,6 +68,13 @@ public class JwtTokenProvider {
      * as additional claims so the API Gateway can inject X-Courier-Id / X-Merchant-Id headers.
      */
     public String generateAccessToken(UserPrincipal userPrincipal) {
+        return generateAccessToken(userPrincipal, Collections.emptyMap());
+    }
+
+    /**
+     * Generates a stateless Access Token (JWT) with custom extra claims (e.g. merchantId, courierId).
+     */
+    public String generateAccessToken(UserPrincipal userPrincipal, Map<String, Object> extraClaims) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpirationMs());
 
@@ -78,7 +97,33 @@ public class JwtTokenProvider {
             builder.claim("merchantId", userPrincipal.getMerchantId().toString());
         }
 
-        return builder
+        builder.issuedAt(now).expiration(expiryDate);
+
+        if (extraClaims != null && !extraClaims.isEmpty()) {
+            extraClaims.forEach(builder::claim);
+        }
+
+        return builder.signWith(getSigningKey()).compact();
+    }
+
+    /**
+     * Issues an OAuth 2.0 Machine-to-Machine (M2M) Bearer JWT for an active Merchant partner.
+     * Contains standard claims plus role=ROLE_MERCHANT and merchantId, and is marked with
+     * token_type=client_credentials and limited scopes so it cannot be used for interactive
+     * account management (webhook config, credential rotation).
+     */
+    public String generateM2mToken(User user, Merchant merchant) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpirationMs());
+
+        return Jwts.builder()
+                .subject(user.getId().toString())
+                .claim("email", user.getEmail())
+                .claim("role", "ROLE_MERCHANT")
+                .claim("merchantId", merchant.getId().toString())
+                .claim("fullName", merchant.getBusinessName())
+                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_M2M)
+                .claim(CLAIM_SCOPE, M2M_SCOPES)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
@@ -107,6 +152,13 @@ public class JwtTokenProvider {
     public String getRoleFromToken(String token) {
         Claims claims = getClaimsFromToken(token);
         return claims.get("role", String.class);
+    }
+
+    /**
+     * True when the verified token was issued through the client_credentials grant.
+     */
+    public static boolean isM2mToken(Claims claims) {
+        return TOKEN_TYPE_M2M.equals(claims.get(CLAIM_TOKEN_TYPE, String.class));
     }
 
     /**
