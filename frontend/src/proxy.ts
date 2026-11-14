@@ -60,7 +60,7 @@ export function proxy(request: NextRequest) {
           return NextResponse.redirect(new URL('/courier/runsheet', request.url));
         }
         if (role === 'ROLE_ADMIN') {
-          return NextResponse.redirect(new URL('/admin/dispatch', request.url));
+          return NextResponse.redirect(new URL('/admin/pricing', request.url));
         }
         return NextResponse.redirect(new URL('/unauthorized', request.url));
       }

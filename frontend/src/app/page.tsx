@@ -27,7 +27,7 @@ export default function HomePage() {
     if (!user) return '/login';
     switch (user.role) {
       case 'ROLE_ADMIN':
-        return '/admin/dispatch';
+        return '/admin/pricing';
       case 'ROLE_MERCHANT':
         return '/merchant/dashboard';
       case 'ROLE_COURIER':
