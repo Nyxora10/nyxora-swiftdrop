@@ -216,6 +216,8 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                     .finalStatus(status)
                     .recipientName(parcel.getRecipientName())
                     .recipientPhone(parcel.getRecipientPhone())
+                    .pickupAddress(parcel.getPickupAddress())
+                    .originZoneName(parcel.getOriginZone() != null ? parcel.getOriginZone().getZoneName() : null)
                     .dropoffAddress(parcel.getDropoffAddress())
                     .destinationZoneName(parcel.getDestinationZone() != null ? parcel.getDestinationZone().getZoneName() : null)
                     .weightKg(parcel.getWeightKg())
