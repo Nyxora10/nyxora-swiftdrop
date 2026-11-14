@@ -44,10 +44,23 @@ class AuthenticationFilterTest {
     }
 
     private String generateToken(String sub, String role, String email, long expMs) {
-        return Jwts.builder()
+        return generateToken(sub, role, email, null, null, expMs);
+    }
+
+    private String generateToken(String sub, String role, String email, String courierId, String merchantId, long expMs) {
+        var builder = Jwts.builder()
                 .subject(sub)
                 .claim("role", role)
-                .claim("email", email)
+                .claim("email", email);
+
+        if (courierId != null) {
+            builder.claim("courierId", courierId);
+        }
+        if (merchantId != null) {
+            builder.claim("merchantId", merchantId);
+        }
+
+        return builder
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expMs))
                 .signWith(secretKey)
@@ -150,7 +163,7 @@ class AuthenticationFilterTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Merchant identity propagation, M2M restrictions and internal-route blocking
+    // Merchant & Courier identity propagation, M2M restrictions and internal-route blocking
     // ---------------------------------------------------------------------------------------
 
     private String merchantToken(UUID userId, UUID merchantId, boolean m2m) {
@@ -175,6 +188,96 @@ class AuthenticationFilterTest {
             return Mono.empty();
         }).block();
         return forwarded.get();
+    }
+
+    @Test
+    @DisplayName("Internal auth-service routes are not reachable through the gateway, returning 404 Not Found")
+    void internalAuthRoutes_AreBlockedAtTheEdge() {
+        String token = merchantToken(UUID.randomUUID(), UUID.randomUUID(), false);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/auth/internal/merchants/" + UUID.randomUUID() + "/webhook-config")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build());
+
+        assertNull(forwardedHeaders(exchange));
+        assertEquals(HttpStatus.NOT_FOUND, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Internal parcel-service routes are not reachable through the gateway, returning 404 Not Found")
+    void internalParcelsRoutes_AreBlockedAtTheEdge() {
+        String token = generateToken(UUID.randomUUID().toString(), "ROLE_ADMIN", "admin@swiftdrop.lk", 900000);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/parcels/internal/sync")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build());
+
+        assertNull(forwardedHeaders(exchange));
+        assertEquals(HttpStatus.NOT_FOUND, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Courier token injects verified X-Courier-Id header and strips spoofed courier header")
+    void courierToken_InjectsXCourierIdHeader() {
+        UUID userId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+        String courierToken = generateToken(userId.toString(), "ROLE_COURIER", "courier@swiftdrop.lk",
+                courierId.toString(), null, 900000);
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/parcels/courier/deliveries")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + courierToken)
+                .header("X-Courier-Id", "spoofed-courier-uuid")
+                .header("X-Merchant-Id", "spoofed-merchant-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        HttpHeaders headers = forwardedHeaders(exchange);
+
+        assertNotNull(headers);
+        assertEquals(userId.toString(), headers.getFirst("X-User-Id"));
+        assertEquals("ROLE_COURIER", headers.getFirst("X-User-Role"));
+        assertEquals(courierId.toString(), headers.getFirst("X-Courier-Id"));
+        assertNull(headers.getFirst("X-Merchant-Id"));
+    }
+
+    @Test
+    @DisplayName("Merchant token injects verified X-Merchant-Id header and strips spoofed merchant header")
+    void merchantToken_InjectsXMerchantIdHeader() {
+        UUID userId = UUID.randomUUID();
+        UUID merchantId = UUID.randomUUID();
+        String merchantToken = generateToken(userId.toString(), "ROLE_MERCHANT", "merchant@swiftdrop.lk",
+                null, merchantId.toString(), 900000);
+
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/parcels/merchant/bulk-upload")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken)
+                .header("X-Merchant-Id", "spoofed-merchant-uuid")
+                .header("X-Courier-Id", "spoofed-courier-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        HttpHeaders headers = forwardedHeaders(exchange);
+
+        assertNotNull(headers);
+        assertEquals(userId.toString(), headers.getFirst("X-User-Id"));
+        assertEquals("ROLE_MERCHANT", headers.getFirst("X-User-Role"));
+        assertEquals(merchantId.toString(), headers.getFirst("X-Merchant-Id"));
+        assertNull(headers.getFirst("X-Courier-Id"));
+    }
+
+    @Test
+    @DisplayName("Public endpoint strips spoofed X-Courier-Id and X-Merchant-Id headers")
+    void publicEndpoint_StripsSpoofedCourierAndMerchantHeaders() {
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
+                .header("X-Courier-Id", "spoofed-courier-uuid")
+                .header("X-Merchant-Id", "spoofed-merchant-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        HttpHeaders headers = forwardedHeaders(exchange);
+
+        assertNotNull(headers);
+        assertNull(headers.getFirst("X-Courier-Id"));
+        assertNull(headers.getFirst("X-Merchant-Id"));
     }
 
     @Test
@@ -283,19 +386,6 @@ class AuthenticationFilterTest {
             assertNull(forwardedHeaders(exchange), "M2M must not reach " + request.getPath());
             assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
         }
-    }
-
-    @Test
-    @DisplayName("Internal auth-service routes are not reachable through the gateway, even with a valid token")
-    void internalRoutes_AreBlockedAtTheEdge() {
-        String token = merchantToken(UUID.randomUUID(), UUID.randomUUID(), false);
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/auth/internal/merchants/" + UUID.randomUUID() + "/webhook-config")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .build());
-
-        assertNull(forwardedHeaders(exchange));
-        assertEquals(HttpStatus.NOT_FOUND, exchange.getResponse().getStatusCode());
     }
 }
 

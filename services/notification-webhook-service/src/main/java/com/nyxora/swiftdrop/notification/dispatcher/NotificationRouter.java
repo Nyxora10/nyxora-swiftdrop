@@ -1,6 +1,5 @@
 package com.nyxora.swiftdrop.notification.dispatcher;
 
-import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.dispatcher.email.EmailNotificationDispatcher;
 import com.nyxora.swiftdrop.notification.dispatcher.sms.MockSmsSender;
 import com.nyxora.swiftdrop.notification.dto.event.ParcelStatusUpdatedEvent;

@@ -17,6 +17,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -32,112 +33,111 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * WebMVC slice tests for CourierController (Task 2.5).
- * Security filters are disabled; principal injection is handled via @WithUserDetails substitute.
+ * Security filters are disabled; principal injection is handled
+ * via @WithUserDetails substitute.
  */
 @WebMvcTest(CourierController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@ActiveProfiles("test")
 class CourierControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+        @Autowired
+        private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @Autowired
+        private ObjectMapper objectMapper;
 
-    @MockBean
-    private CourierService courierService;
+        @MockBean
+        private CourierService courierService;
 
-    @MockBean
-    private JwtTokenProvider jwtTokenProvider;
+        @MockBean
+        private JwtTokenProvider jwtTokenProvider;
 
-    @MockBean
-    private CustomUserDetailsService customUserDetailsService;
+        @MockBean
+        private CustomUserDetailsService customUserDetailsService;
 
-    private UUID userId;
-    private UUID courierId;
-    private UserPrincipal courierPrincipal;
-    private CourierProfileResponse profileResponse;
+        private UUID userId;
+        private UUID courierId;
+        private UserPrincipal courierPrincipal;
+        private CourierProfileResponse profileResponse;
 
-    @BeforeEach
-    void setUp() {
-        userId    = UUID.randomUUID();
-        courierId = UUID.randomUUID();
+        @BeforeEach
+        void setUp() {
+                userId = UUID.randomUUID();
+                courierId = UUID.randomUUID();
 
-        courierPrincipal = UserPrincipal.builder()
-                .id(userId)
-                .email("courier@swiftdrop.lk")
-                .password("hashed")
-                .fullName("Kamal Rider")
-                .phoneNumber("+94771234567")
-                .active(true)
-                .authorities(List.of(new SimpleGrantedAuthority("ROLE_COURIER")))
-                .courierId(courierId)
-                .merchantId(null)
-                .build();
+                courierPrincipal = UserPrincipal.builder()
+                                .id(userId)
+                                .email("courier@swiftdrop.lk")
+                                .password("hashed")
+                                .fullName("Kamal Rider")
+                                .phoneNumber("+94771234567")
+                                .active(true)
+                                .authorities(List.of(new SimpleGrantedAuthority("ROLE_COURIER")))
+                                .courierId(courierId)
+                                .merchantId(null)
+                                .build();
 
-        profileResponse = new CourierProfileResponse(
-                courierId, "MOTORCYCLE", "ABC-1234", true, 2, 5
-        );
-    }
+                profileResponse = new CourierProfileResponse(
+                                courierId, "MOTORCYCLE", "ABC-1234", true, 2, 5);
+        }
 
-    // ─── GET /api/v1/auth/courier/profile ───────────────────────────────────
+        // ─── GET /api/v1/auth/courier/profile ───────────────────────────────────
 
-    @Test
-    @DisplayName("GET /profile — returns 200 with courier profile for ROLE_COURIER principal")
-    void getCourierProfile_success() throws Exception {
-        when(courierService.getCourierProfile(userId)).thenReturn(profileResponse);
+        @Test
+        @DisplayName("GET /profile — returns 200 with courier profile for ROLE_COURIER principal")
+        void getCourierProfile_success() throws Exception {
+                when(courierService.getCourierProfile(userId)).thenReturn(profileResponse);
 
-        mockMvc.perform(get("/api/v1/auth/courier/profile")
-                        .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(courierId.toString()))
-                .andExpect(jsonPath("$.vehicleType").value("MOTORCYCLE"))
-                .andExpect(jsonPath("$.licensePlate").value("ABC-1234"))
-                .andExpect(jsonPath("$.isAvailable").value(true))
-                .andExpect(jsonPath("$.activeDeliveryCount").value(2))
-                .andExpect(jsonPath("$.assignedZoneId").value(5));
-    }
+                mockMvc.perform(get("/api/v1/auth/courier/profile")
+                                .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.id").value(courierId.toString()))
+                                .andExpect(jsonPath("$.vehicleType").value("MOTORCYCLE"))
+                                .andExpect(jsonPath("$.licensePlate").value("ABC-1234"))
+                                .andExpect(jsonPath("$.isAvailable").value(true))
+                                .andExpect(jsonPath("$.activeDeliveryCount").value(2))
+                                .andExpect(jsonPath("$.assignedZoneId").value(5));
+        }
 
-    // ─── PATCH /api/v1/auth/courier/availability ─────────────────────────────
+        // ─── PATCH /api/v1/auth/courier/availability ─────────────────────────────
 
-    @Test
-    @DisplayName("PATCH /availability — returns 200 with updated profile when going off-duty")
-    void updateAvailability_goOffDuty() throws Exception {
-        CourierAvailabilityRequest request = new CourierAvailabilityRequest(false, null);
-        CourierProfileResponse offDutyResponse = new CourierProfileResponse(
-                courierId, "MOTORCYCLE", "ABC-1234", false, 2, 5
-        );
+        @Test
+        @DisplayName("PATCH /availability — returns 200 with updated profile when going off-duty")
+        void updateAvailability_goOffDuty() throws Exception {
+                CourierAvailabilityRequest request = new CourierAvailabilityRequest(false, null);
+                CourierProfileResponse offDutyResponse = new CourierProfileResponse(
+                                courierId, "MOTORCYCLE", "ABC-1234", false, 2, 5);
 
-        when(courierService.updateAvailability(eq(userId), any(CourierAvailabilityRequest.class)))
-                .thenReturn(offDutyResponse);
+                when(courierService.updateAvailability(eq(userId), any(CourierAvailabilityRequest.class)))
+                                .thenReturn(offDutyResponse);
 
-        mockMvc.perform(patch("/api/v1/auth/courier/availability")
-                        .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.isAvailable").value(false));
-    }
+                mockMvc.perform(patch("/api/v1/auth/courier/availability")
+                                .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.isAvailable").value(false));
+        }
 
-    @Test
-    @DisplayName("PATCH /availability — also updates assignedZoneId when provided")
-    void updateAvailability_withZoneUpdate() throws Exception {
-        CourierAvailabilityRequest request = new CourierAvailabilityRequest(true, 12);
-        CourierProfileResponse zoneUpdatedResponse = new CourierProfileResponse(
-                courierId, "MOTORCYCLE", "ABC-1234", true, 2, 12
-        );
+        @Test
+        @DisplayName("PATCH /availability — also updates assignedZoneId when provided")
+        void updateAvailability_withZoneUpdate() throws Exception {
+                CourierAvailabilityRequest request = new CourierAvailabilityRequest(true, 12);
+                CourierProfileResponse zoneUpdatedResponse = new CourierProfileResponse(
+                                courierId, "MOTORCYCLE", "ABC-1234", true, 2, 12);
 
-        when(courierService.updateAvailability(eq(userId), any(CourierAvailabilityRequest.class)))
-                .thenReturn(zoneUpdatedResponse);
+                when(courierService.updateAvailability(eq(userId), any(CourierAvailabilityRequest.class)))
+                                .thenReturn(zoneUpdatedResponse);
 
-        mockMvc.perform(patch("/api/v1/auth/courier/availability")
-                        .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.assignedZoneId").value(12))
-                .andExpect(jsonPath("$.isAvailable").value(true));
-    }
+                mockMvc.perform(patch("/api/v1/auth/courier/availability")
+                                .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.assignedZoneId").value(12))
+                                .andExpect(jsonPath("$.isAvailable").value(true));
+        }
 
     @Test
     @DisplayName("PATCH /availability — returns 400 when isAvailable is missing")

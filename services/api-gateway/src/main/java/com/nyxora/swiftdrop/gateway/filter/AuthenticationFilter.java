@@ -54,7 +54,9 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             HEADER_MERCHANT_ID, HEADER_COURIER_ID, HEADER_TOKEN_TYPE, HEADER_GATEWAY_SECRET);
 
     /** Service-to-service routes that must never be reachable from outside the cluster. */
-    static final String INTERNAL_PATH_PREFIX = "/api/v1/auth/internal";
+    static final List<String> INTERNAL_PATH_PREFIXES = List.of(
+            "/api/v1/auth/internal",
+            "/api/v1/parcels/internal");
 
     static final String TOKEN_TYPE_M2M = "client_credentials";
     static final String TOKEN_TYPE_USER = "user";
@@ -83,8 +85,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().pathWithinApplication().value();
 
-        // 0. Internal service-to-service APIs are not part of the public surface.
-        if (path.equals(INTERNAL_PATH_PREFIX) || path.startsWith(INTERNAL_PATH_PREFIX + "/")) {
+        // 0. Internal service-to-service APIs are not part of the public surface (Task 4.3).
+        if (isInternalPath(path)) {
             log.warn("[AuthenticationFilter] Blocked external access to internal path: {}", path);
             return onError(exchange, "Resource not found.", HttpStatus.NOT_FOUND);
         }
@@ -123,7 +125,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, "Authentication failed.", HttpStatus.UNAUTHORIZED);
         }
 
-        // 4. Token-to-Header Relay: Mutate request with verified identity claims
+        // 4. Token-to-Header Relay: Mutate request with verified identity claims (Task 4.3)
         String userId = claims.getSubject();
         String role = claims.get("role", String.class);
         String email = claims.get("email", String.class);
@@ -177,6 +179,18 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     private static boolean isM2mAllowed(HttpMethod method, String path) {
         String route = (method != null ? method.name() : "") + " " + path;
         return M2M_ALLOWED_ROUTES.contains(route);
+    }
+
+    private static boolean isInternalPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (String prefix : INTERNAL_PATH_PREFIXES) {
+            if (path.equals(prefix) || path.startsWith(prefix + "/")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Returns the claim only if it is a well-formed UUID; never forwards arbitrary strings. */

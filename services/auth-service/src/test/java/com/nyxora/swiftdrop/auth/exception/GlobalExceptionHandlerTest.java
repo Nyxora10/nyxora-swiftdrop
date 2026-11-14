@@ -181,6 +181,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     @DisplayName("HttpMessageNotReadableException returns HTTP 400 Bad Request ProblemDetail")
+    @SuppressWarnings("deprecation")
     void handleHttpMessageNotReadable() {
         HttpMessageNotReadableException ex = new HttpMessageNotReadableException("JSON parse error: Unexpected character");
         ProblemDetail problem = handler.handleHttpMessageNotReadable(ex, request);

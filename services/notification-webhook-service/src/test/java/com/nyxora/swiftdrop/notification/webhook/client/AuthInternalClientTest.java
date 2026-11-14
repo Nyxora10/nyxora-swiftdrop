@@ -17,6 +17,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthInternalClient Unit Tests")
+@SuppressWarnings({"rawtypes", "unchecked"})
 class AuthInternalClientTest {
 
     @Mock
