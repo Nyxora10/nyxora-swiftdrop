@@ -61,7 +61,10 @@ export default function AiDeliveryAssistantWidget() {
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const endOfMessages = endOfMessagesRef.current;
+    if (typeof endOfMessages?.scrollIntoView === 'function') {
+      endOfMessages.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isOpen]);
 
   const sendMessage = useCallback(
@@ -275,7 +278,7 @@ export default function AiDeliveryAssistantWidget() {
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         className="fixed bottom-4 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/30 sm:right-6"
-        aria-label={isOpen ? 'Close delivery assistant' : 'Open delivery assistant'}
+        aria-label={isOpen ? 'Minimize delivery assistant' : 'Open delivery assistant'}
         aria-expanded={isOpen}
         aria-controls="assistant-panel"
       >
