@@ -345,8 +345,8 @@ function CourierHistoryContent() {
                   <div>{getStatusBadge(item.finalStatus)}</div>
                 </div>
 
-                {/* Recipient & Dropoff Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                {/* Recipient, Pickup & Dropoff Info */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                       Recipient
@@ -363,12 +363,31 @@ function CourierHistoryContent() {
                     )}
                   </div>
 
+                  {item.pickupAddress && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        Pickup Address
+                      </span>
+                      <p className="text-slate-700 font-medium mt-0.5 flex items-start gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                        <span>
+                          {item.pickupAddress}
+                          {item.originZoneName && (
+                            <span className="text-[10px] text-slate-400 block">
+                              ({item.originZoneName})
+                            </span>
+                          )}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                       Delivery Address
                     </span>
                     <p className="text-slate-700 font-medium mt-0.5 flex items-start gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                       <span>
                         {item.dropoffAddress}
                         {item.destinationZoneName && (
