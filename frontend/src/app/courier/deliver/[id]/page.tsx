@@ -70,7 +70,11 @@ function CourierDeliverPageContent() {
   }, [parcelId, recipientName, toast]);
 
   useEffect(() => {
-    fetchParcel();
+    const timeoutId = window.setTimeout(() => {
+      void fetchParcel();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchParcel]);
 
   // Handle Photo Selection from Camera or Gallery

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
 import CourierShiftToggle from '@/components/courier/CourierShiftToggle';
 import { getCourierRunsheet, updateParcelStatus } from '@/services/courierService';
@@ -26,7 +25,6 @@ import {
 } from 'lucide-react';
 
 export default function CourierRunsheetPage() {
-  const router = useRouter();
   const toast = useToast();
 
   const [runsheet, setRunsheet] = useState<CourierRunsheetResponse | null>(null);
@@ -51,7 +49,11 @@ export default function CourierRunsheetPage() {
   }, [toast]);
 
   useEffect(() => {
-    fetchRunsheet();
+    const timeoutId = window.setTimeout(() => {
+      void fetchRunsheet();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchRunsheet]);
 
   // Quick action: Confirm pickup directly from runsheet

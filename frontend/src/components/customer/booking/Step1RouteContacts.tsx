@@ -6,7 +6,6 @@ import {
   User,
   Building,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
   RefreshCw,
   Navigation,
@@ -34,7 +33,6 @@ export default function Step1RouteContacts({
   zoneError,
   onRetryZones,
   onNext,
-  isLoggedIn,
 }: Step1RouteContactsProps) {
   // Validate phone numbers in real time
   const isSenderPhoneValid = useMemo(
