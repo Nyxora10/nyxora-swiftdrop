@@ -127,4 +127,102 @@ class McpSecurityFilterTest {
         // Verify context is cleared
         assertThat(UserContextHolder.getContext()).isNull();
     }
+
+    @Test
+    @DisplayName("Should initialize filter with non-Base64 raw secret string")
+    void shouldInitializeWithNonBase64Secret() {
+        McpSecurityFilter filter = new McpSecurityFilter("nonBase64KeyWithAtLeast32BytesLengthForHmacSha256!");
+        assertThat(filter).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should reject request when Authorization header does not start with Bearer")
+    void shouldRejectNonBearerAuthHeader() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+        request.addHeader("Authorization", "Basic dXNlcjpwYXNz");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        securityFilter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("Should reject JWT when subject is missing or blank")
+    void shouldRejectJwtWithBlankSubject() throws ServletException, IOException {
+        String token = Jwts.builder()
+                .subject("   ")
+                .claim("role", "CUSTOMER")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        securityFilter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("Should default role to USER when JWT does not specify a role")
+    void shouldDefaultRoleToUserWhenJwtRoleMissing() throws ServletException, IOException {
+        String token = Jwts.builder()
+                .subject("user-no-role")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        AtomicReference<UserIdentity> capturedIdentity = new AtomicReference<>();
+        FilterChain filterChain = (req, res) -> capturedIdentity.set(UserContextHolder.getContext());
+
+        securityFilter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(capturedIdentity.get()).isNotNull();
+        assertThat(capturedIdentity.get().role()).isEqualTo("USER");
+        assertThat(capturedIdentity.get().email()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should reject gateway headers when X-User-Id is blank")
+    void shouldRejectGatewayHeadersWhenUserIdBlank() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+        request.addHeader("X-User-Id", "   ");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        securityFilter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("Should default role to USER and accept null email for gateway headers")
+    void shouldDefaultGatewayRoleToUser() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+        request.addHeader("X-User-Id", "gateway-user-1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        AtomicReference<UserIdentity> capturedIdentity = new AtomicReference<>();
+        FilterChain filterChain = (req, res) -> capturedIdentity.set(UserContextHolder.getContext());
+
+        securityFilter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(capturedIdentity.get()).isNotNull();
+        assertThat(capturedIdentity.get().userId()).isEqualTo("gateway-user-1");
+        assertThat(capturedIdentity.get().role()).isEqualTo("USER");
+        assertThat(capturedIdentity.get().email()).isNull();
+    }
 }

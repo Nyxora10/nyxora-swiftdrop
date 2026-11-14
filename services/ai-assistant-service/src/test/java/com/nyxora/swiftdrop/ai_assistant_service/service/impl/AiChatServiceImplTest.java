@@ -101,4 +101,34 @@ class AiChatServiceImplTest {
         // Verify history was saved into ChatMemory
         assertThat(chatMemory.get(conversationId)).isNotEmpty();
     }
+
+    @Test
+    @DisplayName("Should support 1-argument chat method")
+    void shouldSupportSingleArgumentChat() {
+        org.springframework.ai.chat.model.ChatResponse mockModelResponse =
+                new org.springframework.ai.chat.model.ChatResponse(
+                        List.of(new Generation(new AssistantMessage("Hello there!")))
+                );
+        when(chatModel.call(any(Prompt.class))).thenReturn(mockModelResponse);
+
+        String reply = aiChatService.chat("Hello!");
+        assertThat(reply).isEqualTo("Hello there!");
+    }
+
+    @Test
+    @DisplayName("Should generate UUID conversationId when request conversationId is blank")
+    void shouldGenerateUuidWhenBlankConversationId() {
+        org.springframework.ai.chat.model.ChatResponse mockModelResponse =
+                new org.springframework.ai.chat.model.ChatResponse(
+                        List.of(new Generation(new AssistantMessage("Response for blank conv")))
+                );
+        when(chatModel.call(any(Prompt.class))).thenReturn(mockModelResponse);
+
+        ChatRequest request = new ChatRequest("Test", "   ");
+        ChatResponse response = aiChatService.chat(request);
+
+        assertThat(response.conversationId()).isNotBlank();
+        assertThat(response.conversationId()).isNotEqualTo("   ");
+        assertThat(response.reply()).isEqualTo("Response for blank conv");
+    }
 }
