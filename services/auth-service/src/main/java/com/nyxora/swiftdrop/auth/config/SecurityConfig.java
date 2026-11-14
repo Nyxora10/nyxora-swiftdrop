@@ -15,9 +15,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import java.util.Arrays;
-import java.util.List;
-
 /**
  * Spring Security 6 Configuration for SwiftDrop auth-service.
  * - Stateless JWT Authentication

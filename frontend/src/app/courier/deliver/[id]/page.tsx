@@ -69,8 +69,33 @@ export default function CourierDeliverPage() {
   }, [parcelId, recipientName, toast]);
 
   useEffect(() => {
-    fetchParcel();
-  }, [fetchParcel]);
+    let ignore = false;
+    const load = async () => {
+      if (!parcelId) return;
+      try {
+        const data = await getCourierParcelById(parcelId);
+        if (!ignore) {
+          setParcel(data);
+          if (data.recipientName && !recipientName) {
+            setRecipientName(data.recipientName);
+          }
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Failed to load parcel details.';
+          toast.error(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      ignore = true;
+    };
+  }, [parcelId, recipientName, toast]);
 
   // Handle Photo Selection from Camera or Gallery
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

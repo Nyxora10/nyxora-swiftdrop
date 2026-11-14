@@ -46,7 +46,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
 

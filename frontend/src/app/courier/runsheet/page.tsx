@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
 import CourierShiftToggle from '@/components/courier/CourierShiftToggle';
 import { getCourierRunsheet, updateParcelStatus } from '@/services/courierService';
@@ -26,7 +25,6 @@ import {
 } from 'lucide-react';
 
 export default function CourierRunsheetPage() {
-  const router = useRouter();
   const toast = useToast();
 
   const [runsheet, setRunsheet] = useState<CourierRunsheetResponse | null>(null);
@@ -51,8 +49,29 @@ export default function CourierRunsheetPage() {
   }, [toast]);
 
   useEffect(() => {
-    fetchRunsheet();
-  }, [fetchRunsheet]);
+    let ignore = false;
+    const load = async () => {
+      try {
+        const data = await getCourierRunsheet();
+        if (!ignore) {
+          setRunsheet(data);
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const message = err instanceof Error ? err.message : 'Failed to load daily runsheet.';
+          toast.error(message);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      ignore = true;
+    };
+  }, [toast]);
 
   // Quick action: Confirm pickup directly from runsheet
   const handleConfirmPickup = async (parcelId: string, trackingNumber: string) => {

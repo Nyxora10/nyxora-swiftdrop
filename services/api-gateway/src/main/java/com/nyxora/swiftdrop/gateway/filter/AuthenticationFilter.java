@@ -43,15 +43,25 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().pathWithinApplication().value();
 
+        // Task 4.3 — Block internal inter-service endpoints from external traffic at perimeter
+        if (path.equals("/api/v1/auth/internal") || path.startsWith("/api/v1/auth/internal/")
+                || path.equals("/api/v1/parcels/internal") || path.startsWith("/api/v1/parcels/internal/")) {
+            log.warn("[AuthenticationFilter] Blocked external access to internal path: {}", path);
+            return onError(exchange,
+                    "Access to internal service endpoints is forbidden.", HttpStatus.FORBIDDEN);
+        }
+
         // 1. Whitelist Check: Public Endpoints
         if (!routeValidator.isSecured.test(request)) {
             log.debug("[AuthenticationFilter] Public path accessed: {}", path);
-            // Anti-spoofing: Remove any forged X-User headers on public paths
+            // Anti-spoofing: Remove any forged identity headers on public paths
             ServerHttpRequest sanitizedRequest = request.mutate()
                     .headers(h -> {
                         h.remove("X-User-Id");
                         h.remove("X-User-Role");
                         h.remove("X-User-Email");
+                        h.remove("X-Courier-Id");
+                        h.remove("X-Merchant-Id");
                     })
                     .build();
             return chain.filter(exchange.mutate().request(sanitizedRequest).build());
@@ -81,10 +91,14 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, "Authentication failed.", HttpStatus.UNAUTHORIZED);
         }
 
-        // 4. Token-to-Header Relay: Mutate request with verified identity claims
+        // 4. Token-to-Header Relay: Mutate request with verified identity claims (Task 4.3)
         String userId = claims.getSubject();
         String role = claims.get("role", String.class);
         String email = claims.get("email", String.class);
+        Object courierIdClaim = claims.get("courierId");
+        String courierId = courierIdClaim != null ? String.valueOf(courierIdClaim) : "";
+        Object merchantIdClaim = claims.get("merchantId");
+        String merchantId = merchantIdClaim != null ? String.valueOf(merchantIdClaim) : "";
 
         log.debug("[AuthenticationFilter] Verified user [{}] with role [{}] for path [{}]",
                 PiiMaskingUtil.maskEmail(email), role, path);
@@ -95,10 +109,14 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                     h.remove("X-User-Id");
                     h.remove("X-User-Role");
                     h.remove("X-User-Email");
+                    h.remove("X-Courier-Id");
+                    h.remove("X-Merchant-Id");
                 })
                 .header("X-User-Id", userId != null ? userId : "")
                 .header("X-User-Role", role != null ? role : "")
                 .header("X-User-Email", email != null ? email : "")
+                .header("X-Courier-Id", courierId)
+                .header("X-Merchant-Id", merchantId)
                 .build();
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());

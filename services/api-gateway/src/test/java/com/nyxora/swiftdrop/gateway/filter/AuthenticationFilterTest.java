@@ -43,10 +43,23 @@ class AuthenticationFilterTest {
     }
 
     private String generateToken(String sub, String role, String email, long expMs) {
-        return Jwts.builder()
+        return generateToken(sub, role, email, null, null, expMs);
+    }
+
+    private String generateToken(String sub, String role, String email, String courierId, String merchantId, long expMs) {
+        var builder = Jwts.builder()
                 .subject(sub)
                 .claim("role", role)
-                .claim("email", email)
+                .claim("email", email);
+
+        if (courierId != null) {
+            builder.claim("courierId", courierId);
+        }
+        if (merchantId != null) {
+            builder.claim("merchantId", merchantId);
+        }
+
+        return builder
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expMs))
                 .signWith(secretKey)
@@ -139,6 +152,130 @@ class AuthenticationFilterTest {
             assertEquals(userId.toString(), headers.getFirst("X-User-Id"));
             assertEquals("ROLE_CUSTOMER", headers.getFirst("X-User-Role")); // spoof overwritten
             assertEquals("kamal@swiftdrop.lk", headers.getFirst("X-User-Email"));
+            return Mono.empty();
+        };
+
+        authenticationFilter.filter(exchange, chain).block();
+
+        assertTrue(chainInvoked.get());
+        assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Internal auth endpoint is blocked at perimeter with 403 Forbidden")
+    void internalAuthEndpoint_BlockedWithForbidden() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/auth/internal/users/123").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        GatewayFilterChain chain = mutatedExchange -> {
+            chainInvoked.set(true);
+            return Mono.empty();
+        };
+
+        authenticationFilter.filter(exchange, chain).block();
+
+        assertFalse(chainInvoked.get());
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Internal parcels endpoint is blocked at perimeter with 403 Forbidden even with valid token")
+    void internalParcelsEndpoint_BlockedWithForbidden() {
+        String token = generateToken(UUID.randomUUID().toString(), "ROLE_ADMIN", "admin@swiftdrop.lk", 900000);
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/parcels/internal/sync")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        GatewayFilterChain chain = mutatedExchange -> {
+            chainInvoked.set(true);
+            return Mono.empty();
+        };
+
+        authenticationFilter.filter(exchange, chain).block();
+
+        assertFalse(chainInvoked.get());
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Courier token injects verified X-Courier-Id header and strips spoofed courier header")
+    void courierToken_InjectsXCourierIdHeader() {
+        UUID userId = UUID.randomUUID();
+        UUID courierId = UUID.randomUUID();
+        String courierToken = generateToken(userId.toString(), "ROLE_COURIER", "courier@swiftdrop.lk",
+                courierId.toString(), null, 900000);
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/parcels/courier/deliveries")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + courierToken)
+                .header("X-Courier-Id", "spoofed-courier-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        GatewayFilterChain chain = mutatedExchange -> {
+            chainInvoked.set(true);
+            HttpHeaders headers = mutatedExchange.getRequest().getHeaders();
+            assertEquals(userId.toString(), headers.getFirst("X-User-Id"));
+            assertEquals("ROLE_COURIER", headers.getFirst("X-User-Role"));
+            assertEquals(courierId.toString(), headers.getFirst("X-Courier-Id"));
+            assertEquals("", headers.getFirst("X-Merchant-Id"));
+            return Mono.empty();
+        };
+
+        authenticationFilter.filter(exchange, chain).block();
+
+        assertTrue(chainInvoked.get());
+        assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Merchant token injects verified X-Merchant-Id header and strips spoofed merchant header")
+    void merchantToken_InjectsXMerchantIdHeader() {
+        UUID userId = UUID.randomUUID();
+        UUID merchantId = UUID.randomUUID();
+        String merchantToken = generateToken(userId.toString(), "ROLE_MERCHANT", "merchant@swiftdrop.lk",
+                null, merchantId.toString(), 900000);
+
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/parcels/merchant/bulk-upload")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken)
+                .header("X-Merchant-Id", "spoofed-merchant-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        GatewayFilterChain chain = mutatedExchange -> {
+            chainInvoked.set(true);
+            HttpHeaders headers = mutatedExchange.getRequest().getHeaders();
+            assertEquals(userId.toString(), headers.getFirst("X-User-Id"));
+            assertEquals("ROLE_MERCHANT", headers.getFirst("X-User-Role"));
+            assertEquals("", headers.getFirst("X-Courier-Id"));
+            assertEquals(merchantId.toString(), headers.getFirst("X-Merchant-Id"));
+            return Mono.empty();
+        };
+
+        authenticationFilter.filter(exchange, chain).block();
+
+        assertTrue(chainInvoked.get());
+        assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Public endpoint strips spoofed X-Courier-Id and X-Merchant-Id headers")
+    void publicEndpoint_StripsSpoofedCourierAndMerchantHeaders() {
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
+                .header("X-Courier-Id", "spoofed-courier-uuid")
+                .header("X-Merchant-Id", "spoofed-merchant-uuid")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        GatewayFilterChain chain = mutatedExchange -> {
+            chainInvoked.set(true);
+            assertNull(mutatedExchange.getRequest().getHeaders().getFirst("X-Courier-Id"));
+            assertNull(mutatedExchange.getRequest().getHeaders().getFirst("X-Merchant-Id"));
             return Mono.empty();
         };
 

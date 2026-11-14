@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("FacebookClient Unit Tests")
+@SuppressWarnings({"rawtypes", "unchecked"})
 class FacebookClientTest {
 
     @Mock
@@ -48,7 +49,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Valid Facebook token returns normalized SocialUserProfile")
-    @SuppressWarnings("unchecked")
     void verify_ValidToken_ReturnsSocialUserProfile() {
         String token = "valid-user-access-token";
         FacebookClient.FacebookUserResponse mockResponse =
@@ -70,7 +70,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Facebook account without email throws BadCredentialsException")
-    @SuppressWarnings("unchecked")
     void verify_MissingEmail_ThrowsBadCredentialsException() {
         String token = "no-email-token";
         FacebookClient.FacebookUserResponse mockResponse =
@@ -87,7 +86,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Facebook Graph API call failure throws BadCredentialsException")
-    @SuppressWarnings("unchecked")
     void verify_GraphApiError_ThrowsBadCredentialsException() {
         String token = "invalid-token";
 

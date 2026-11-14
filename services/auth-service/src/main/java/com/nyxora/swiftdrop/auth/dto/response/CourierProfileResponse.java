@@ -1,7 +1,6 @@
 package com.nyxora.swiftdrop.auth.dto.response;
 
 import com.nyxora.swiftdrop.auth.entity.Courier;
-import com.nyxora.swiftdrop.auth.entity.enums.VehicleType;
 
 import java.util.UUID;
 

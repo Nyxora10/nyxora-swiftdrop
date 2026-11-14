@@ -33,7 +33,6 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +41,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DispatchServiceImpl Unit Tests (Member 5: Task 1.6)")
+@SuppressWarnings("unchecked")
 class DispatchServiceImplTest {
 
     @Mock
