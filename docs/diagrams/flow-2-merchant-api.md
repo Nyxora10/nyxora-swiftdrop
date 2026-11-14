@@ -64,7 +64,7 @@ sequenceDiagram
         MerchantOrderSvc->>PricingEngine: calculateQuote(tier=MERCHANT, originZone, destZone, weight)
         PricingEngine->>PricingEngine: Apply MerchantDiscountPricingStrategy<br/>(15% discount on baseRate & ratePerKg)
         PricingEngine-->>MerchantOrderSvc: ParcelQuoteResponse (discountedFee, discountAmount, zoneSurcharge)
-        
+
         MerchantOrderSvc->>Generator: generateUniqueTrackingNumber()
         Generator-->>MerchantOrderSvc: Tracking Number (SD-YYYYMMDD-XXXXXX)
 
