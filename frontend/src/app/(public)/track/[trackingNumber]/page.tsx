@@ -11,6 +11,7 @@ import Spinner from '@/components/ui/Spinner';
 import { useParcelTracking } from '@/hooks/useParcelTracking';
 import { useParcelWebSocket } from '@/lib/websocket';
 import type { ParcelTrackingResponse, ParcelTrackingUpdate } from '@/types/tracking';
+import AiDeliveryAssistantWidget from '@/components/AiDeliveryAssistantWidget';
 
 function TrackingPageContent() {
   const params = useParams<{ trackingNumber: string }>();
@@ -185,6 +186,7 @@ function TrackingPageContent() {
           )}
         </div>
       </div>
+      <AiDeliveryAssistantWidget />
     </main>
   );
 }
