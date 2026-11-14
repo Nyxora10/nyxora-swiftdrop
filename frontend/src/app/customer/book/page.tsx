@@ -26,7 +26,7 @@ export default function CustomerBookingPage() {
   const toast = useToast();
 
   // 1. Data Layer: Logistics Zones
-  const { zones, loadingZones } = useDeliveryZones();
+  const { zones, loadingZones, zoneError, refetchZones } = useDeliveryZones();
 
   // 2. Wizard & Form State
   const {
@@ -112,6 +112,8 @@ export default function CustomerBookingPage() {
             onChange={updateFormData}
             zones={zones}
             loadingZones={loadingZones}
+            zoneError={zoneError}
+            onRetryZones={refetchZones}
             onNext={nextStep}
             isLoggedIn={Boolean(user)}
           />

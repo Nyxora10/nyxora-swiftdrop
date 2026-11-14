@@ -84,11 +84,6 @@ api.interceptors.response.use(
     isRefreshing = true;
 
     const refreshToken = authStorage.getRefreshToken();
-    // Do not attempt token refresh or clear session if using demo mock tokens
-    if (refreshToken?.startsWith('mock-')) {
-      isRefreshing = false;
-      return Promise.reject(error);
-    }
 
     if (!refreshToken) {
       isRefreshing = false;

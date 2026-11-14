@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
@@ -32,7 +32,7 @@ import {
   X,
 } from 'lucide-react';
 
-export default function CourierDeliverPage() {
+function CourierDeliverPageContent() {
   const router = useRouter();
   const routeParams = useParams();
   const toast = useToast();
@@ -60,6 +60,7 @@ export default function CourierDeliverPage() {
       if (data.recipientName && !recipientName) {
         setRecipientName(data.recipientName);
       }
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load parcel details.';
       toast.error(msg);
@@ -69,33 +70,12 @@ export default function CourierDeliverPage() {
   }, [parcelId, recipientName, toast]);
 
   useEffect(() => {
-    let ignore = false;
-    const load = async () => {
-      if (!parcelId) return;
-      try {
-        const data = await getCourierParcelById(parcelId);
-        if (!ignore) {
-          setParcel(data);
-          if (data.recipientName && !recipientName) {
-            setRecipientName(data.recipientName);
-          }
-        }
-      } catch (err: unknown) {
-        if (!ignore) {
-          const msg = err instanceof Error ? err.message : 'Failed to load parcel details.';
-          toast.error(msg);
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      ignore = true;
-    };
-  }, [parcelId, recipientName, toast]);
+    const timeoutId = window.setTimeout(() => {
+      void fetchParcel();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchParcel]);
 
   // Handle Photo Selection from Camera or Gallery
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -651,5 +631,13 @@ export default function CourierDeliverPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function CourierDeliverPage() {
+  return (
+    <Suspense fallback={null}>
+      <CourierDeliverPageContent />
+    </Suspense>
   );
 }

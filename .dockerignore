@@ -1,0 +1,13 @@
+# Build context = repo root for the backend images. Keep it small and secret-free.
+.git
+.github
+**/target
+**/node_modules
+frontend
+docs
+k8s
+docker
+.env
+.env.*
+**/.idea
+**/.vscode

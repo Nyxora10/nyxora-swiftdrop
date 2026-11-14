@@ -62,6 +62,49 @@ class PiiMaskingUtilTest {
     }
 
     @Nested
+    @DisplayName("Personal Name Masking Tests")
+    class NameMaskingTests {
+
+        @Test
+        @DisplayName("Should mask standard multi-word names preserving first and last characters per token")
+        void testStandardNames() {
+            assertThat(PiiMaskingUtil.maskName("Kamal Perera")).isEqualTo("K***l P***a");
+            assertThat(PiiMaskingUtil.maskName("John Ronald Tolkien")).isEqualTo("J***n R***d T***n");
+            assertThat(PiiMaskingUtil.maskName("Alice")).isEqualTo("A***e");
+            assertThat(PiiMaskingUtil.maskName("Bob")).isEqualTo("B***b");
+        }
+
+        @Test
+        @DisplayName("Should mask single-character name tokens with asterisk")
+        void testSingleCharNameTokens() {
+            assertThat(PiiMaskingUtil.maskName("A")).isEqualTo("*");
+            assertThat(PiiMaskingUtil.maskName("A B C")).isEqualTo("* * *");
+        }
+
+        @Test
+        @DisplayName("Should mask two-character name tokens with first character and asterisk")
+        void testTwoCharNameTokens() {
+            assertThat(PiiMaskingUtil.maskName("Al")).isEqualTo("A*");
+            assertThat(PiiMaskingUtil.maskName("A.")).isEqualTo("A*");
+            assertThat(PiiMaskingUtil.maskName("Al Perera")).isEqualTo("A* P***a");
+        }
+
+        @Test
+        @DisplayName("Should trim leading, trailing, and multiple inter-word whitespace")
+        void testNameWhitespaceNormalization() {
+            assertThat(PiiMaskingUtil.maskName("  Kamal   Perera  ")).isEqualTo("K***l P***a");
+        }
+
+        @Test
+        @DisplayName("Should return null and empty safely without exception")
+        void testNullAndEmptyName() {
+            assertThat(PiiMaskingUtil.maskName(null)).isNull();
+            assertThat(PiiMaskingUtil.maskName("")).isEqualTo("");
+            assertThat(PiiMaskingUtil.maskName("   ")).isEqualTo("");
+        }
+    }
+
+    @Nested
     @DisplayName("Phone Number Masking Tests")
     class PhoneNumberMaskingTests {
 

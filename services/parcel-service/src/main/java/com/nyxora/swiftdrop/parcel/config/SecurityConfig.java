@@ -64,6 +64,10 @@ public class SecurityConfig {
                         // Member 6: Public delivery proof image viewing (Task 1.8)
                         .requestMatchers(HttpMethod.GET, "/api/v1/parcels/proofs/**").permitAll()
 
+                        // Member 2: B2B Merchant order creation & bulk ingestion (Task 1.13)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/parcels/merchant/**").hasAnyRole("MERCHANT", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/parcels/bulk").hasAnyRole("MERCHANT", "ADMIN")
+
                         // Member 4: Customer & Merchant delivery operations
                         .requestMatchers(HttpMethod.POST, "/api/v1/parcels/book")
                         .hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")

@@ -2,6 +2,7 @@ package com.nyxora.swiftdrop.parcel.receipt;
 
 import com.nyxora.swiftdrop.parcel.domain.entity.Parcel;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,7 +38,7 @@ public class ParcelReceiptServiceImpl implements ParcelReceiptService {
         log.debug("Verifying access for receipt download: parcelId={}, requesterUserId={}", parcelId, requesterUserId);
 
         Parcel parcel = parcelRepository.findById(parcelId)
-                .orElseThrow(() -> new IllegalArgumentException("Parcel with ID " + parcelId + " was not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Parcel with ID " + parcelId + " was not found."));
 
         // Role-based ownership check
         boolean isAdmin = authorities != null && authorities.stream()

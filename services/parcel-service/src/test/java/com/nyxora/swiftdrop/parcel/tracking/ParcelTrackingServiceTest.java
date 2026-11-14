@@ -7,6 +7,7 @@ import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelStatusHistoryRepository;
+import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.tracking.dto.ParcelTrackingResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -89,12 +90,12 @@ class ParcelTrackingServiceTest {
     }
 
     @Test
-    @DisplayName("trackParcel throws IllegalArgumentException when trackingNumber is not found")
+    @DisplayName("trackParcel throws ResourceNotFoundException when trackingNumber is not found")
     void trackParcel_notFound_throwsException() {
         when(parcelRepository.findByTrackingNumber("SD-UNKNOWN-000000")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> trackingService.trackParcel("SD-UNKNOWN-000000"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Parcel with tracking number 'SD-UNKNOWN-000000' was not found.");
     }
 

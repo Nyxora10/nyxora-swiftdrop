@@ -1,27 +1,17 @@
-import { BookingFormData, DeliveryTier, DeliveryZone, ParcelSize, RateQuoteResponse } from '@/types/booking';
+import { BookingFormData, DeliveryTier, ParcelSize } from '@/types/booking';
 
-// Sri Lankan Phone Number regex: 10 digits starting with 07
-export const SRI_LANKAN_PHONE_REGEX = /^07\d{8}$/;
-
-// Pre-seeded fallback zones representing major Sri Lankan logistics hubs
-export const DEFAULT_FALLBACK_ZONES: DeliveryZone[] = [
-  { id: '1', zoneCode: 'WP-COL-01', zoneName: 'Colombo Central Metro', district: 'Colombo' },
-  { id: '2', zoneCode: 'WP-GAM-01', zoneName: 'Gampaha Industrial Hub', district: 'Gampaha' },
-  { id: '3', zoneCode: 'CP-KAN-01', zoneName: 'Kandy Central Highlands', district: 'Kandy' },
-  { id: '4', zoneCode: 'SP-GAL-01', zoneName: 'Galle Southern Corridor', district: 'Galle' },
-  { id: '5', zoneCode: 'NP-JAF-01', zoneName: 'Jaffna Northern Peninsula', district: 'Jaffna' },
-  { id: '6', zoneCode: 'NW-KUR-01', zoneName: 'Kurunegala Wayamba Zone', district: 'Kurunegala' },
-];
+// Sri Lankan Phone Number regex: accepts 07XXXXXXXX or +947XXXXXXXX or 0XXXXXXXXX (matches backend regex ^(\+94|0)[0-9]{9}$)
+export const SRI_LANKAN_PHONE_REGEX = /^(?:\+94|0)[0-9]{9}$/;
 
 export const INITIAL_FORM_DATA: BookingFormData = {
   senderName: '',
   senderPhone: '',
   senderAddress: '',
-  originZoneId: DEFAULT_FALLBACK_ZONES[0].id,
+  originZoneId: '',
   recipientName: '',
   recipientPhone: '',
   recipientAddress: '',
-  destinationZoneId: DEFAULT_FALLBACK_ZONES[1].id,
+  destinationZoneId: '',
   weightKg: 1.5,
   parcelSize: 'MEDIUM',
   deliveryTier: 'STANDARD',
@@ -98,38 +88,3 @@ export const TIER_OPTIONS: TierOption[] = [
     deliveryHours: 24,
   },
 ];
-
-export const PRICING_CONFIG = {
-  INTRA_ZONE_BASE: 300.0,
-  INTER_ZONE_BASE: 450.0,
-  PER_KG_SURCHARGE: 80.0,
-  FREE_WEIGHT_KG: 1.0,
-} as const;
-
-/**
- * Pure calculation function for resilient offline fallback pricing
- */
-export function calculateFallbackQuote(formData: BookingFormData): RateQuoteResponse {
-  const isInterZone = formData.originZoneId !== formData.destinationZoneId;
-  const baseFare = isInterZone ? PRICING_CONFIG.INTER_ZONE_BASE : PRICING_CONFIG.INTRA_ZONE_BASE;
-  const weightSurcharge = Math.max(0, formData.weightKg - PRICING_CONFIG.FREE_WEIGHT_KG) * PRICING_CONFIG.PER_KG_SURCHARGE;
-  
-  const sizeOption = SIZE_OPTIONS.find((s) => s.id === formData.parcelSize) ?? SIZE_OPTIONS[1];
-  const tierOption = TIER_OPTIONS.find((t) => t.id === formData.deliveryTier) ?? TIER_OPTIONS[0];
-
-  const sizeMultiplier = sizeOption.multiplierValue;
-  const tierMultiplier = tierOption.multiplierValue;
-  const subtotal = (baseFare + weightSurcharge) * sizeMultiplier;
-  const total = subtotal * tierMultiplier;
-
-  return {
-    baseRate: baseFare,
-    weightSurcharge,
-    sizeSurcharge: subtotal - (baseFare + weightSurcharge),
-    tierMultiplier,
-    totalEstimatedFee: Math.round(total * 100) / 100,
-    currency: 'LKR',
-    estimatedDeliveryHours: tierOption.deliveryHours,
-  };
-}
-

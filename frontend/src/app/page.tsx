@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   Shield,
@@ -11,11 +12,15 @@ import {
   Sparkles,
   ExternalLink,
   CheckCircle,
+  Search,
 } from 'lucide-react';
 import { useUserSession } from '@/lib/auth';
 
 export default function HomePage() {
   const user = useUserSession();
+  const router = useRouter();
+  const [trackingNumber, setTrackingNumber] = React.useState('');
+  const [trackingError, setTrackingError] = React.useState<string | null>(null);
 
   const getPortalLink = () => {
     if (!user) return '/login';
@@ -29,6 +34,19 @@ export default function HomePage() {
       default:
         return '/customer/book';
     }
+  };
+
+  const handleTrackingSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedTrackingNumber = trackingNumber.trim();
+
+    if (!normalizedTrackingNumber) {
+      setTrackingError('Enter a tracking number to continue.');
+      return;
+    }
+
+    setTrackingError(null);
+    router.push(`/track/${encodeURIComponent(normalizedTrackingNumber)}`);
   };
 
   return (
@@ -93,6 +111,64 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        {/* Public Tracking Search */}
+        <section className="mb-12 rounded-2xl border border-blue-100 bg-blue-50/60 p-5 shadow-xs sm:p-6">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-700">
+              <Package className="h-4 w-4" />
+              <span>Public parcel tracking</span>
+            </div>
+            <h2 className="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
+              Track your delivery in real time
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Enter your tracking number to view the latest delivery milestone and timeline.
+            </p>
+
+            <form
+              onSubmit={handleTrackingSubmit}
+              className="mt-5 flex flex-col gap-2 sm:flex-row"
+              noValidate
+            >
+              <label htmlFor="tracking-number" className="sr-only">
+                Tracking number
+              </label>
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="tracking-number"
+                  name="trackingNumber"
+                  value={trackingNumber}
+                  onChange={(event) => {
+                    setTrackingNumber(event.target.value);
+                    if (trackingError) {
+                      setTrackingError(null);
+                    }
+                  }}
+                  placeholder="e.g. SD-20261107-7K9P2X"
+                  autoComplete="off"
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3.5 text-sm text-slate-800 placeholder-slate-400 shadow-2xs transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  aria-invalid={Boolean(trackingError)}
+                  aria-describedby={trackingError ? 'tracking-number-error' : undefined}
+                />
+              </div>
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition-all hover:bg-blue-700 active:scale-[0.99]"
+              >
+                <span>Track Parcel</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
+
+            {trackingError && (
+              <p id="tracking-number-error" className="mt-2 text-left text-xs font-medium text-rose-600">
+                {trackingError}
+              </p>
+            )}
+          </div>
+        </section>
 
         {/* Feature Grid representing the 10 vertical slices */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">

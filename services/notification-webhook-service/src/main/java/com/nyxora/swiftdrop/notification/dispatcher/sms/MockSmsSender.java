@@ -47,12 +47,18 @@ public class MockSmsSender {
 
         String maskedPhone = PiiMaskingUtil.maskPhoneNumber(recipientPhone);
 
-        log.info("[MOCK SMS GATEWAY] Message dispatched successfully: recipient={}, length={} chars, text='{}'",
-                maskedPhone,
-                message.length(),
-                message);
+        try {
+            log.info("[MOCK SMS GATEWAY] Message dispatched successfully: recipient={}, length={} chars",
+                    maskedPhone,
+                    message.length());
 
-        return true;
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to dispatch SMS to recipient={}: {}",
+                    maskedPhone,
+                    PiiMaskingUtil.maskText(ex.getMessage()));
+            return false;
+        }
     }
 
     public boolean isMockEnabled() {

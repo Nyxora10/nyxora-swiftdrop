@@ -32,35 +32,15 @@ export function useBookingSubmission({
   const confirmBooking = useCallback(async () => {
     setBookingLoading(true);
     const token = authStorage.getAccessToken();
-    const isMock = !token || token.startsWith('mock-');
-
-    if (isMock) {
-      // Seamless mock simulation for offline testing
-      setTimeout(() => {
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const demoResponse: BookingResponse = {
-          parcelId: '00000000-0000-0000-0000-000000000001',
-          trackingNumber: `SD-${dateStr}-${randomCode}`,
-          status: 'CREATED',
-          originZoneName: originZone?.zoneName || 'Colombo Central Metro',
-          destinationZoneName: destZone?.zoneName || 'Gampaha Industrial Hub',
-          totalChargeLkr: quoteResult?.totalEstimatedFee || 990.0,
-          deliveryTier: formData.deliveryTier,
-          createdAt: new Date().toISOString(),
-        };
-        setBookingResult(demoResponse);
-        onSuccess();
-        toast.success(`Booking Confirmed! Tracking: ${demoResponse.trackingNumber}`);
-        setBookingLoading(false);
-      }, 600);
+    if (!token) {
+      toast.error('Authentication required. Please log in to confirm your booking.');
+      setBookingLoading(false);
       return;
     }
 
     try {
       const response = await bookParcel(formData);
 
-      // Enhance with resolved zone names and fallback fees if needed
       const enrichedResult: BookingResponse = {
         ...response,
         originZoneName: response.originZoneName || originZone?.zoneName || 'Origin Zone',

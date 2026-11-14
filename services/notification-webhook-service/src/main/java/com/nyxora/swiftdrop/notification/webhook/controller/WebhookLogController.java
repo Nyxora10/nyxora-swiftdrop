@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.notification.webhook.controller;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.demo.UserMerchantMappingResolver;
 import com.nyxora.swiftdrop.notification.webhook.dto.ManualRetryResponse;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookLogsPageResponse;
@@ -228,7 +229,8 @@ public class WebhookLogController {
                     .body(Map.of("error", "CONCURRENT_RETRY_CONFLICT", "message", ex.getMessage()));
 
         } catch (IllegalStateException ex) {
-            log.error("Internal error executing manual retry for deliveryLogId={}: {}", deliveryLogId, ex.getMessage());
+            log.error("Internal error executing manual retry for deliveryLogId={}: {}",
+                    deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()));
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "RETRY_PUBLICATION_FAILED", "message", ex.getMessage()));
         }

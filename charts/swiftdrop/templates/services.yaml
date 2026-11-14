@@ -1,0 +1,117 @@
+{{- /* One Deployment + Service per backend microservice, from .Values.services */}}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    {{- include "swiftdrop.labels" $ | nindent 4 }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: {{ $svc.port }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    {{- include "swiftdrop.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      # No Kubernetes "service link" env vars: they clash with PARCEL_SERVICE_PORT etc.
+      enableServiceLinks: false
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.repository }}/{{ $name }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $svc.port }}
+          envFrom:
+            - configMapRef:
+                name: swiftdrop-config
+            - secretRef:
+                name: {{ $.Values.secrets.name }}
+            {{- if $svc.gemini }}
+            - secretRef:
+                name: {{ $.Values.gemini.secretName }}
+                optional: true
+            {{- end }}
+          {{- if eq $svc.probe "http" }}
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $svc.port }}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $svc.port }}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $svc.port }}
+            periodSeconds: 20
+            failureThreshold: 3
+          {{- else }}
+          startupProbe:
+            tcpSocket:
+              port: {{ $svc.port }}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            tcpSocket:
+              port: {{ $svc.port }}
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ $svc.port }}
+            periodSeconds: 20
+            failureThreshold: 3
+          {{- end }}
+          resources:
+            requests:
+              cpu: {{ $.Values.resources.requests.cpu }}
+              memory: {{ $.Values.resources.requests.memory }}
+            limits:
+              cpu: {{ $.Values.resources.limits.cpu | quote }}
+              memory: {{ $.Values.resources.limits.memory }}
+          {{- if $svc.uploads }}
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: swiftdrop-uploads
+          {{- end }}
+{{- end }}
+---
+# Shared uploads volume (delivery proofs)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: swiftdrop-uploads
+  labels:
+    {{- include "swiftdrop.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.uploads.storage }}

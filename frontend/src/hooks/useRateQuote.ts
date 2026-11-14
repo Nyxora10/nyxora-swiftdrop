@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import { BookingFormData, RateQuoteResponse } from '@/types/booking';
-import { calculateFallbackQuote } from '@/constants/booking';
 import { getRateQuote } from '@/services/parcelService';
 
 export function useRateQuote(formData: BookingFormData, currentStep: number) {
@@ -11,16 +11,27 @@ export function useRateQuote(formData: BookingFormData, currentStep: number) {
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const fetchQuote = useCallback(async () => {
+    // Only fetch if origin and destination are selected
+    if (!formData.originZoneId || !formData.destinationZoneId) {
+      setQuoteResult(null);
+      setQuoteError('Origin and destination delivery zones must be selected to calculate a rate quote.');
+      return;
+    }
+
     setQuoteLoading(true);
     setQuoteError(null);
     try {
       const quote = await getRateQuote(formData);
       setQuoteResult(quote);
     } catch (error: unknown) {
-      console.warn('API quote request error, computing fallback estimate:', error);
-      // Fallback calculation for offline resilience
-      const fallback = calculateFallbackQuote(formData);
-      setQuoteResult(fallback);
+      console.error('API quote request error:', error);
+      const errorMsg = axios.isAxiosError(error)
+        ? (error.response?.data?.message as string | undefined) ||
+          (error.response?.data?.detail as string | undefined) ||
+          'Unable to calculate real-time delivery quote from dispatch engine.'
+        : 'Unable to calculate real-time delivery quote. Please check your network and try again.';
+      setQuoteResult(null);
+      setQuoteError(errorMsg);
     } finally {
       setQuoteLoading(false);
     }
@@ -49,4 +60,3 @@ export function useRateQuote(formData: BookingFormData, currentStep: number) {
     clearQuote,
   };
 }
-

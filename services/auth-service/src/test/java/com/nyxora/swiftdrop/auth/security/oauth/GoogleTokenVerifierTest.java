@@ -133,4 +133,169 @@ class GoogleTokenVerifierTest {
         BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockJwt));
         assertTrue(ex.getMessage().contains("not verified"));
     }
+
+    @Test
+    @DisplayName("Sandbox demo token without email resolves default sandbox profile")
+    void verify_DemoToken_WithoutEmail_ResolvesProfile() {
+        SocialUserProfile profile = googleTokenVerifier.verify("google_demo_testing");
+        assertNotNull(profile);
+        assertEquals("google.testing@gmail.com", profile.email());
+        assertEquals("Google Testing", profile.fullName());
+
+        SocialUserProfile profileMock = googleTokenVerifier.verify("mock-google-token");
+        assertNotNull(profileMock);
+        assertEquals("google.sandbox@gmail.com", profileMock.email());
+        assertEquals("Google Sandbox", profileMock.fullName());
+
+        SocialUserProfile profileEmptySuffix = googleTokenVerifier.verify("google_demo_");
+        assertNotNull(profileEmptySuffix);
+        assertEquals("google.sandbox@gmail.com", profileEmptySuffix.email());
+    }
+
+    @Test
+    @DisplayName("Google ID token without name claim defaults to email prefix")
+    void verify_IdToken_WithoutName_DefaultsToEmailPrefix() throws Exception {
+        String mockJwt = "header.payload.signature";
+        GoogleIdToken googleIdToken = mock(GoogleIdToken.class);
+        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+        payload.setEmail("kasun.perera@gmail.com");
+        payload.setEmailVerified(true);
+        payload.setSubject("google-sub-22222");
+
+        when(googleIdToken.getPayload()).thenReturn(payload);
+        when(googleIdTokenVerifier.verify(mockJwt)).thenReturn(googleIdToken);
+
+        SocialUserProfile profile = googleTokenVerifier.verify(mockJwt);
+        assertNotNull(profile);
+        assertEquals("kasun.perera", profile.fullName());
+    }
+
+    @Test
+    @DisplayName("Google ID token verify throws exception, fallback to verifyAccessToken succeeds")
+    void verify_IdTokenException_FallbackAccessTokenSucceeds() throws Exception {
+        String mockJwt = "header.payload.signature";
+        when(googleIdTokenVerifier.verify(mockJwt)).thenThrow(new RuntimeException("Crypto parse error"));
+
+        GoogleTokenVerifier.GoogleUserInfoResponse mockResponse =
+                new GoogleTokenVerifier.GoogleUserInfoResponse(
+                        "google-sub-33333", null, "First", "Last",
+                        null, "fallback@gmail.com", true
+                );
+
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockJwt))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenVerifier.GoogleUserInfoResponse.class)).thenReturn(mockResponse);
+
+        SocialUserProfile profile = googleTokenVerifier.verify(mockJwt);
+        assertNotNull(profile);
+        assertEquals("fallback@gmail.com", profile.email());
+        assertEquals("fallback", profile.fullName());
+    }
+
+    @Test
+    @DisplayName("Google ID token verify throws exception and fallback also fails, throws BadCredentialsException")
+    void verify_IdTokenException_FallbackFails_ThrowsException() throws Exception {
+        String mockJwt = "header.payload.signature";
+        when(googleIdTokenVerifier.verify(mockJwt)).thenThrow(new RuntimeException("Crypto parse error"));
+
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockJwt))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenThrow(new RuntimeException("API down"));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockJwt));
+        assertTrue(ex.getMessage().contains("Failed to verify Google ID token"));
+    }
+
+    @Test
+    @DisplayName("Google ID token null return, fallback to verifyAccessToken succeeds")
+    void verify_IdTokenNull_FallbackAccessTokenSucceeds() throws Exception {
+        String mockJwt = "header.payload.signature";
+        when(googleIdTokenVerifier.verify(mockJwt)).thenReturn(null);
+
+        GoogleTokenVerifier.GoogleUserInfoResponse mockResponse =
+                new GoogleTokenVerifier.GoogleUserInfoResponse(
+                        "google-sub-44444", "John Doe", "John", "Doe",
+                        null, "johndoe@gmail.com", true
+                );
+
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockJwt))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenVerifier.GoogleUserInfoResponse.class)).thenReturn(mockResponse);
+
+        SocialUserProfile profile = googleTokenVerifier.verify(mockJwt);
+        assertNotNull(profile);
+        assertEquals("johndoe@gmail.com", profile.email());
+        assertEquals("John Doe", profile.fullName());
+    }
+
+    @Test
+    @DisplayName("Google ID token null return and fallback fails, throws BadCredentialsException")
+    void verify_IdTokenNull_FallbackFails_ThrowsException() throws Exception {
+        String mockJwt = "header.payload.signature";
+        when(googleIdTokenVerifier.verify(mockJwt)).thenReturn(null);
+
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockJwt))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenThrow(new RuntimeException("API down"));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockJwt));
+        assertTrue(ex.getMessage().contains("Google ID token is invalid, expired, or issued for an unrecognized client audience"));
+    }
+
+    @Test
+    @DisplayName("Google Access token API call throwing exception throws BadCredentialsException")
+    void verify_AccessToken_NetworkError_ThrowsException() {
+        String mockAccessToken = "ya29.network.error";
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockAccessToken))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenThrow(new RuntimeException("Timeout"));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockAccessToken));
+        assertTrue(ex.getMessage().contains("Google access token is invalid or expired"));
+    }
+
+    @Test
+    @DisplayName("Google Access token null response or sub throws BadCredentialsException")
+    void verify_AccessToken_NullResponseOrSub_ThrowsException() {
+        String mockAccessToken = "ya29.null.response";
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockAccessToken))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenVerifier.GoogleUserInfoResponse.class)).thenReturn(null);
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockAccessToken));
+        assertTrue(ex.getMessage().contains("Invalid response from Google UserInfo API"));
+
+        // Null sub
+        when(responseSpec.body(GoogleTokenVerifier.GoogleUserInfoResponse.class))
+                .thenReturn(new GoogleTokenVerifier.GoogleUserInfoResponse(null, "Name", null, null, null, "email@gmail.com", true));
+        assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockAccessToken));
+    }
+
+    @Test
+    @DisplayName("Google Access token unverified email throws BadCredentialsException")
+    void verify_AccessToken_UnverifiedEmail_ThrowsException() {
+        String mockAccessToken = "ya29.unverified.email";
+        GoogleTokenVerifier.GoogleUserInfoResponse mockResponse =
+                new GoogleTokenVerifier.GoogleUserInfoResponse(
+                        "sub-99", "Name", null, null, null, "unverified@gmail.com", false
+                );
+
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("/oauth2/v3/userinfo")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.header(eq("Authorization"), eq("Bearer " + mockAccessToken))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenVerifier.GoogleUserInfoResponse.class)).thenReturn(mockResponse);
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> googleTokenVerifier.verify(mockAccessToken));
+        assertTrue(ex.getMessage().contains("Google email address is not verified"));
+    }
 }

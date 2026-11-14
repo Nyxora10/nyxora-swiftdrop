@@ -139,14 +139,21 @@ class CourierControllerTest {
                                 .andExpect(jsonPath("$.isAvailable").value(true));
         }
 
-        @Test
-        @DisplayName("PATCH /availability — returns 400 when isAvailable is missing")
-        void updateAvailability_missingIsAvailable_returns400() throws Exception {
-                // Send an empty JSON body — @NotNull on isAvailable should trigger 400
-                mockMvc.perform(patch("/api/v1/auth/courier/availability")
-                                .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content("{}"))
-                                .andExpect(status().isBadRequest());
-        }
+    @Test
+    @DisplayName("PATCH /availability — returns 400 when isAvailable is missing")
+    void updateAvailability_missingIsAvailable_returns400() throws Exception {
+        // Send an empty JSON body — @NotNull on isAvailable should trigger 400
+        mockMvc.perform(patch("/api/v1/auth/courier/availability")
+                        .with(SecurityMockMvcRequestPostProcessors.user(courierPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /profile — throws BadCredentialsException when unauthenticated")
+    void getMyProfile_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/courier/profile"))
+                .andExpect(status().isUnauthorized());
+    }
 }

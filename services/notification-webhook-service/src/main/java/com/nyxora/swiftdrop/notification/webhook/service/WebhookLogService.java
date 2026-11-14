@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.notification.webhook.service;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.dto.ManualRetryResponse;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookLogsPageResponse;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryLog;
@@ -184,7 +185,7 @@ public class WebhookLogService {
 
         } catch (Exception ex) {
             log.error("RabbitMQ manual retry publishing failed for deliveryLogId={}. Executing compensating state rollback: {}",
-                    deliveryLogId, ex.getMessage(), ex);
+                    deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()), ex);
 
             // Roll back database state to DEAD_LETTER in a committed compensating transaction
             try {
@@ -201,7 +202,7 @@ public class WebhookLogService {
                 });
             } catch (Exception rollbackEx) {
                 log.error("Failed to execute compensating rollback for deliveryLogId={}: {}",
-                        deliveryLogId, rollbackEx.getMessage(), rollbackEx);
+                        deliveryLogId, PiiMaskingUtil.maskText(rollbackEx.getMessage()), rollbackEx);
             }
 
             throw new IllegalStateException("Failed to enqueue manual retry to message broker for deliveryLogId=" + deliveryLogId, ex);

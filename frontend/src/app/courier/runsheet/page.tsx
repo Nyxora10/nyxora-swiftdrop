@@ -49,29 +49,12 @@ export default function CourierRunsheetPage() {
   }, [toast]);
 
   useEffect(() => {
-    let ignore = false;
-    const load = async () => {
-      try {
-        const data = await getCourierRunsheet();
-        if (!ignore) {
-          setRunsheet(data);
-        }
-      } catch (err: unknown) {
-        if (!ignore) {
-          const message = err instanceof Error ? err.message : 'Failed to load daily runsheet.';
-          toast.error(message);
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      ignore = true;
-    };
-  }, [toast]);
+    const timeoutId = window.setTimeout(() => {
+      void fetchRunsheet();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchRunsheet]);
 
   // Quick action: Confirm pickup directly from runsheet
   const handleConfirmPickup = async (parcelId: string, trackingNumber: string) => {
