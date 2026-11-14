@@ -80,6 +80,8 @@ export interface CourierDeliveryHistoryItem {
   finalStatus: ParcelStatus;
   recipientName: string;
   recipientPhone: string;
+  pickupAddress?: string | null;
+  originZoneName?: string | null;
   dropoffAddress: string;
   destinationZoneName?: string | null;
   weightKg: number;
