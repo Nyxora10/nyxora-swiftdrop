@@ -1,8 +1,11 @@
 package com.nyxora.swiftdrop.parcel.pricing;
 
+import com.nyxora.swiftdrop.parcel.domain.entity.DefaultPricingRule;
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
+import com.nyxora.swiftdrop.parcel.domain.enums.RouteType;
+import com.nyxora.swiftdrop.parcel.domain.repository.DefaultPricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.exception.ResourceConflictException;
@@ -10,6 +13,7 @@ import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreatePricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreateZoneRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdatePricingRuleRequest;
+import com.nyxora.swiftdrop.parcel.pricing.dto.UpdateDefaultPricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdateZoneRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +41,9 @@ class ZonePricingServiceTest {
 
     @Mock
     private PricingRuleRepository pricingRuleRepository;
+
+    @Mock
+    private DefaultPricingRuleRepository defaultPricingRuleRepository;
 
     @InjectMocks
     private ZonePricingService zonePricingService;
@@ -286,8 +293,13 @@ class ZonePricingServiceTest {
     }
 
     @Test
-    @DisplayName("createPricingRule rejects a rule from a zone to itself")
-    void createPricingRule_sameZone_throwsException() {
+    @DisplayName("createPricingRule supports a same-zone route override")
+    void createPricingRule_sameZone_success() {
+        when(zoneRepository.findById(1)).thenReturn(Optional.of(zone1));
+        when(pricingRuleRepository.findByOriginZone_IdAndDestinationZone_IdAndParcelSize(1, 1, ParcelSize.SMALL))
+                .thenReturn(Optional.empty());
+        when(pricingRuleRepository.save(any(PricingRule.class))).thenAnswer(i -> i.getArgument(0));
+
         CreatePricingRuleRequest request = CreatePricingRuleRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(1)
@@ -297,11 +309,34 @@ class ZonePricingServiceTest {
                 .sizeMultiplier(BigDecimal.ONE)
                 .build();
 
-        assertThatThrownBy(() -> zonePricingService.createPricingRule(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Origin and destination zones must be different");
+        PricingRule result = zonePricingService.createPricingRule(request);
 
-        verifyNoInteractions(zoneRepository, pricingRuleRepository);
+        assertThat(result.getOriginZone()).isSameAs(zone1);
+        assertThat(result.getDestinationZone()).isSameAs(zone1);
+    }
+
+    @Test
+    @DisplayName("updateDefaultPricingRule changes values without changing its coverage key")
+    void updateDefaultPricingRule_success() {
+        DefaultPricingRule rule = DefaultPricingRule.builder()
+                .id(1)
+                .routeType(RouteType.DIFFERENT_ZONE)
+                .parcelSize(ParcelSize.SMALL)
+                .baseFee(new BigDecimal("450.00"))
+                .ratePerKg(new BigDecimal("80.00"))
+                .sizeMultiplier(BigDecimal.ONE)
+                .build();
+        when(defaultPricingRuleRepository.findById(1)).thenReturn(Optional.of(rule));
+        when(defaultPricingRuleRepository.save(any(DefaultPricingRule.class))).thenAnswer(i -> i.getArgument(0));
+
+        DefaultPricingRule updated = zonePricingService.updateDefaultPricingRule(1,
+                UpdateDefaultPricingRuleRequest.builder()
+                        .baseFee(new BigDecimal("475.00"))
+                        .build());
+
+        assertThat(updated.getBaseFee()).isEqualByComparingTo("475.00");
+        assertThat(updated.getRouteType()).isEqualTo(RouteType.DIFFERENT_ZONE);
+        assertThat(updated.getParcelSize()).isEqualTo(ParcelSize.SMALL);
     }
 
     @Test

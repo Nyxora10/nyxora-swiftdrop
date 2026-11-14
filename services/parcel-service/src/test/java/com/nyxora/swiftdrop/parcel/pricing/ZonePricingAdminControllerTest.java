@@ -2,13 +2,16 @@ package com.nyxora.swiftdrop.parcel.pricing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
+import com.nyxora.swiftdrop.parcel.domain.entity.DefaultPricingRule;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
+import com.nyxora.swiftdrop.parcel.domain.enums.RouteType;
 import com.nyxora.swiftdrop.parcel.exception.ResourceConflictException;
 import com.nyxora.swiftdrop.parcel.exception.ResourceNotFoundException;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreatePricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.CreateZoneRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdatePricingRuleRequest;
+import com.nyxora.swiftdrop.parcel.pricing.dto.UpdateDefaultPricingRuleRequest;
 import com.nyxora.swiftdrop.parcel.pricing.dto.UpdateZoneRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -276,5 +279,53 @@ class ZonePricingAdminControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.baseFee").value(275.00));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/pricing/defaults returns the fallback pricing rules")
+    void getDefaultPricingRules_withAdminRole_returns200() throws Exception {
+        DefaultPricingRule rule = DefaultPricingRule.builder()
+                .id(1)
+                .routeType(RouteType.DIFFERENT_ZONE)
+                .parcelSize(ParcelSize.SMALL)
+                .baseFee(new BigDecimal("450.00"))
+                .ratePerKg(new BigDecimal("80.00"))
+                .sizeMultiplier(BigDecimal.ONE)
+                .build();
+        when(zonePricingService.getDefaultPricingRules()).thenReturn(List.of(rule));
+
+        mockMvc.perform(get("/api/v1/pricing/defaults")
+                        .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
+                        .header("X-User-Role", "ROLE_ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].routeType").value("DIFFERENT_ZONE"))
+                .andExpect(jsonPath("$[0].parcelSize").value("SMALL"))
+                .andExpect(jsonPath("$[0].baseFee").value(450.00));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/pricing/defaults/{id} updates fallback pricing")
+    void updateDefaultPricingRule_withAdminRole_returns200() throws Exception {
+        UpdateDefaultPricingRuleRequest request = UpdateDefaultPricingRuleRequest.builder()
+                .baseFee(new BigDecimal("475.00"))
+                .build();
+        DefaultPricingRule updated = DefaultPricingRule.builder()
+                .id(1)
+                .routeType(RouteType.DIFFERENT_ZONE)
+                .parcelSize(ParcelSize.SMALL)
+                .baseFee(new BigDecimal("475.00"))
+                .ratePerKg(new BigDecimal("80.00"))
+                .sizeMultiplier(BigDecimal.ONE)
+                .build();
+        when(zonePricingService.updateDefaultPricingRule(eq(1), any(UpdateDefaultPricingRuleRequest.class)))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/v1/pricing/defaults/1")
+                        .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
+                        .header("X-User-Role", "ROLE_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.baseFee").value(475.00));
     }
 }
