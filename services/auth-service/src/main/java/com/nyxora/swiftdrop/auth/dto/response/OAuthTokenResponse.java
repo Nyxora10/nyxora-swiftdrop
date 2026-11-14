@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.auth.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.nyxora.swiftdrop.auth.security.JwtTokenProvider;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;
@@ -19,7 +20,7 @@ public record OAuthTokenResponse(
         @JsonProperty("expires_in")
         long expiresIn,
 
-        @Schema(description = "Authorized permission scope", example = "merchant:orders")
+        @Schema(description = "Authorized permission scopes", example = "parcels:create parcels:bulk")
         @JsonProperty("scope")
         String scope,
 
@@ -32,7 +33,7 @@ public record OAuthTokenResponse(
                 accessToken,
                 "Bearer",
                 expiresInMs / 1000,
-                "merchant:orders",
+                JwtTokenProvider.M2M_SCOPES,
                 merchantId
         );
     }

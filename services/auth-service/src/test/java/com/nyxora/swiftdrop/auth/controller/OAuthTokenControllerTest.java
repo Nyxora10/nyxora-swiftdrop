@@ -61,7 +61,7 @@ class OAuthTokenControllerTest {
                 .andExpect(jsonPath("$.access_token").value("mocked.jwt.token"))
                 .andExpect(jsonPath("$.token_type").value("Bearer"))
                 .andExpect(jsonPath("$.expires_in").value(900))
-                .andExpect(jsonPath("$.scope").value("merchant:orders"))
+                .andExpect(jsonPath("$.scope").value(JwtTokenProvider.M2M_SCOPES))
                 .andExpect(jsonPath("$.merchant_id").value(merchantId.toString()));
     }
 
