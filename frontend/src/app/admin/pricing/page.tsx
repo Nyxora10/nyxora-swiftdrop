@@ -26,6 +26,7 @@ interface DeliveryZone {
   zoneCode: string;
   zoneName: string;
   district: string;
+  hubLocation: string;
   baseSurcharge: number;
   isActive: boolean;
 }
@@ -37,6 +38,15 @@ interface PricingRule {
   baseFee: number;
   ratePerKg: number;
   parcelSize: 'SMALL' | 'MEDIUM' | 'LARGE';
+  sizeMultiplier: number;
+}
+
+interface DefaultPricingRule {
+  id: number;
+  routeType: 'SAME_ZONE' | 'DIFFERENT_ZONE';
+  parcelSize: 'SMALL' | 'MEDIUM' | 'LARGE';
+  baseFee: number;
+  ratePerKg: number;
   sizeMultiplier: number;
 }
 
@@ -66,18 +76,22 @@ const readApiError = (error: unknown, fallback: string) => {
 export default function AdminPricingPage() {
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [rules, setRules] = useState<PricingRule[]>([]);
+  const [defaultRules, setDefaultRules] = useState<DefaultPricingRule[]>([]);
   const [activeTab, setActiveTab] = useState<'SIMULATOR' | 'ZONES' | 'RULES'>('SIMULATOR');
 
   // Modals
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
+  const [showDefaultRuleModal, setShowDefaultRuleModal] = useState(false);
   const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
+  const [editingDefaultRule, setEditingDefaultRule] = useState<DefaultPricingRule | null>(null);
 
   // New Zone Form
   const [newZoneCode, setNewZoneCode] = useState('');
   const [newZoneName, setNewZoneName] = useState('');
   const [newDistrict, setNewDistrict] = useState('');
+  const [newHubLocation, setNewHubLocation] = useState('');
   const [newBaseSurcharge, setNewBaseSurcharge] = useState('25.00');
 
   // New Rule Form
@@ -101,17 +115,20 @@ export default function AdminPricingPage() {
   const [pageNotice, setPageNotice] = useState('');
 
   const loadPricingData = useCallback(async () => {
-    const [{ data: zData }, { data: rData }] = await Promise.all([
+    const [{ data: zData }, { data: rData }, { data: dData }] = await Promise.all([
       api.get<DeliveryZone[]>('/api/v1/zones'),
       api.get<PricingRule[]>('/api/v1/pricing/rules'),
+      api.get<DefaultPricingRule[]>('/api/v1/pricing/defaults'),
     ]);
     const nextZones = Array.isArray(zData) ? zData : [];
     const nextRules = Array.isArray(rData) ? rData : [];
+    const nextDefaultRules = Array.isArray(dData) ? dData : [];
     const firstZoneId = nextZones[0]?.id ?? 0;
     const secondZoneId = nextZones[1]?.id ?? firstZoneId;
 
     setZones(nextZones);
     setRules(nextRules);
+    setDefaultRules(nextDefaultRules);
     setCalcOrigin((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
     setCalcDest((current) => nextZones.some((zone) => zone.id === current) ? current : secondZoneId);
     setRuleOriginId((current) => nextZones.some((zone) => zone.id === current) ? current : firstZoneId);
@@ -129,6 +146,7 @@ export default function AdminPricingPage() {
     loadPricingData().catch((error) => {
       setZones([]);
       setRules([]);
+      setDefaultRules([]);
       setQuoteResult(null);
       setPageError(readApiError(error, 'Unable to load pricing data.'));
     });
@@ -158,12 +176,6 @@ export default function AdminPricingPage() {
     const origin = zones.find(z => z.id === calcOrigin) || zones[0];
     const dest = zones.find(z => z.id === calcDest) || zones[1] || zones[0];
     if (!origin || !dest) return;
-
-    if (origin.id === dest.id) {
-      setQuoteResult(null);
-      setPageError('Origin and destination zones must be different.');
-      return;
-    }
 
     try {
       const response = await api.post<QuoteResponse>('/api/v1/parcels/quote', {
@@ -213,7 +225,7 @@ export default function AdminPricingPage() {
 
   const handleSaveZone = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newZoneCode.trim() || !newZoneName.trim() || !newDistrict.trim()) return;
+    if (!newZoneCode.trim() || !newZoneName.trim() || !newDistrict.trim() || !newHubLocation.trim()) return;
 
     const baseSurcharge = Number(newBaseSurcharge);
     if (!Number.isFinite(baseSurcharge) || baseSurcharge < 0) {
@@ -231,6 +243,7 @@ export default function AdminPricingPage() {
         zoneCode: newZoneCode.trim().toUpperCase(),
         zoneName: newZoneName.trim(),
         district: newDistrict.trim(),
+        hubLocation: newHubLocation.trim(),
         baseSurcharge,
         ...(isEditing ? {} : { isActive: true }),
       };
@@ -243,6 +256,7 @@ export default function AdminPricingPage() {
       setNewZoneCode('');
       setNewZoneName('');
       setNewDistrict('');
+      setNewHubLocation('');
       setEditingZoneId(null);
       setShowZoneModal(false);
       setPageNotice(isEditing ? 'Delivery zone updated successfully.' : 'Delivery zone created successfully.');
@@ -256,12 +270,6 @@ export default function AdminPricingPage() {
   const handleSaveRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!zones.some((zone) => zone.id === ruleOriginId) || !zones.some((zone) => zone.id === ruleDestId)) return;
-
-    if (ruleOriginId === ruleDestId) {
-      setPageError('Origin and destination zones must be different.');
-      setPageNotice('');
-      return;
-    }
 
     const baseFee = Number(ruleBaseFee);
     const ratePerKg = Number(ruleRatePerKg);
@@ -318,6 +326,7 @@ export default function AdminPricingPage() {
     setNewZoneCode(zone.zoneCode);
     setNewZoneName(zone.zoneName);
     setNewDistrict(zone.district);
+    setNewHubLocation(zone.hubLocation);
     setNewBaseSurcharge(zone.baseSurcharge.toFixed(2));
     setShowZoneModal(true);
   };
@@ -343,11 +352,60 @@ export default function AdminPricingPage() {
     setShowRuleModal(false);
   };
 
+  const closeDefaultRuleModal = () => {
+    setEditingDefaultRule(null);
+    setShowDefaultRuleModal(false);
+  };
+
+  const startEditingDefaultRule = (rule: DefaultPricingRule) => {
+    setEditingDefaultRule(rule);
+    setRuleBaseFee(rule.baseFee.toFixed(2));
+    setRuleRatePerKg(rule.ratePerKg.toFixed(2));
+    setRuleMultiplier(rule.sizeMultiplier.toFixed(2));
+    setShowDefaultRuleModal(true);
+  };
+
+  const handleSaveDefaultRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDefaultRule) return;
+
+    const baseFee = Number(ruleBaseFee);
+    const ratePerKg = Number(ruleRatePerKg);
+    const sizeMultiplier = Number(ruleMultiplier);
+    if (!Number.isFinite(baseFee) || baseFee <= 0 || !Number.isFinite(ratePerKg) || ratePerKg <= 0) {
+      setPageError('Base fee and rate per kilogram must be greater than zero.');
+      return;
+    }
+    if (!Number.isFinite(sizeMultiplier) || sizeMultiplier < 1) {
+      setPageError('Size multiplier must be at least 1.00.');
+      return;
+    }
+
+    setIsSaving(true);
+    setPageError('');
+    setPageNotice('');
+    try {
+      await api.put(`/api/v1/pricing/defaults/${editingDefaultRule.id}`, {
+        baseFee,
+        ratePerKg,
+        sizeMultiplier,
+      });
+      await loadPricingData();
+      closeDefaultRuleModal();
+      setPageNotice('Default pricing rule updated successfully.');
+    } catch (error) {
+      setPageError(readApiError(error, 'Unable to update the default pricing rule.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const openNewZoneModal = () => {
     setEditingZoneId(null);
     setNewZoneCode('');
     setNewZoneName('');
     setNewDistrict('');
+    setNewHubLocation('');
     setNewBaseSurcharge('25.00');
     setShowZoneModal(true);
   };
@@ -411,7 +469,7 @@ export default function AdminPricingPage() {
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Pricing Rule</span>
+                <span>Add Route Override</span>
               </button>
             </div>
           </div>
@@ -434,8 +492,9 @@ export default function AdminPricingPage() {
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pricing Rules</div>
-              <div className="text-xl font-bold text-slate-900">{rules.length} Matrix Rules</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pricing Coverage</div>
+              <div className="text-xl font-bold text-slate-900">{defaultRules.length} Defaults</div>
+              <div className="text-[11px] text-slate-500">{rules.length} route overrides</div>
             </div>
           </div>
 
@@ -495,7 +554,7 @@ export default function AdminPricingPage() {
             }`}
           >
             <Layers className="w-4 h-4 text-slate-500" />
-            <span>Pricing Rules ({rules.length})</span>
+            <span>Pricing Rules ({defaultRules.length + rules.length})</span>
           </button>
         </div>
 
@@ -808,6 +867,7 @@ export default function AdminPricingPage() {
                     <th className="px-5 py-3">Zone Code</th>
                     <th className="px-5 py-3">Zone Name</th>
                     <th className="px-5 py-3">District</th>
+                    <th className="px-5 py-3">Hub Location</th>
                     <th className="px-5 py-3">Base Surcharge</th>
                     <th className="px-5 py-3">Status</th>
                     <th className="px-5 py-3 text-right">Actions</th>
@@ -819,6 +879,7 @@ export default function AdminPricingPage() {
                       <td className="px-5 py-3 font-mono font-semibold text-slate-900">{z.zoneCode}</td>
                       <td className="px-5 py-3 font-medium text-slate-900">{z.zoneName}</td>
                       <td className="px-5 py-3 text-slate-600">{z.district}</td>
+                      <td className="px-5 py-3 text-slate-600 min-w-64">{z.hubLocation}</td>
                       <td className="px-5 py-3 font-mono text-slate-800">LKR {z.baseSurcharge.toFixed(2)}</td>
                       <td className="px-5 py-3">
                         {z.isActive ? (
@@ -861,17 +922,60 @@ export default function AdminPricingPage() {
         {/* Tab 3: Pricing Rules Matrix */}
         {activeTab === 'RULES' && (
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Default Pricing Rules</h3>
+              <p className="text-xs text-slate-500">
+                Six rules cover every route: same-district and different-district pricing for each parcel size.
+              </p>
+            </div>
+            <div className="overflow-x-auto border-b border-slate-200">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider border-b border-slate-200 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3">Route Type</th>
+                    <th className="px-5 py-3">Parcel Size</th>
+                    <th className="px-5 py-3">Base Fee</th>
+                    <th className="px-5 py-3">Rate / Kg</th>
+                    <th className="px-5 py-3">Multiplier</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {defaultRules.map(rule => (
+                    <tr key={rule.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-5 py-3 font-semibold text-slate-900">
+                        {rule.routeType === 'SAME_ZONE' ? 'Same district' : 'Different districts'}
+                      </td>
+                      <td className="px-5 py-3">{rule.parcelSize}</td>
+                      <td className="px-5 py-3 font-mono font-semibold text-slate-800">LKR {rule.baseFee.toFixed(2)}</td>
+                      <td className="px-5 py-3 font-mono font-semibold text-slate-800">LKR {rule.ratePerKg.toFixed(2)}</td>
+                      <td className="px-5 py-3 font-mono text-slate-900 font-bold">{rule.sizeMultiplier.toFixed(2)}x</td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => startEditingDefaultRule(rule)}
+                          disabled={isSaving}
+                          className="px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Inter-Zone Pricing Rules Matrix</h3>
-                <p className="text-xs text-slate-500">Unique constraint across (origin_zone_id, destination_zone_id, parcel_size)</p>
+                <h3 className="text-base font-bold text-slate-900">Optional Route Overrides</h3>
+                <p className="text-xs text-slate-500">An override replaces the matching default for one route and parcel size.</p>
               </div>
               <button
                 onClick={openNewRuleModal}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Rule</span>
+                <span>Add Route Override</span>
               </button>
             </div>
 
@@ -977,6 +1081,21 @@ export default function AdminPricingPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Hub Location
+                  </label>
+                  <textarea
+                    value={newHubLocation}
+                    onChange={(e) => setNewHubLocation(e.target.value)}
+                    placeholder="e.g. No. 64, KKS Road, Jaffna"
+                    required
+                    maxLength={255}
+                    rows={2}
+                    className="w-full resize-none bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Base Surcharge (LKR)
                   </label>
                   <input
@@ -1003,6 +1122,74 @@ export default function AdminPricingPage() {
                     className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
                   >
                     {isSaving ? 'Saving...' : editingZoneId === null ? 'Save Zone' : 'Update Zone'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Edit a fallback default pricing rule */}
+        {showDefaultRuleModal && editingDefaultRule && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Default Pricing Rule</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {editingDefaultRule.routeType === 'SAME_ZONE' ? 'Same district' : 'Different districts'} / {editingDefaultRule.parcelSize}
+                  </p>
+                </div>
+                <button onClick={closeDefaultRuleModal} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveDefaultRule} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Base Fee (LKR)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={ruleBaseFee}
+                      onChange={(e) => setRuleBaseFee(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Rate / Kg (LKR)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={ruleRatePerKg}
+                      onChange={(e) => setRuleRatePerKg(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Size Multiplier</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="1"
+                    required
+                    value={ruleMultiplier}
+                    onChange={(e) => setRuleMultiplier(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button type="button" onClick={closeDefaultRuleModal} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={isSaving} className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60">
+                    {isSaving ? 'Saving...' : 'Update Default'}
                   </button>
                 </div>
               </form>
