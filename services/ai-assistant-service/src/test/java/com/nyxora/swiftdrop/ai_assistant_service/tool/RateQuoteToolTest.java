@@ -239,4 +239,169 @@ class RateQuoteToolTest {
         assertThat(result.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
         assertThat(result.message()).contains("temporarily unavailable");
     }
+
+    @Test
+    @DisplayName("Should allow MERCHANT tier for ROLE_ADMIN")
+    void shouldAllowMerchantTierForAdminRole() {
+        UserContextHolder.setContext(new UserIdentity("admin-1", "ROLE_ADMIN", "admin@swiftdrop.lk"));
+
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+        when(deliveryZoneResolver.resolveZone("Kandy")).thenReturn(ZoneResolutionResult.resolved(kandyZone));
+
+        ParcelQuoteResponse quote = new ParcelQuoteResponse(
+                "MERCHANT",
+                new BigDecimal("297.50"),
+                new BigDecimal("106.25"),
+                new BigDecimal("1.20"),
+                new BigDecimal("50.00"),
+                new BigDecimal("71.25"),
+                BigDecimal.ZERO,
+                new BigDecimal("534.50")
+        );
+        when(parcelServiceClient.calculateQuote(any(ParcelQuoteRequest.class))).thenReturn(quote);
+
+        RateQuoteResult result = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM", "MERCHANT");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Should handle EXPRESS tier and custom fallback tiers")
+    void shouldHandleExpressAndFallbackTiers() {
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+        when(deliveryZoneResolver.resolveZone("Kandy")).thenReturn(ZoneResolutionResult.resolved(kandyZone));
+
+        ParcelQuoteResponse quote = new ParcelQuoteResponse(
+                "EXPRESS",
+                new BigDecimal("450.00"),
+                new BigDecimal("150.00"),
+                new BigDecimal("1.20"),
+                new BigDecimal("50.00"),
+                BigDecimal.ZERO,
+                new BigDecimal("100.00"),
+                new BigDecimal("750.00")
+        );
+        when(parcelServiceClient.calculateQuote(any(ParcelQuoteRequest.class))).thenReturn(quote);
+
+        RateQuoteResult expressResult = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM", "EXPRESS");
+        assertThat(expressResult.status()).isEqualTo(ToolResultStatus.SUCCESS);
+
+        RateQuoteResult customTierResult = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM", "CUSTOM_TIER");
+        assertThat(customTierResult.status()).isEqualTo(ToolResultStatus.SUCCESS);
+
+        RateQuoteResult blankTierResult = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM", "   ");
+        assertThat(blankTierResult.status()).isEqualTo(ToolResultStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Should return UNAVAILABLE when dependencies are null")
+    void shouldReturnUnavailableWhenDependenciesNull() {
+        RateQuoteTool noDepsTool = new RateQuoteTool(null, null);
+
+        RateQuoteResult result = noDepsTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM");
+
+        assertThat(result.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Should handle origin MISSING_LOCATION and UNAVAILABLE")
+    void shouldHandleOriginMissingLocationAndUnavailable() {
+        when(deliveryZoneResolver.resolveZone("")).thenReturn(ZoneResolutionResult.missingLocation("Origin required"));
+        RateQuoteResult missingResult = rateQuoteTool.calculateRateQuote(2.0, "", "Kandy", "SMALL");
+        assertThat(missingResult.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+        assertThat(missingResult.message()).contains("Origin city is required");
+
+        when(deliveryZoneResolver.resolveZone("OfflineZone")).thenReturn(ZoneResolutionResult.unavailable("Service down"));
+        RateQuoteResult unavailResult = rateQuoteTool.calculateRateQuote(2.0, "OfflineZone", "Kandy", "SMALL");
+        assertThat(unavailResult.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Should handle destination MISSING_LOCATION, AMBIGUOUS, and UNAVAILABLE")
+    void shouldHandleDestinationEdgeCases() {
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+
+        when(deliveryZoneResolver.resolveZone("")).thenReturn(ZoneResolutionResult.missingLocation("Dest required"));
+        RateQuoteResult missingDest = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "", "SMALL");
+        assertThat(missingDest.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+        assertThat(missingDest.message()).contains("Destination city is required");
+
+        PublicDeliveryZoneResponse zone1 = new PublicDeliveryZoneResponse(2, "CP-KAN-01", "Kandy Metro", "Kandy");
+        PublicDeliveryZoneResponse zone2 = new PublicDeliveryZoneResponse(4, "CP-KAN-02", "Kandy South", "Kandy");
+        when(deliveryZoneResolver.resolveZone("Kandy")).thenReturn(ZoneResolutionResult.ambiguous("Kandy", List.of(zone1, zone2), "Ambiguous"));
+        RateQuoteResult ambDest = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "SMALL");
+        assertThat(ambDest.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+        assertThat(ambDest.availableZones()).hasSize(2);
+
+        when(deliveryZoneResolver.resolveZone("DownZone")).thenReturn(ZoneResolutionResult.unavailable("Down"));
+        RateQuoteResult unavailDest = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "DownZone", "SMALL");
+        assertThat(unavailDest.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Should return UNAVAILABLE when ParcelService returns 500 server error")
+    void shouldReturnUnavailableOn500ServerError() {
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+        when(deliveryZoneResolver.resolveZone("Kandy")).thenReturn(ZoneResolutionResult.resolved(kandyZone));
+
+        HttpClientErrorException serverError = HttpClientErrorException.create(
+                HttpStatusCode.valueOf(500),
+                "Internal Server Error",
+                HttpHeaders.EMPTY,
+                "Unexpected backend failure".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        );
+        when(parcelServiceClient.calculateQuote(any(ParcelQuoteRequest.class))).thenThrow(serverError);
+
+        RateQuoteResult result = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "Kandy", "MEDIUM");
+        assertThat(result.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Should support 4-argument calculateRateQuote overload")
+    void shouldSupport4ArgOverload() {
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+        when(deliveryZoneResolver.resolveZone("Kandy")).thenReturn(ZoneResolutionResult.resolved(kandyZone));
+
+        ParcelQuoteResponse quote = new ParcelQuoteResponse(
+                "STANDARD",
+                new BigDecimal("350.00"),
+                new BigDecimal("125.00"),
+                new BigDecimal("1.20"),
+                new BigDecimal("50.00"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                new BigDecimal("620.00")
+        );
+        when(parcelServiceClient.calculateQuote(any(ParcelQuoteRequest.class))).thenReturn(quote);
+
+        RateQuoteResult result = rateQuoteTool.calculateRateQuote(2.5, "Colombo", "Kandy", "MEDIUM");
+        assertThat(result.status()).isEqualTo(ToolResultStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Should handle destination zone resolution branch outcomes")
+    void shouldHandleDestinationZoneResolutionBranches() {
+        when(deliveryZoneResolver.resolveZone("Colombo")).thenReturn(ZoneResolutionResult.resolved(colomboZone));
+
+        // Missing destination
+        when(deliveryZoneResolver.resolveZone("MissingDest")).thenReturn(ZoneResolutionResult.missingLocation("Missing dest"));
+        RateQuoteResult missingRes = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "MissingDest", "MEDIUM");
+        assertThat(missingRes.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+
+        // Destination not found
+        when(deliveryZoneResolver.resolveZone("NotFoundDest")).thenReturn(ZoneResolutionResult.notFound("NotFoundDest", "Not found"));
+        RateQuoteResult notFoundRes = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "NotFoundDest", "MEDIUM");
+        assertThat(notFoundRes.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+
+        // Destination ambiguous
+        when(deliveryZoneResolver.resolveZone("AmbiguousDest")).thenReturn(ZoneResolutionResult.ambiguous("AmbiguousDest", List.of(kandyZone), "Ambiguous"));
+        RateQuoteResult ambiguousRes = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "AmbiguousDest", "MEDIUM");
+        assertThat(ambiguousRes.status()).isEqualTo(ToolResultStatus.INVALID_INPUT);
+
+        // Destination unavailable
+        when(deliveryZoneResolver.resolveZone("UnavailableDest")).thenReturn(ZoneResolutionResult.unavailable("Service unavailable"));
+        RateQuoteResult unavailRes = rateQuoteTool.calculateRateQuote(2.0, "Colombo", "UnavailableDest", "MEDIUM");
+        assertThat(unavailRes.status()).isEqualTo(ToolResultStatus.UNAVAILABLE);
+    }
 }

@@ -142,4 +142,32 @@ class MerchantProfileControllerTest {
                 .andExpect(jsonPath("$.oauthClientId").value("mer_daraz_client_01"))
                 .andExpect(jsonPath("$.oauthClientSecret").value("cs_live_new_secret_456"));
     }
+
+    @Test
+    @DisplayName("falls back to the security context when no principal is injected")
+    void nullPrincipal_resolvesUserFromSecurityContext() {
+        MerchantProfileController controller = new MerchantProfileController(merchantAuthService);
+        MerchantProfileResponse profile = new MerchantProfileResponse(
+                UUID.randomUUID(), "Daraz", "PV-1", "client", null, "whsec_****");
+        when(merchantAuthService.getMerchantProfile(userId)).thenReturn(profile);
+
+        org.junit.jupiter.api.Assertions.assertSame(profile, controller.getProfile(null).getBody());
+    }
+
+    @Test
+    @DisplayName("rejects the request when the security context holds no merchant principal")
+    void nullPrincipal_withoutMerchantInContext_throwsBadCredentials() {
+        MerchantProfileController controller = new MerchantProfileController(merchantAuthService);
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("not-a-user-principal", null, Collections.emptyList()));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.authentication.BadCredentialsException.class,
+                () -> controller.rotateCredentials(null));
+
+        SecurityContextHolder.clearContext();
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.authentication.BadCredentialsException.class,
+                () -> controller.updateWebhook(null, new MerchantWebhookUpdateRequest(null, false)));
+    }
 }

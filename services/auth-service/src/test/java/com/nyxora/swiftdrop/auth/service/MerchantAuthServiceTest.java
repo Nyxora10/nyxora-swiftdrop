@@ -231,4 +231,91 @@ class MerchantAuthServiceTest {
         assertEquals("$2a$12$newHashedSecret", merchant.getOauthClientSecretHash());
         verify(merchantRepository, times(1)).save(merchant);
     }
+
+    @Test
+    @DisplayName("generateM2mToken rejects a merchant that has no client secret configured")
+    void generateM2mToken_NoSecretHash_ThrowsException() {
+        merchant.setOauthClientSecretHash(null);
+        OAuthTokenRequest request = new OAuthTokenRequest("client_credentials", "mer_daraz_client_01", "rawSecret123");
+        when(merchantRepository.findByOauthClientId("mer_daraz_client_01")).thenReturn(Optional.of(merchant));
+
+        assertThrows(BadCredentialsException.class, () -> merchantAuthService.generateM2mToken(request));
+        verifyNoInteractions(passwordEncoder, jwtTokenProvider);
+    }
+
+    @Test
+    @DisplayName("getInternalWebhookConfig reports an inactive merchant as not active")
+    void getInternalWebhookConfig_InactiveMerchant_IsActiveFalse() {
+        merchant.setUser(pendingMerchantUser);
+        when(merchantRepository.findById(merchantId)).thenReturn(Optional.of(merchant));
+
+        assertFalse(merchantAuthService.getInternalWebhookConfig(merchantId).isActive());
+    }
+
+    @Test
+    @DisplayName("getMerchantProfile throws ResourceNotFoundException when the user has no merchant profile")
+    void getMerchantProfile_NotFound_ThrowsException() {
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> merchantAuthService.getMerchantProfile(userId));
+    }
+
+    @Test
+    @DisplayName("getMerchantProfile masks all but the last four characters of a long secret")
+    void getMerchantProfile_LongSecret_ShowsLastFourOnly() {
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+
+        assertEquals("whsec_****_123", merchantAuthService.getMerchantProfile(userId).webhookSecret());
+    }
+
+    @Test
+    @DisplayName("getMerchantProfile fully masks short, blank and missing secrets")
+    void getMerchantProfile_ShortBlankOrMissingSecret_FullyMasked() {
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+
+        for (String secret : new String[]{"short", "   ", null}) {
+            merchant.setWebhookSecret(secret);
+            assertEquals("whsec_****", merchantAuthService.getMerchantProfile(userId).webhookSecret());
+        }
+    }
+
+    @Test
+    @DisplayName("updateWebhook clears the URL when blank and keeps the secret when not regenerating")
+    void updateWebhook_BlankUrlNoRegeneration_ClearsUrlKeepsSecret() {
+        MerchantWebhookUpdateRequest request = new MerchantWebhookUpdateRequest("   ", false);
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(i -> i.getArgument(0));
+
+        MerchantProfileResponse response = merchantAuthService.updateWebhook(userId, request);
+
+        assertNull(response.webhookUrl());
+        assertNull(response.newWebhookSecret());
+        assertEquals("whsec_secure_signing_secret_123", merchant.getWebhookSecret());
+    }
+
+    @Test
+    @DisplayName("updateWebhook keeps the URL when none is sent and reveals a regenerated secret once")
+    void updateWebhook_NullUrlWithRegeneration_KeepsUrlRevealsSecret() {
+        MerchantWebhookUpdateRequest request = new MerchantWebhookUpdateRequest(null, true);
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(i -> i.getArgument(0));
+
+        MerchantProfileResponse response = merchantAuthService.updateWebhook(userId, request);
+
+        assertEquals("https://partner.daraz.lk/webhooks", response.webhookUrl());
+        assertEquals(merchant.getWebhookSecret(), response.newWebhookSecret());
+        assertTrue(response.newWebhookSecret().matches("whsec_[0-9a-f]{64}"));
+        assertNotEquals(response.newWebhookSecret(), response.webhookSecret());
+    }
+
+    @Test
+    @DisplayName("updateWebhook and rotateCredentials throw ResourceNotFoundException for unknown users")
+    void updateAndRotate_UnknownUser_ThrowsException() {
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> merchantAuthService.updateWebhook(userId, new MerchantWebhookUpdateRequest(null, true)));
+        assertThrows(ResourceNotFoundException.class, () -> merchantAuthService.rotateCredentials(userId));
+        verify(merchantRepository, never()).save(any());
+    }
 }

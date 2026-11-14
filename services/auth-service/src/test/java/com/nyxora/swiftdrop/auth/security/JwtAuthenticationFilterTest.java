@@ -1,6 +1,6 @@
 package com.nyxora.swiftdrop.auth.security;
 
-import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.AfterEach;
@@ -88,7 +88,7 @@ class JwtAuthenticationFilterTest {
 
         verify(filterChain).doFilter(request, response);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(jwtTokenProvider, never()).getUserIdFromToken(anyString());
+        verify(jwtTokenProvider, never()).getClaimsFromToken(anyString());
     }
 
     @Test
@@ -98,11 +98,8 @@ class JwtAuthenticationFilterTest {
         UUID userId = UUID.randomUUID();
         request.addHeader("Authorization", "Bearer " + token);
 
-        Claims claims = mock(Claims.class);
         when(jwtTokenProvider.validateToken(token)).thenReturn(true);
-        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(claims);
-        when(claims.getSubject()).thenReturn(userId.toString());
-        when(claims.get(JwtTokenProvider.CLAIM_TOKEN_TYPE, String.class)).thenReturn(null);
+        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(Jwts.claims().subject(userId.toString()).build());
         when(customUserDetailsService.loadUserById(userId)).thenReturn(userDetails);
         when(userDetails.isEnabled()).thenReturn(true);
         doReturn(Collections.emptyList()).when(userDetails).getAuthorities();
@@ -121,10 +118,8 @@ class JwtAuthenticationFilterTest {
         UUID userId = UUID.randomUUID();
         request.addHeader("Authorization", "Bearer " + token);
 
-        Claims claims = mock(Claims.class);
         when(jwtTokenProvider.validateToken(token)).thenReturn(true);
-        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(claims);
-        when(claims.getSubject()).thenReturn(userId.toString());
+        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(Jwts.claims().subject(userId.toString()).build());
         when(customUserDetailsService.loadUserById(userId)).thenReturn(userDetails);
         when(userDetails.isEnabled()).thenReturn(false);
 

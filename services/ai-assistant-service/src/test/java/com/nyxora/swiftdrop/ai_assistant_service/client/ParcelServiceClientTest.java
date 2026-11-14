@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.ai_assistant_service.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.PublicDeliveryZoneResponse;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteRequest;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteResponse;
@@ -10,9 +11,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -28,11 +31,16 @@ class ParcelServiceClientTest {
 
     private MockRestServiceServer mockServer;
     private ParcelServiceClient parcelServiceClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8082");
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("http://localhost:8082")
+                .messageConverters(converters -> {
+                    converters.removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
+                    converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
+                });
         mockServer = MockRestServiceServer.bindTo(builder).build();
         parcelServiceClient = new ParcelServiceClient(builder.build());
     }
@@ -64,6 +72,11 @@ class ParcelServiceClientTest {
         assertThat(result).isPresent();
         assertThat(result.get().trackingNumber()).isEqualTo("SD-20261107-7K9P2X");
         assertThat(result.get().currentStatus()).isEqualTo("IN_TRANSIT");
+        assertThat(result.get().createdAt()).isEqualTo(Instant.parse("2026-11-07T09:00:00Z"));
+        assertThat(result.get().timeline()).hasSize(1);
+        assertThat(result.get().timeline().get(0).status()).isEqualTo("BOOKED");
+        assertThat(result.get().timeline().get(0).timestamp()).isEqualTo(Instant.parse("2026-11-07T09:00:00Z"));
+        assertThat(result.get().timeline().get(0).deliveryNote()).isEqualTo("Booked");
         mockServer.verify();
     }
 
@@ -141,6 +154,105 @@ class ParcelServiceClientTest {
 
         assertThat(response.totalFee()).isEqualByComparingTo("620.00");
         assertThat(response.appliedTier()).isEqualTo("STANDARD");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should query public zones with district filter only")
+    void shouldQueryPublicZonesWithDistrictOnly() throws Exception {
+        List<PublicDeliveryZoneResponse> expected = List.of(
+                new PublicDeliveryZoneResponse(2, "CP-KAN-01", "Kandy Metro", "Kandy")
+        );
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/public/zones?district=Kandy"))
+                .andRespond(withSuccess(objectMapper.writeValueAsString(expected), MediaType.APPLICATION_JSON));
+
+        List<PublicDeliveryZoneResponse> zones = parcelServiceClient.getPublicZones(null, "Kandy");
+
+        assertThat(zones).hasSize(1);
+        assertThat(zones.get(0).zoneName()).isEqualTo("Kandy Metro");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should query public zones with both search and district filters")
+    void shouldQueryPublicZonesWithSearchAndDistrict() throws Exception {
+        List<PublicDeliveryZoneResponse> expected = List.of(
+                new PublicDeliveryZoneResponse(1, "WP-COL-01", "Colombo Central Metro", "Colombo")
+        );
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/public/zones?search=Central&district=Colombo"))
+                .andRespond(withSuccess(objectMapper.writeValueAsString(expected), MediaType.APPLICATION_JSON));
+
+        List<PublicDeliveryZoneResponse> zones = parcelServiceClient.getPublicZones("Central", "Colombo");
+
+        assertThat(zones).hasSize(1);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should query public zones with no filters")
+    void shouldQueryPublicZonesWithNoFilters() throws Exception {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/public/zones"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        List<PublicDeliveryZoneResponse> zones = parcelServiceClient.getPublicZones(null, null);
+
+        assertThat(zones).isEmpty();
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should throw RestClientException when getPublicZones encounters connection failure")
+    void shouldThrowExceptionWhenGetPublicZonesFails() {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/public/zones"))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> parcelServiceClient.getPublicZones(null, null))
+                .isInstanceOf(RestClientException.class);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should throw RestClientException when calculateQuote encounters connection failure")
+    void shouldThrowExceptionWhenCalculateQuoteFails() {
+        ParcelQuoteRequest request = new ParcelQuoteRequest(1, 2, new BigDecimal("2.50"), "MEDIUM", "STANDARD");
+
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/parcels/quote"))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> parcelServiceClient.calculateQuote(request))
+                .isInstanceOf(RestClientException.class);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should instantiate with base URL constructor")
+    void shouldInstantiateWithUrlConstructor() {
+        ParcelServiceClient client = new ParcelServiceClient("http://localhost:8082");
+        assertThat(client).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should return empty when tracking returns 400 Bad Request")
+    void shouldReturnEmptyWhenTrackingReturnsBadRequest() {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/parcels/track/SD-20261107-INVALID"))
+                .andRespond(withBadRequest());
+
+        Optional<ParcelTrackingResponseDto> result = parcelServiceClient.getTracking("SD-20261107-INVALID");
+
+        assertThat(result).isEmpty();
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should throw RestClientException when tracking returns 500 server error")
+    void shouldThrowExceptionWhenTrackingReturnsServerError() {
+        mockServer.expect(requestTo("http://localhost:8082/api/v1/parcels/track/SD-20261107-FAIL"))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> parcelServiceClient.getTracking("SD-20261107-FAIL"))
+                .isInstanceOf(RestClientException.class);
         mockServer.verify();
     }
 }
