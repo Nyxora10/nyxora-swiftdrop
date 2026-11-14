@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.auth.security;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.AfterEach;
@@ -97,8 +98,11 @@ class JwtAuthenticationFilterTest {
         UUID userId = UUID.randomUUID();
         request.addHeader("Authorization", "Bearer " + token);
 
+        Claims claims = mock(Claims.class);
         when(jwtTokenProvider.validateToken(token)).thenReturn(true);
-        when(jwtTokenProvider.getUserIdFromToken(token)).thenReturn(userId);
+        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(claims);
+        when(claims.getSubject()).thenReturn(userId.toString());
+        when(claims.get(JwtTokenProvider.CLAIM_TOKEN_TYPE, String.class)).thenReturn(null);
         when(customUserDetailsService.loadUserById(userId)).thenReturn(userDetails);
         when(userDetails.isEnabled()).thenReturn(true);
         doReturn(Collections.emptyList()).when(userDetails).getAuthorities();
@@ -117,8 +121,10 @@ class JwtAuthenticationFilterTest {
         UUID userId = UUID.randomUUID();
         request.addHeader("Authorization", "Bearer " + token);
 
+        Claims claims = mock(Claims.class);
         when(jwtTokenProvider.validateToken(token)).thenReturn(true);
-        when(jwtTokenProvider.getUserIdFromToken(token)).thenReturn(userId);
+        when(jwtTokenProvider.getClaimsFromToken(token)).thenReturn(claims);
+        when(claims.getSubject()).thenReturn(userId.toString());
         when(customUserDetailsService.loadUserById(userId)).thenReturn(userDetails);
         when(userDetails.isEnabled()).thenReturn(false);
 

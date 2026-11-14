@@ -97,15 +97,15 @@ public class JwtTokenProvider {
             builder.claim("merchantId", userPrincipal.getMerchantId().toString());
         }
 
-        return builder
-                .issuedAt(now)
-                .expiration(expiryDate);
-
         if (extraClaims != null && !extraClaims.isEmpty()) {
             extraClaims.forEach(builder::claim);
         }
 
-        return builder.signWith(getSigningKey()).compact();
+        return builder
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(getSigningKey())
+                .compact();
     }
 
     /**
