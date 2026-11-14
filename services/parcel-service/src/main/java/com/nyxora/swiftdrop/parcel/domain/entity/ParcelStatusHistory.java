@@ -48,6 +48,9 @@ public class ParcelStatusHistory extends BaseCreatedEntity {
     @Column(name = "proof_photo_url", length = 500)
     private String proofPhotoUrl;
 
+    @Column(name = "signature_image_url", length = 500)
+    private String signatureImageUrl;
+
     @Column(name = "failure_reason", length = 100)
     private String failureReason;
 }
