@@ -26,6 +26,8 @@ public class CourierDeliveryHistoryItemDto {
     private ParcelStatus finalStatus;
     private String recipientName;
     private String recipientPhone;
+    private String pickupAddress;
+    private String originZoneName;
     private String dropoffAddress;
     private String destinationZoneName;
     private BigDecimal weightKg;
