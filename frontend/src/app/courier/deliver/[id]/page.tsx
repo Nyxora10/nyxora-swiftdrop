@@ -463,7 +463,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Package className="w-5 h-5" />}
-            Confirm Parcel Pickup (PICKED_UP)
+            Confirm Pickup
           </button>
         )}
 
@@ -474,7 +474,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-sky-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Truck className="w-5 h-5" />}
-            Mark In Transit to Hub (IN_TRANSIT)
+            Mark In Transit
           </button>
         )}
 
@@ -485,7 +485,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Navigation className="w-5 h-5" />}
-            Start Last-Mile Delivery (OUT_FOR_DELIVERY)
+            Start Delivery
           </button>
         )}
 
@@ -503,7 +503,7 @@ function CourierDeliverPageContent() {
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
               >
-                Complete Delivery (DELIVERED)
+                Complete Delivery
               </button>
 
               <button
@@ -515,7 +515,7 @@ function CourierDeliverPageContent() {
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
               >
-                Report Failure (FAILED)
+                Report Failed Attempt
               </button>
             </div>
 
@@ -607,7 +607,7 @@ function CourierDeliverPageContent() {
                   ) : (
                     <CheckCircle2 className="w-4 h-4" />
                   )}
-                  Upload Proof & Mark DELIVERED
+                  Confirm & Complete Delivery
                 </button>
               </div>
             ) : (
@@ -669,7 +669,7 @@ function CourierDeliverPageContent() {
                   ) : (
                     <AlertTriangle className="w-4 h-4" />
                   )}
-                  Log Delivery Failure (FAILED)
+                  Submit Failed Attempt
                 </button>
               </div>
             )}
