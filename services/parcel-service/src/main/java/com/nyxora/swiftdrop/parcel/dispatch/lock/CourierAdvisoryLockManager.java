@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.dispatch.lock;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +47,8 @@ public class CourierAdvisoryLockManager {
             log.debug("[CourierAdvisoryLockManager] Acquired transaction advisory lock for courier={}, key={}", courierId, lockKey);
         } catch (Exception ex) {
             // Fallback for non-PostgreSQL dialects (e.g. in-memory H2 database during unit tests)
-            log.debug("[CourierAdvisoryLockManager] Advisory lock skipped on non-PostgreSQL dialect: {}", ex.getMessage());
+            log.debug("[CourierAdvisoryLockManager] Advisory lock skipped on non-PostgreSQL dialect: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
     }
 }

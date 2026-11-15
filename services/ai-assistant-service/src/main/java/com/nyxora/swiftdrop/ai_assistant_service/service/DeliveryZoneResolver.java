@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.ai_assistant_service.service;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.ai_assistant_service.client.ParcelServiceClient;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.PublicDeliveryZoneResponse;
 import org.slf4j.Logger;
@@ -37,7 +38,8 @@ public class DeliveryZoneResolver {
         }
 
         String clean = locationQuery.trim();
-        log.debug("Resolving delivery zone for location query: '{}'", clean);
+        log.debug("Resolving delivery zone for location query: '{}'",
+                PiiMaskingUtil.maskAddress(clean));
 
         List<PublicDeliveryZoneResponse> zones;
         try {
@@ -47,12 +49,14 @@ public class DeliveryZoneResolver {
             if (zones.isEmpty()) {
                 String stripped = clean.replaceAll("(?i)\\b(district|city|metro|area|town|province)\\b", "").trim();
                 if (!stripped.isEmpty() && !stripped.equalsIgnoreCase(clean)) {
-                    log.debug("Retrying zone lookup with stripped term: '{}'", stripped);
+                    log.debug("Retrying zone lookup with stripped term: '{}'",
+                            PiiMaskingUtil.maskAddress(stripped));
                     zones = parcelServiceClient.getPublicZones(stripped, null);
                 }
             }
         } catch (RestClientException ex) {
-            log.error("Zone lookup failed due to downstream Parcel Service error: {}", ex.getMessage(), ex);
+            log.error("Zone lookup failed due to downstream Parcel Service error: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             return ZoneResolutionResult.unavailable("Live SwiftDrop delivery zone lookup service is temporarily unavailable.");
         }
 
@@ -76,7 +80,8 @@ public class DeliveryZoneResolver {
             return ZoneResolutionResult.resolved(exactMatches.get(0));
         }
 
-        log.info("Location query '{}' matched {} candidate zones (ambiguous)", clean, zones.size());
+        log.info("Location query '{}' matched {} candidate zones (ambiguous)",
+                PiiMaskingUtil.maskAddress(clean), zones.size());
         return ZoneResolutionResult.ambiguous(clean, zones,
                 "Multiple delivery zones match '" + clean + "'. Please choose one from the available options.");
     }

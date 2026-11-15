@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.ai_assistant_service.tool;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.ai_assistant_service.client.ParcelServiceClient;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteRequest;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.quote.ParcelQuoteResponse;
@@ -69,7 +70,8 @@ public class RateQuoteTool {
             String tier) {
 
         log.info("Executing calculate_rate_quote for weight: {}, origin: {}, destination: {}, size: {}, tier: {}",
-                parcelWeight, originCity, destinationCity, parcelSize, tier);
+                parcelWeight, PiiMaskingUtil.maskAddress(originCity),
+                PiiMaskingUtil.maskAddress(destinationCity), parcelSize, tier);
 
         // 1. Validate parcel weight
         if (parcelWeight == null || parcelWeight <= 0) {
@@ -169,7 +171,7 @@ public class RateQuoteTool {
         try {
             quoteResponse = parcelServiceClient.calculateQuote(quoteRequest);
         } catch (RestClientResponseException ex) {
-            log.warn("Parcel quotation returned status {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            log.warn("Parcel quotation returned status {}", ex.getStatusCode());
             if (ex.getStatusCode().value() == 400) {
                 return RateQuoteResult.invalidInput(
                         "This delivery route between " + originRes.matchedZone().zoneName() + " and "
@@ -180,7 +182,8 @@ public class RateQuoteTool {
                     "Live SwiftDrop pricing engine is currently synchronizing tariff tables and is temporarily unavailable."
             );
         } catch (RestClientException ex) {
-            log.error("Failed to connect to Parcel Service quotation API: {}", ex.getMessage(), ex);
+            log.error("Failed to connect to Parcel Service quotation API: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             return RateQuoteResult.unavailable(
                     "Live SwiftDrop pricing engine is currently synchronizing tariff tables and is temporarily unavailable."
             );

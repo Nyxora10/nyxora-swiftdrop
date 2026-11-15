@@ -185,7 +185,7 @@ public class WebhookLogService {
 
         } catch (Exception ex) {
             log.error("RabbitMQ manual retry publishing failed for deliveryLogId={}. Executing compensating state rollback: {}",
-                    deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()), ex);
+                    deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()));
 
             // Roll back database state to DEAD_LETTER in a committed compensating transaction
             try {
@@ -202,7 +202,7 @@ public class WebhookLogService {
                 });
             } catch (Exception rollbackEx) {
                 log.error("Failed to execute compensating rollback for deliveryLogId={}: {}",
-                        deliveryLogId, PiiMaskingUtil.maskText(rollbackEx.getMessage()), rollbackEx);
+                        deliveryLogId, PiiMaskingUtil.maskText(rollbackEx.getMessage()));
             }
 
             throw new IllegalStateException("Failed to enqueue manual retry to message broker for deliveryLogId=" + deliveryLogId, ex);

@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.ai_assistant_service;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -62,7 +63,8 @@ public class AiAssistantServiceApplication {
                     log.info("Successfully loaded {} variables from .env file: {}", loadedCount, path.toAbsolutePath());
                     break;
                 } catch (IOException ex) {
-                    log.warn("Could not read .env file at {}: {}", path, ex.getMessage());
+                    log.warn("Could not read .env file at {}: {}", path,
+                            PiiMaskingUtil.maskText(ex.getMessage()));
                 }
             }
         }

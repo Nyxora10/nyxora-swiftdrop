@@ -156,7 +156,7 @@ public class WebhookRetryConsumer {
                 retryPublisher.scheduleRetry(deliveryLog);
             } catch (Exception ex) {
                 log.error("Failed to publish next retry message to RabbitMQ DLX for deliveryLogId={}: {}",
-                        deliveryLog.getId(), PiiMaskingUtil.maskText(ex.getMessage()), ex);
+                        deliveryLog.getId(), PiiMaskingUtil.maskText(ex.getMessage()));
                 // Reject without requeueing to avoid fast immediate retry storm on RabbitMQ
                 // broker
                 throw new AmqpRejectAndDontRequeueException(

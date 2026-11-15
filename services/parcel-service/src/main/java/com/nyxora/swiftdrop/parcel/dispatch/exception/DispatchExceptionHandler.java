@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.dispatch.exception;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.dispatch.controller.DispatchReportController;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -17,7 +18,8 @@ public class DispatchExceptionHandler {
 
     @ExceptionHandler(CourierWorkloadExceededException.class)
     public ProblemDetail handleCourierWorkloadExceeded(CourierWorkloadExceededException ex) {
-        log.warn("[DispatchExceptionHandler] Courier workload exceeded: {}", ex.getMessage());
+        log.warn("[DispatchExceptionHandler] Courier workload exceeded: {}",
+                PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Courier Workload Exceeded");
         problem.setProperty("courierId", ex.getCourierId());
@@ -27,7 +29,8 @@ public class DispatchExceptionHandler {
 
     @ExceptionHandler(InvalidParcelStateException.class)
     public ProblemDetail handleInvalidParcelState(InvalidParcelStateException ex) {
-        log.warn("[DispatchExceptionHandler] Invalid parcel state: {}", ex.getMessage());
+        log.warn("[DispatchExceptionHandler] Invalid parcel state: {}",
+                PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid Parcel State");
         return problem;
@@ -35,7 +38,7 @@ public class DispatchExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("[DispatchExceptionHandler] Bad request: {}", ex.getMessage());
+        log.warn("[DispatchExceptionHandler] Bad request: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid Request Parameters");
         return problem;

@@ -225,6 +225,24 @@ class PiiMaskingUtilTest {
         }
 
         @Test
+        @DisplayName("Should completely redact bearer tokens and credential values")
+        void testCredentialRedaction() {
+            String rawLog = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret "
+                    + "password=plain-password api_key='api-value' refresh_token=refresh-value";
+
+            assertThat(PiiMaskingUtil.maskText(rawLog))
+                    .isEqualTo("Authorization: Bearer [REDACTED] password=[REDACTED] "
+                            + "api_key=[REDACTED] refresh_token=[REDACTED]");
+        }
+
+        @Test
+        @DisplayName("Should preserve safe diagnostic text while redacting sensitive values")
+        void testSafeTextPreservation() {
+            assertThat(PiiMaskingUtil.maskText("status=RETRYING, attempt=2, reason=timeout"))
+                    .isEqualTo("status=RETRYING, attempt=2, reason=timeout");
+        }
+
+        @Test
         @DisplayName("Should return text as-is if no PII is present")
         void testTextWithoutPii() {
             String rawLog = "Parcel SD-20261102-123456 transitioned to status IN_TRANSIT";
@@ -236,6 +254,18 @@ class PiiMaskingUtilTest {
         void testNullAndEmptyText() {
             assertThat(PiiMaskingUtil.maskText(null)).isNull();
             assertThat(PiiMaskingUtil.maskText("")).isEqualTo("");
+        }
+    }
+
+    @Nested
+    @DisplayName("Secret Redaction Tests")
+    class SecretRedactionTests {
+
+        @Test
+        void testRedactSecret() {
+            assertThat(PiiMaskingUtil.redactSecret("secret-value")).isEqualTo("[REDACTED]");
+            assertThat(PiiMaskingUtil.redactSecret("   ")).isEqualTo("   ");
+            assertThat(PiiMaskingUtil.redactSecret(null)).isNull();
         }
     }
 

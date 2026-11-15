@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.merchant;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.booking.TrackingNumberGenerator;
 import com.nyxora.swiftdrop.parcel.booking.config.RabbitMqConfig;
 import com.nyxora.swiftdrop.parcel.booking.event.ParcelCreatedEvent;
@@ -158,7 +159,8 @@ public class MerchantOrderServiceImpl implements MerchantOrderService {
             );
             log.debug("[MerchantOrderService] Published parcel.created domain event for trackingNumber={}", parcel.getTrackingNumber());
         } catch (Exception ex) {
-            log.warn("[MerchantOrderService] Non-fatal: Failed to publish parcel.created event: {}", ex.getMessage());
+            log.warn("[MerchantOrderService] Non-fatal: Failed to publish parcel.created event: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
     }
 }

@@ -27,6 +27,16 @@ public final class PiiMaskingUtil {
             "(?:\\+94|0)(?:[\\s\\-]?[0-9]){8,10}\\b"
     );
 
+    private static final Pattern BEARER_TOKEN_PATTERN = Pattern.compile(
+            "(?i)(\\bBearer\\s+)[A-Za-z0-9._~+/=-]+"
+    );
+
+    private static final Pattern SENSITIVE_VALUE_PATTERN = Pattern.compile(
+            "(?i)(\\b(?:password|passwd|secret|token|access[_-]?token|refresh[_-]?token|"
+                    + "api[_-]?key|authorization|webhook[_-]?secret|client[_-]?secret)\\b\\s*[=:]\\s*)"
+                    + "(?!Bearer\\b)(\"[^\"]*\"|'[^']*'|[^\\s,;}]+)"
+    );
+
     // Matches leading street/house/unit numbers (e.g., "123/A", "45", "No. 12/B", "No 45")
     private static final Pattern LEADING_ADDRESS_NUMBER_PATTERN = Pattern.compile(
             "^(?i)(No\\.?\\s*)?(\\d+([/\\-][a-zA-Z0-9]+)?|[0-9]+[a-zA-Z]?)(?:,\\s*|\\s+)"
@@ -34,6 +44,19 @@ public final class PiiMaskingUtil {
 
     private PiiMaskingUtil() {
         throw new UnsupportedOperationException("PiiMaskingUtil is a utility class and cannot be instantiated.");
+    }
+
+    /**
+     * Completely redacts a credential, token, or secret for diagnostic output.
+     *
+     * @param value Sensitive value
+     * @return Redaction marker, or the original null/blank state
+     */
+    public static String redactSecret(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.isBlank() ? value : "[REDACTED]";
     }
 
     /**
@@ -222,8 +245,7 @@ public final class PiiMaskingUtil {
     }
 
     /**
-     * Scans an arbitrary free-text log message and masks all embedded email addresses
-     * and phone numbers.
+     * Scans an arbitrary free-text log message and masks embedded PII and credentials.
      *
      * @param text Raw log text or exception message
      * @return Sanitized text with all PII masked
@@ -255,6 +277,10 @@ public final class PiiMaskingUtil {
         }
         phoneMatcher.appendTail(sbPhone);
 
-        return sbPhone.toString();
+        // 3. Completely redact credentials and authorization material.
+        Matcher bearerMatcher = BEARER_TOKEN_PATTERN.matcher(sbPhone);
+        String withBearerRedacted = bearerMatcher.replaceAll("$1[REDACTED]");
+        Matcher sensitiveValueMatcher = SENSITIVE_VALUE_PATTERN.matcher(withBearerRedacted);
+        return sensitiveValueMatcher.replaceAll("$1[REDACTED]");
     }
 }

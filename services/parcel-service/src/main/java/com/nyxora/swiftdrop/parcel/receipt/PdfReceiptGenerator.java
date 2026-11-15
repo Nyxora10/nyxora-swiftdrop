@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.receipt;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
@@ -90,7 +91,8 @@ public class PdfReceiptGenerator {
             return baos.toByteArray();
 
         } catch (DocumentException | IOException ex) {
-            log.error("Failed to generate PDF delivery receipt for parcel {}: {}", parcel.getId(), ex.getMessage(), ex);
+            log.error("Failed to generate PDF delivery receipt for parcel {}: {}",
+                    parcel.getId(), PiiMaskingUtil.maskText(ex.getMessage()));
             throw new IllegalStateException("Failed to generate digital PDF delivery receipt.", ex);
         }
     }

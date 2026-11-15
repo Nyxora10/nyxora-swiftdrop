@@ -47,7 +47,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccountPendingApprovalException.class)
     public ProblemDetail handleAccountPendingApproval(AccountPendingApprovalException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Account pending approval: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Account pending approval: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setTitle("Account Pending Approval");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-pending-approval"));
@@ -58,7 +58,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccountSuspendedException.class)
     public ProblemDetail handleAccountSuspended(AccountSuspendedException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Suspended account access: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Suspended account access: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setTitle("Account Suspended");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-suspended"));
@@ -69,7 +69,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccountRejectedException.class)
     public ProblemDetail handleAccountRejected(AccountRejectedException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Rejected account login attempt: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Rejected account login attempt: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setTitle("Account Application Rejected");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-rejected"));
@@ -80,7 +80,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Failed login attempt: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Failed login attempt: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         String detail = (ex.getMessage() != null && !ex.getMessage().isBlank())
                 ? ex.getMessage()
                 : "Invalid credentials provided.";
@@ -94,7 +94,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleGenericAuthenticationException(AuthenticationException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Authentication error on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Authentication error on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Authentication Required");
         problem.setType(URI.create("https://swiftdrop.lk/errors/unauthorized"));
@@ -105,7 +106,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Access denied on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Access denied on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Access denied. Insufficient permissions.");
         problem.setTitle("Access Denied");
         problem.setType(URI.create("https://swiftdrop.lk/errors/forbidden"));
@@ -116,7 +118,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DisabledException.class)
     public ProblemDetail handleDisabledException(DisabledException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Disabled user login attempt: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Disabled user login attempt: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Account is disabled or pending approval.");
         problem.setTitle("Account Disabled");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-disabled"));
@@ -127,7 +129,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidRefreshTokenException.class)
     public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Invalid refresh token: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Invalid refresh token: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Invalid Refresh Token");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-refresh-token"));
@@ -138,7 +140,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Resource not found: {}", ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Resource not found: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Resource Not Found");
         problem.setType(URI.create("https://swiftdrop.lk/errors/resource-not-found"));
@@ -160,7 +162,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Malformed JSON request body on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Malformed JSON request body on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST,
                 "Malformed JSON request body. Please verify that JSON quotes, commas, and fields are correctly structured."
@@ -179,7 +182,8 @@ public class GlobalExceptionHandler {
             errors.put(error.getField(), error.getDefaultMessage());
         }
 
-        log.warn("[GlobalExceptionHandler] Validation failed on {}: {}", request.getRequestURI(), errors);
+        log.warn("[GlobalExceptionHandler] Validation failed on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(errors.toString()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed for one or more fields.");
         problem.setTitle("Validation Failed");
         problem.setType(URI.create("https://swiftdrop.lk/errors/validation-error"));
@@ -205,7 +209,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ProblemDetail handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Unsupported media type on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Unsupported media type on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                 "Content-Type is not supported. Please use application/json."
@@ -233,7 +238,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Illegal argument on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Illegal argument on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Bad Request");
         problem.setType(URI.create("https://swiftdrop.lk/errors/bad-request"));
@@ -244,7 +250,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ProblemDetail handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
-        log.warn("[GlobalExceptionHandler] Conflict/Invalid state transition on {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("[GlobalExceptionHandler] Conflict/Invalid state transition on {}: {}",
+                request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Invalid State Transition");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-state-transition"));
@@ -255,7 +262,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGenericException(Exception ex, HttpServletRequest request) {
-        log.error("[GlobalExceptionHandler] Unhandled exception occurred on {}: ", request.getRequestURI(), ex);
+        log.error("[GlobalExceptionHandler] Unhandled exception occurred on {}: {}",
+                request.getRequestURI(), ex.getClass().getSimpleName());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected server error occurred.");
         problem.setTitle("Internal Server Error");
         problem.setType(URI.create("https://swiftdrop.lk/errors/internal-server-error"));

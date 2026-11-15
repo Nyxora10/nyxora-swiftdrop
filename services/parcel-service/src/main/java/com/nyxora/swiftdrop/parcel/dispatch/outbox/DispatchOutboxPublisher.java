@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.dispatch.outbox;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.parcel.dispatch.config.DispatchRabbitMqConfig;
 import com.nyxora.swiftdrop.parcel.dispatch.event.ParcelAssignedEvent;
@@ -88,7 +89,7 @@ public class DispatchOutboxPublisher {
                 }
             } catch (Exception ex) {
                 log.warn("[DispatchOutboxPublisher] Publisher confirm timed out or failed for event {}: {}. Will retry.",
-                        outboxEvent.getId(), ex.getMessage());
+                        outboxEvent.getId(), PiiMaskingUtil.maskText(ex.getMessage()));
                 ack = false;
             }
 
@@ -106,7 +107,8 @@ public class DispatchOutboxPublisher {
             outboxEvent.setRetryCount(outboxEvent.getRetryCount() + 1);
             outboxRepository.save(outboxEvent);
             log.error("[DispatchOutboxPublisher] Error publishing outbox event {}: {}. Will retry. (retryCount={})",
-                    outboxEvent.getId(), ex.getMessage(), outboxEvent.getRetryCount());
+                    outboxEvent.getId(), PiiMaskingUtil.maskText(ex.getMessage()),
+                    outboxEvent.getRetryCount());
         }
     }
 }

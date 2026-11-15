@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.exception;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -25,7 +26,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("Bad request: {}", ex.getMessage());
+        log.warn("Bad request: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Bad Request");
         return problem;
@@ -33,7 +34,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex) {
-        log.warn("Resource not found: {}", ex.getMessage());
+        log.warn("Resource not found: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Resource Not Found");
         return problem;
@@ -41,7 +42,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceConflictException.class)
     public ProblemDetail handleResourceConflict(ResourceConflictException ex) {
-        log.warn("Resource conflict: {}", ex.getMessage());
+        log.warn("Resource conflict: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Resource Conflict");
         return problem;
@@ -50,7 +51,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidStateTransitionException.class)
     public ProblemDetail handleInvalidStateTransition(InvalidStateTransitionException ex) {
         log.warn("Invalid parcel state transition: from={} to={}, reason={}",
-                ex.getFromStatus(), ex.getToStatus(), ex.getMessage());
+                ex.getFromStatus(), ex.getToStatus(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Invalid State Transition");
         if (ex.getFromStatus() != null) {
@@ -73,7 +74,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        log.warn("Type mismatch for parameter or header '{}': {}", ex.getName(), ex.getMessage());
+        log.warn("Type mismatch for parameter or header '{}': {}",
+                ex.getName(), PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST, "Invalid format for parameter or header '" + ex.getName() + "'.");
         problem.setTitle("Type Mismatch");
@@ -82,7 +84,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
-        log.warn("Access denied: {}", ex.getMessage());
+        log.warn("Access denied: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.FORBIDDEN, "Access denied: You do not have permission to perform this action.");
         problem.setTitle("Forbidden");
@@ -91,7 +93,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ProblemDetail handleIllegalState(IllegalStateException ex) {
-        log.error("Internal state error: {}", ex.getMessage());
+        log.error("Internal state error: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         problem.setTitle("Internal Server Error");
         return problem;
@@ -111,7 +113,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGenericException(Exception ex) {
-        log.error("Unexpected error: {}", ex.getMessage(), ex);
+        log.error("Unexpected error: {}", ex.getClass().getSimpleName());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.");
         problem.setTitle("Internal Server Error");
