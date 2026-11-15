@@ -546,10 +546,24 @@ export default function CourierRunsheetPage() {
 
                     <Link
                       href={`/courier/deliver/${parcel.id}`}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                      className={`px-4 py-2 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs ${
+                        parcel.currentStatus === 'PICKED_UP'
+                          ? 'bg-sky-600 hover:bg-sky-700'
+                          : parcel.currentStatus === 'IN_TRANSIT'
+                          ? 'bg-amber-600 hover:bg-amber-700'
+                          : parcel.currentStatus === 'FAILED'
+                          ? 'bg-rose-600 hover:bg-rose-700'
+                          : 'bg-emerald-600 hover:bg-emerald-700'
+                      }`}
                     >
                       <Navigation className="w-3.5 h-3.5" />
-                      Execute Delivery
+                      {parcel.currentStatus === 'PICKED_UP'
+                        ? 'Send to Transit'
+                        : parcel.currentStatus === 'IN_TRANSIT'
+                        ? 'Out for Delivery'
+                        : parcel.currentStatus === 'FAILED'
+                        ? 'Retry Delivery'
+                        : 'Complete Delivery'}
                       <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                     </Link>
                   </div>
