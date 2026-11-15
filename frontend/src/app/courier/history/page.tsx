@@ -426,14 +426,18 @@ function CourierHistoryContent() {
                       </span>
                     )}
 
-                    {item.proofPhotoUrl && (
+                    {(item.proofPhotoUrl || item.signatureImageUrl) && (
                       <button
                         type="button"
                         onClick={() => setSelectedProof(item)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-[11px] font-semibold transition-colors shadow-2xs"
                       >
                         <Camera className="w-3.5 h-3.5 text-emerald-600" />
-                        View Proof Photo
+                        {item.signatureImageUrl && item.proofPhotoUrl && item.signatureImageUrl !== item.proofPhotoUrl
+                          ? 'View Proof & Signature'
+                          : item.signatureImageUrl
+                            ? 'View Signature'
+                            : 'View Proof Photo'}
                       </button>
                     )}
 
@@ -478,16 +482,40 @@ function CourierHistoryContent() {
                 </button>
               </div>
 
-              {/* Modal Body / Image */}
-              <div className="p-4 pt-0 space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center min-h-[260px]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getProofImageSrc(selectedProof.proofPhotoUrl)}
-                    alt={`Proof for ${selectedProof.trackingNumber}`}
-                    className="max-h-[380px] w-full object-contain"
-                  />
-                </div>
+              {/* Modal Body / Proof Photo & Signature */}
+              <div className="p-4 pt-0 space-y-3 max-h-[70vh] overflow-y-auto">
+                {selectedProof.proofPhotoUrl &&
+                  selectedProof.proofPhotoUrl !== selectedProof.signatureImageUrl && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Doorstep Proof Photo
+                      </span>
+                      <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center min-h-[200px]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={getProofImageSrc(selectedProof.proofPhotoUrl)}
+                          alt={`Proof for ${selectedProof.trackingNumber}`}
+                          className="max-h-[300px] w-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                {selectedProof.signatureImageUrl && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Recipient Digital Signature
+                    </span>
+                    <div className="relative rounded-xl overflow-hidden bg-white border border-dashed border-slate-300 flex items-center justify-center p-3 min-h-[120px]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getProofImageSrc(selectedProof.signatureImageUrl)}
+                        alt={`Signature for ${selectedProof.trackingNumber}`}
+                        className="max-h-[140px] w-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Details Footer */}
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-1">
