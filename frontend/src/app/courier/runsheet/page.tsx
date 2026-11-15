@@ -24,13 +24,15 @@ import {
   Navigation,
 } from 'lucide-react';
 
+type RunsheetTab = 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'FAILED';
+
 export default function CourierRunsheetPage() {
   const toast = useToast();
 
   const [runsheet, setRunsheet] = useState<CourierRunsheetResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'PICKUPS' | 'DELIVERIES'>('PICKUPS');
+  const [activeTab, setActiveTab] = useState<RunsheetTab>('ASSIGNED');
   const [searchQuery, setSearchQuery] = useState('');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
@@ -66,7 +68,7 @@ export default function CourierRunsheetPage() {
       });
       toast.success(`Parcel ${trackingNumber} marked as PICKED UP!`);
       await fetchRunsheet();
-      setActiveTab('DELIVERIES');
+      setActiveTab('PICKED_UP');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update pickup status.';
       toast.error(msg);
@@ -141,8 +143,92 @@ export default function CourierRunsheetPage() {
     );
   };
 
-  const pickups = runsheet ? filterParcels(runsheet.pickups) : [];
-  const deliveries = runsheet ? filterParcels(runsheet.deliveries) : [];
+  const allParcels = runsheet ? [...runsheet.pickups, ...runsheet.deliveries] : [];
+  const assignedAll = allParcels.filter((p) => p.currentStatus === 'ASSIGNED' || p.currentStatus === 'CREATED');
+  const pickedUpAll = allParcels.filter((p) => p.currentStatus === 'PICKED_UP');
+  const inTransitAll = allParcels.filter((p) => p.currentStatus === 'IN_TRANSIT');
+  const outForDeliveryAll = allParcels.filter((p) => p.currentStatus === 'OUT_FOR_DELIVERY');
+  const failedAll = allParcels.filter((p) => p.currentStatus === 'FAILED');
+
+  const stageConfig: Record<
+    RunsheetTab,
+    {
+      label: string;
+      shortLabel: string;
+      items: CourierParcelCard[];
+      emptyTitle: string;
+      emptyDesc: string;
+      activeClass: string;
+      metricActiveClass: string;
+      metricLabelClass: string;
+      metricValueClass: string;
+      icon: React.ReactNode;
+    }
+  > = {
+    ASSIGNED: {
+      label: 'Assigned',
+      shortLabel: 'Assigned',
+      items: filterParcels(assignedAll),
+      emptyTitle: 'No assigned pickups',
+      emptyDesc: 'All assigned pickup requests have been collected or none assigned yet.',
+      activeClass: 'bg-white text-indigo-700 shadow-xs',
+      metricActiveClass: 'bg-indigo-50/80 border-indigo-200 shadow-xs',
+      metricLabelClass: 'text-indigo-700',
+      metricValueClass: 'text-indigo-900',
+      icon: <Clock className="w-4 h-4" />,
+    },
+    PICKED_UP: {
+      label: 'Picked Up',
+      shortLabel: 'Picked Up',
+      items: filterParcels(pickedUpAll),
+      emptyTitle: 'No picked up parcels',
+      emptyDesc: 'Confirm pickups from the Assigned tab to move them here.',
+      activeClass: 'bg-white text-sky-700 shadow-xs',
+      metricActiveClass: 'bg-sky-50/80 border-sky-200 shadow-xs',
+      metricLabelClass: 'text-sky-700',
+      metricValueClass: 'text-sky-900',
+      icon: <Package className="w-4 h-4" />,
+    },
+    IN_TRANSIT: {
+      label: 'In Transit',
+      shortLabel: 'In Transit',
+      items: filterParcels(inTransitAll),
+      emptyTitle: 'No parcels in transit',
+      emptyDesc: 'Parcels traveling between origin and destination hubs will appear here.',
+      activeClass: 'bg-white text-amber-700 shadow-xs',
+      metricActiveClass: 'bg-amber-50/80 border-amber-200 shadow-xs',
+      metricLabelClass: 'text-amber-700',
+      metricValueClass: 'text-amber-900',
+      icon: <Truck className="w-4 h-4" />,
+    },
+    OUT_FOR_DELIVERY: {
+      label: 'Out for Delivery',
+      shortLabel: 'Out for Delivery',
+      items: filterParcels(outForDeliveryAll),
+      emptyTitle: 'No parcels out for delivery',
+      emptyDesc: 'Parcels dispatched for final doorstep delivery will appear here.',
+      activeClass: 'bg-white text-emerald-700 shadow-xs',
+      metricActiveClass: 'bg-emerald-50/80 border-emerald-200 shadow-xs',
+      metricLabelClass: 'text-emerald-700',
+      metricValueClass: 'text-emerald-900',
+      icon: <Navigation className="w-4 h-4" />,
+    },
+    FAILED: {
+      label: 'Failed',
+      shortLabel: 'Failed',
+      items: filterParcels(failedAll),
+      emptyTitle: 'No failed deliveries',
+      emptyDesc: 'Any failed delivery attempts needing re-attempt or return will appear here.',
+      activeClass: 'bg-white text-rose-700 shadow-xs',
+      metricActiveClass: 'bg-rose-50/80 border-rose-200 shadow-xs',
+      metricLabelClass: 'text-rose-700',
+      metricValueClass: 'text-rose-900',
+      icon: <AlertTriangle className="w-4 h-4" />,
+    },
+  };
+
+  const tabOrder: RunsheetTab[] = ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'FAILED'];
+  const currentStage = stageConfig[activeTab];
 
   return (
     <AppShell>
@@ -173,8 +259,8 @@ export default function CourierRunsheetPage() {
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-4 pt-4 border-t border-slate-100">
-            <div className="bg-slate-50 rounded-xl p-2.5 sm:p-3 text-center border border-slate-200/60">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 mt-4 pt-4 border-t border-slate-100">
+            <div className="col-span-2 sm:col-span-1 bg-slate-50 rounded-xl p-2.5 sm:p-3 text-center border border-slate-200/60">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Active Total
               </span>
@@ -183,37 +269,35 @@ export default function CourierRunsheetPage() {
               </p>
             </div>
 
-            <div
-              onClick={() => setActiveTab('PICKUPS')}
-              className={`rounded-xl p-2.5 sm:p-3 text-center border cursor-pointer transition-all ${
-                activeTab === 'PICKUPS'
-                  ? 'bg-indigo-50/80 border-indigo-200 shadow-xs'
-                  : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/60'
-              }`}
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700">
-                Pickups
-              </span>
-              <p className="text-xl sm:text-2xl font-extrabold text-indigo-900">
-                {runsheet ? runsheet.pickups.length : 0}
-              </p>
-            </div>
-
-            <div
-              onClick={() => setActiveTab('DELIVERIES')}
-              className={`rounded-xl p-2.5 sm:p-3 text-center border cursor-pointer transition-all ${
-                activeTab === 'DELIVERIES'
-                  ? 'bg-emerald-50/80 border-emerald-200 shadow-xs'
-                  : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/60'
-              }`}
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
-                Deliveries
-              </span>
-              <p className="text-xl sm:text-2xl font-extrabold text-emerald-900">
-                {runsheet ? runsheet.deliveries.length : 0}
-              </p>
-            </div>
+            {(['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] as RunsheetTab[]).map((tabKey) => {
+              const cfg = stageConfig[tabKey];
+              const rawCount =
+                tabKey === 'ASSIGNED'
+                  ? assignedAll.length
+                  : tabKey === 'PICKED_UP'
+                  ? pickedUpAll.length
+                  : tabKey === 'IN_TRANSIT'
+                  ? inTransitAll.length
+                  : outForDeliveryAll.length;
+              return (
+                <div
+                  key={tabKey}
+                  onClick={() => setActiveTab(tabKey)}
+                  className={`rounded-xl p-2.5 sm:p-3 text-center border cursor-pointer transition-all ${
+                    activeTab === tabKey
+                      ? cfg.metricActiveClass
+                      : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/60'
+                  }`}
+                >
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${cfg.metricLabelClass}`}>
+                    {cfg.shortLabel}
+                  </span>
+                  <p className={`text-xl sm:text-2xl font-extrabold ${cfg.metricValueClass}`}>
+                    {rawCount}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -240,31 +324,38 @@ export default function CourierRunsheetPage() {
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-white/70 p-1 rounded-xl backdrop-blur-xs">
-          <button
-            onClick={() => setActiveTab('PICKUPS')}
-            className={`flex-1 py-2.5 text-center font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'PICKUPS'
-                ? 'bg-white text-indigo-700 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            Pickups ({runsheet?.pickups.length ?? 0})
-          </button>
-
-          <button
-            onClick={() => setActiveTab('DELIVERIES')}
-            className={`flex-1 py-2.5 text-center font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'DELIVERIES'
-                ? 'bg-white text-emerald-700 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Truck className="w-4 h-4" />
-            Deliveries ({runsheet?.deliveries.length ?? 0})
-          </button>
+        {/* Stage Tab Navigation */}
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white/70 p-1 rounded-xl backdrop-blur-xs">
+          {tabOrder.map((tabKey) => {
+            const cfg = stageConfig[tabKey];
+            const count =
+              tabKey === 'ASSIGNED'
+                ? assignedAll.length
+                : tabKey === 'PICKED_UP'
+                ? pickedUpAll.length
+                : tabKey === 'IN_TRANSIT'
+                ? inTransitAll.length
+                : tabKey === 'OUT_FOR_DELIVERY'
+                ? outForDeliveryAll.length
+                : failedAll.length;
+            return (
+              <button
+                key={tabKey}
+                onClick={() => setActiveTab(tabKey)}
+                className={`flex-1 min-w-fit px-3 py-2.5 text-center font-semibold text-xs sm:text-sm rounded-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                  activeTab === tabKey
+                    ? cfg.activeClass
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {cfg.icon}
+                <span>{cfg.label}</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[11px] bg-slate-100 text-slate-700">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Content Section */}
@@ -273,19 +364,17 @@ export default function CourierRunsheetPage() {
             <RefreshCw className="w-8 h-8 mx-auto text-emerald-600 animate-spin mb-3" />
             <p className="text-sm font-medium text-slate-600">Loading daily runsheet...</p>
           </div>
-        ) : activeTab === 'PICKUPS' ? (
-          /* Pickups List */
+        ) : activeTab === 'ASSIGNED' ? (
+          /* Assigned (Pickups) List */
           <div className="space-y-3">
-            {pickups.length === 0 ? (
+            {currentStage.items.length === 0 ? (
               <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-2xs">
                 <Inbox className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <h3 className="font-semibold text-slate-700">No pending pickups</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  All assigned pickup requests have been fulfilled or none assigned today.
-                </p>
+                <h3 className="font-semibold text-slate-700">{currentStage.emptyTitle}</h3>
+                <p className="text-xs text-slate-500 mt-1">{currentStage.emptyDesc}</p>
               </div>
             ) : (
-              pickups.map((parcel) => (
+              currentStage.items.map((parcel) => (
                 <div
                   key={parcel.id}
                   className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition-shadow space-y-3"
@@ -360,18 +449,16 @@ export default function CourierRunsheetPage() {
             )}
           </div>
         ) : (
-          /* Deliveries List */
+          /* Stage Delivery / Transit List */
           <div className="space-y-3">
-            {deliveries.length === 0 ? (
+            {currentStage.items.length === 0 ? (
               <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-2xs">
                 <Inbox className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <h3 className="font-semibold text-slate-700">No active deliveries</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Once pickups are confirmed, active deliveries will appear here.
-                </p>
+                <h3 className="font-semibold text-slate-700">{currentStage.emptyTitle}</h3>
+                <p className="text-xs text-slate-500 mt-1">{currentStage.emptyDesc}</p>
               </div>
             ) : (
-              deliveries.map((parcel) => (
+              currentStage.items.map((parcel) => (
                 <div
                   key={parcel.id}
                   className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition-shadow space-y-3"
