@@ -329,6 +329,49 @@ function CourierDeliverPageContent() {
             )}
           </div>
 
+          {/* Hub Routing Locations (Origin Hub -> Destination Hub) */}
+          {(parcel.originHubLocation || parcel.destinationHubLocation) && (
+            <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-xs space-y-2">
+              {parcel.originHubLocation && (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">
+                      Origin Hub ({parcel.originZoneName || 'Origin'})
+                    </span>
+                    <p className="font-medium text-slate-700">{parcel.originHubLocation}</p>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(parcel.originHubLocation)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+                  >
+                    Maps <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+
+              {parcel.destinationHubLocation && (
+                <div className="pt-2 border-t border-indigo-100 flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
+                      Destination Hub ({parcel.destinationZoneName || 'Destination'})
+                    </span>
+                    <p className="font-semibold text-slate-800">{parcel.destinationHubLocation}</p>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(parcel.destinationHubLocation)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+                  >
+                    Maps <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Recipient Details & Click-to-Call */}
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 space-y-2 text-xs">
             <div className="flex items-center justify-between">
