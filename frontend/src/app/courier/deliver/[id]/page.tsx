@@ -305,29 +305,44 @@ function CourierDeliverPageContent() {
 
         {/* Milestone Progress Stepper */}
         <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-0" />
+          <div className="flex items-start justify-between relative">
+            {/* Connector track centered vertically through the milestone circles */}
+            <div className="absolute left-[10%] right-[10%] top-3.5 sm:top-4 -translate-y-1/2 h-1 bg-slate-100 rounded-full z-0 overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
+                style={{
+                  width: `${(Math.max(0, Math.min(currentStep, steps.length - 1)) / Math.max(1, steps.length - 1)) * 100}%`,
+                }}
+              />
+            </div>
             {steps.map((s, idx) => {
               const isCompleted = idx < currentStep;
               const isCurrent = idx === currentStep;
-              
 
-  return (
-                <div key={s.status} className="flex flex-col items-center relative z-10">
-                  <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      isCompleted
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : isCurrent
-                        ? 'bg-slate-900 text-white ring-4 ring-slate-100 shadow-xs'
-                        : 'bg-white border-2 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+              return (
+                <div key={s.status} className="flex-1 flex flex-col items-center relative z-10">
+                  <div className="relative flex items-center justify-center">
+                    {isCurrent && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -inset-1 rounded-full bg-emerald-400/50 animate-ping"
+                      />
+                    )}
+                    <div
+                      className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        isCompleted
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : isCurrent
+                          ? 'bg-slate-900 text-white ring-4 ring-emerald-300/70 shadow-[0_0_16px_rgba(16,185,129,0.55)]'
+                          : 'bg-white border-2 border-slate-200 text-slate-400'
+                      }`}
+                    >
+                      {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+                    </div>
                   </div>
                   <span
                     className={`text-[10px] sm:text-[11px] font-semibold mt-1.5 whitespace-nowrap ${
-                      isCurrent ? 'text-slate-900' : 'text-slate-400'
+                      isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-400'
                     }`}
                   >
                     {s.label}
