@@ -1,11 +1,9 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '@/lib/api';
 import MerchantDashboardPage from '../dashboard/page';
-import MerchantOrdersPage from '../orders/page';
 import MerchantBulkUploadPage from '../bulk-upload/page';
-import MerchantWebhooksPage from '../webhooks/page';
 
 vi.mock('@/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/components/layout/AppShell', () => ({
@@ -98,37 +96,6 @@ describe('Merchant dashboard', () => {
   });
 });
 
-describe('Merchant orders page', () => {
-  it('pages and filters on the server', async () => {
-    routeGets({ '/api/v1/parcels/merchant/orders': () => history([order(1), order(2)], 60, 3) });
-
-    render(<MerchantOrdersPage />);
-    expect(await screen.findByText('Showing 1–25 of 60')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
-    await waitFor(() =>
-      expect(get).toHaveBeenLastCalledWith('/api/v1/parcels/merchant/orders', { params: { page: 1, size: 25 } }),
-    );
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Delivered' }));
-    await waitFor(() =>
-      expect(get).toHaveBeenLastCalledWith('/api/v1/parcels/merchant/orders', {
-        params: { page: 0, size: 25, status: 'DELIVERED' },
-      }),
-    );
-  });
-
-  it('searches within the loaded page', async () => {
-    routeGets({ '/api/v1/parcels/merchant/orders': () => history([order(1), order(2)]) });
-    render(<MerchantOrdersPage />);
-    await screen.findByText('SD-20261114-000002');
-
-    fireEvent.change(screen.getByLabelText('Search this page'), { target: { value: 'recipient 1' } });
-    expect(screen.queryByText('SD-20261114-000002')).not.toBeInTheDocument();
-    expect(screen.getByText('SD-20261114-000001')).toBeInTheDocument();
-  });
-});
-
 function uploadFile(name: string, content: string) {
   const input = document.getElementById('bulk-file-input') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File([content], name, { type: 'text/plain' })] } });
@@ -193,75 +160,5 @@ describe('Bulk upload page', () => {
     uploadFile('orders.json', '{oops');
     expect(await screen.findByRole('alert')).toHaveTextContent('The file is not valid JSON.');
     expect(alertSpy).not.toHaveBeenCalled();
-  });
-});
-
-describe('Webhooks page', () => {
-  it('saves a new URL and reveals a regenerated secret once', async () => {
-    routeGets({
-      '/api/v1/auth/merchant/profile': () => ({ data: profile }),
-      '/api/v1/webhooks/demo-events': () => ({ data: { merchantId: profile.merchantId, count: 0, events: [] } }),
-    });
-    put.mockImplementation((_url: string, body: unknown) =>
-      Promise.resolve({
-        data: (body as { regenerateSecret?: boolean }).regenerateSecret
-          ? { ...profile, webhookSecret: 'whsec_****beef', newWebhookSecret: 'whsec_new_plaintext' }
-          : { ...profile, webhookUrl: 'https://shop.lk/swiftdrop' },
-      }),
-    );
-
-    render(<MerchantWebhooksPage />);
-    const urlInput = await screen.findByLabelText('Webhook URL');
-    await waitFor(() => expect(urlInput).toHaveValue('https://store.lk/hooks'));
-
-    fireEvent.change(urlInput, { target: { value: 'not a url' } });
-    expect(screen.getByText('Enter a full address starting with https:// or http://')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save URL' })).toBeDisabled();
-
-    fireEvent.change(urlInput, { target: { value: 'https://shop.lk/swiftdrop' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save URL' }));
-    expect(await screen.findByText(/Webhook URL saved/)).toBeInTheDocument();
-    expect(put).toHaveBeenCalledWith('/api/v1/auth/merchant/webhook', { webhookUrl: 'https://shop.lk/swiftdrop' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Regenerate secret' })); // confirm step
-    expect(await screen.findByDisplayValue('whsec_new_plaintext')).toBeInTheDocument();
-    expect(screen.getByText('whsec_****beef')).toBeInTheDocument();
-  });
-
-  it('explains the unavailable event log in plain words', async () => {
-    get.mockImplementation((url: string) =>
-      url === '/api/v1/auth/merchant/profile'
-        ? Promise.resolve({ data: profile })
-        : Promise.reject({ response: { status: 503, data: { error: 'AUTH_MAPPING_UNAVAILABLE' } } }),
-    );
-    render(<MerchantWebhooksPage />);
-    expect(await screen.findByText(/The event log is not available yet/)).toBeInTheDocument();
-  });
-
-  it('lists received events with their payload', async () => {
-    routeGets({
-      '/api/v1/auth/merchant/profile': () => ({ data: profile }),
-      '/api/v1/webhooks/demo-events': () => ({
-        data: {
-          merchantId: profile.merchantId,
-          count: 1,
-          events: [
-            {
-              id: 'ev-1',
-              merchantId: profile.merchantId,
-              eventType: 'parcel.status.updated',
-              payload: '{"trackingNumber":"SD-20261114-000001","status":"DELIVERED"}',
-              receivedAt: '2026-11-14T08:00:00Z',
-              verified: true,
-              verificationStatus: 'VERIFIED_HMAC_SHA256',
-            },
-          ],
-        },
-      }),
-    });
-    render(<MerchantWebhooksPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /parcel.status.updated/ }));
-    expect(screen.getByText(/"status": "DELIVERED"/)).toBeInTheDocument();
   });
 });

@@ -7,17 +7,6 @@ export function formatLkr(value: number | string | null | undefined): string {
   return `LKR ${amount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** True for an http(s) URL, or an empty value (which removes the webhook). */
-export function isValidWebhookUrl(value: string): boolean {
-  if (!value.trim()) return true;
-  try {
-    const url = new URL(value.trim());
-    return (url.protocol === 'https:' || url.protocol === 'http:') && Boolean(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
 /** Reads the server's problem-detail message from an axios error, or falls back to the given text. */
 export function apiErrorMessage(err: unknown, fallback: string): string {
   const data = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;

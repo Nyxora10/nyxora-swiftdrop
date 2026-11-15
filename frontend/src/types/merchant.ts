@@ -68,23 +68,6 @@ export interface MerchantProfile {
   newWebhookSecret?: string | null;
 }
 
-/** notification-webhook-service DemoWebhookEvent */
-export interface WebhookEvent {
-  id: string;
-  merchantId: string;
-  eventType: string;
-  payload: string;
-  receivedAt: string;
-  verified: boolean;
-  verificationStatus: string;
-}
-
-export interface WebhookEventsResponse {
-  merchantId: string;
-  count: number;
-  events: WebhookEvent[];
-}
-
 /** One order as sent to POST /api/v1/parcels/bulk */
 export interface BulkOrderInput {
   originZoneId: number;

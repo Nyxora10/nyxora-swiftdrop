@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiErrorMessage, formatLkr, isValidWebhookUrl } from '../format';
+import { apiErrorMessage, formatLkr } from '../format';
 
 describe('formatLkr', () => {
   it('formats amounts with two decimals and grouping', () => {
@@ -12,20 +12,6 @@ describe('formatLkr', () => {
     expect(formatLkr(undefined)).toBe('—');
     expect(formatLkr('')).toBe('—');
     expect(formatLkr('abc')).toBe('—');
-  });
-});
-
-describe('isValidWebhookUrl', () => {
-  it('accepts http and https URLs and an empty value', () => {
-    expect(isValidWebhookUrl('https://store.lk/hooks/swiftdrop')).toBe(true);
-    expect(isValidWebhookUrl('http://localhost:8083/api/v1/webhooks/demo-receiver')).toBe(true);
-    expect(isValidWebhookUrl('   ')).toBe(true);
-  });
-
-  it('rejects other schemes and malformed input', () => {
-    expect(isValidWebhookUrl('ftp://store.lk/hook')).toBe(false);
-    expect(isValidWebhookUrl('store.lk/hook')).toBe(false);
-    expect(isValidWebhookUrl('javascript:alert(1)')).toBe(false);
   });
 });
 
