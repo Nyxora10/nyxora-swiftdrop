@@ -374,7 +374,7 @@ function CourierHistoryContent() {
                           {item.pickupAddress}
                           {item.originZoneName && (
                             <span className="text-[10px] text-slate-400 block">
-                              ({item.originZoneName})
+                              ({item.originZoneName}{item.originHubLocation ? ` • ${item.originHubLocation}` : ''})
                             </span>
                           )}
                         </span>
@@ -392,7 +392,7 @@ function CourierHistoryContent() {
                         {item.dropoffAddress}
                         {item.destinationZoneName && (
                           <span className="text-[10px] text-slate-400 block">
-                            ({item.destinationZoneName})
+                            ({item.destinationZoneName}{item.destinationHubLocation ? ` • ${item.destinationHubLocation}` : ''})
                           </span>
                         )}
                       </span>
