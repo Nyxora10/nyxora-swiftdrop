@@ -394,6 +394,16 @@ export default function CourierRunsheetPage() {
 
                   {/* Recipient & Destination Details */}
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-2">
+                    <div className="flex items-start gap-2 pb-2 border-b border-slate-200/60">
+                      <MapPin className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Pickup Address
+                        </span>
+                        <p className="text-slate-700 font-medium">{parcel.pickupAddress}</p>
+                      </div>
+                    </div>
+
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
                         <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
