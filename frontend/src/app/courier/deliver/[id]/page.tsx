@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/components/layout/ToastContext';
 import {
   ArrowLeft,
+  ArrowRight,
   Package,
   Truck,
   MapPin,
@@ -31,6 +32,29 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+
+function formatStatusLabel(status: ParcelStatus): string {
+  switch (status) {
+    case 'CREATED':
+      return 'Created';
+    case 'ASSIGNED':
+      return 'Assigned';
+    case 'PICKED_UP':
+      return 'Picked Up';
+    case 'IN_TRANSIT':
+      return 'In Transit';
+    case 'OUT_FOR_DELIVERY':
+      return 'Out for Delivery';
+    case 'DELIVERED':
+      return 'Delivered';
+    case 'FAILED':
+      return 'Attempt Failed';
+    case 'RETURNED_TO_SENDER':
+      return 'Returned to Sender';
+    default:
+      return status;
+  }
+}
 
 function CourierDeliverPageContent() {
   const router = useRouter();
@@ -74,7 +98,9 @@ function CourierDeliverPageContent() {
       void fetchParcel();
     }, 0);
 
-    return () => window.clearTimeout(timeoutId);
+    
+
+  return () => window.clearTimeout(timeoutId);
   }, [fetchParcel]);
 
   // Handle Photo Selection from Camera or Gallery
@@ -134,14 +160,21 @@ function CourierDeliverPageContent() {
     setUpdating(true);
     try {
       let proofUrl = '';
+      let signatureUrl = '';
 
-      // Upload proof file (signature or photo)
+      // Upload doorstep photo and drawn signature independently when provided
       if (photoFile) {
         const uploadRes = await uploadDeliveryProof(parcel.id, photoFile, photoFile.name);
         proofUrl = uploadRes.proofPhotoUrl;
-      } else if (signatureBlob) {
-        const uploadRes = await uploadDeliveryProof(parcel.id, signatureBlob, `${parcel.id}_signature.png`);
-        proofUrl = uploadRes.proofPhotoUrl;
+      }
+      if (signatureBlob) {
+        const sigRes = await uploadDeliveryProof(parcel.id, signatureBlob, `${parcel.id}_signature.png`);
+        signatureUrl = sigRes.proofPhotoUrl;
+      }
+
+      // Satisfy backend state machine guard if courier captured only a signature
+      if (!proofUrl && signatureUrl) {
+        proofUrl = signatureUrl;
       }
 
       // Execute DELIVERED status transition
@@ -149,6 +182,7 @@ function CourierDeliverPageContent() {
         targetStatus: 'DELIVERED',
         recipientSignatureName: recipientName.trim(),
         proofPhotoUrl: proofUrl,
+        signatureImageUrl: signatureUrl || undefined,
         deliveryNote: deliveryNote.trim() || 'Successfully delivered to recipient',
       });
 
@@ -216,7 +250,9 @@ function CourierDeliverPageContent() {
   const currentStep = parcel ? getStepIndex(parcel.currentStatus) : 0;
 
   if (loading) {
-    return (
+    
+
+  return (
       <AppShell>
         <div className="max-w-xl mx-auto p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-2xs mt-8">
           <RefreshCw className="w-8 h-8 mx-auto text-emerald-600 animate-spin mb-3" />
@@ -227,7 +263,9 @@ function CourierDeliverPageContent() {
   }
 
   if (!parcel) {
-    return (
+    
+
+  return (
       <AppShell>
         <div className="max-w-xl mx-auto p-8 text-center bg-white rounded-2xl border border-slate-200 mt-8 space-y-4">
           <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
@@ -245,6 +283,8 @@ function CourierDeliverPageContent() {
       </AppShell>
     );
   }
+
+  
 
   return (
     <AppShell>
@@ -265,27 +305,44 @@ function CourierDeliverPageContent() {
 
         {/* Milestone Progress Stepper */}
         <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-0" />
+          <div className="flex items-start justify-between relative">
+            {/* Connector track centered vertically through the milestone circles */}
+            <div className="absolute left-[10%] right-[10%] top-3.5 sm:top-4 -translate-y-1/2 h-1 bg-slate-100 rounded-full z-0 overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
+                style={{
+                  width: `${(Math.max(0, Math.min(currentStep, steps.length - 1)) / Math.max(1, steps.length - 1)) * 100}%`,
+                }}
+              />
+            </div>
             {steps.map((s, idx) => {
               const isCompleted = idx < currentStep;
               const isCurrent = idx === currentStep;
+
               return (
-                <div key={s.status} className="flex flex-col items-center relative z-10">
-                  <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      isCompleted
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : isCurrent
-                        ? 'bg-slate-900 text-white ring-4 ring-slate-100 shadow-xs'
-                        : 'bg-white border-2 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+                <div key={s.status} className="flex-1 flex flex-col items-center relative z-10">
+                  <div className="relative flex items-center justify-center">
+                    {isCurrent && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -inset-1 rounded-full bg-emerald-400/50 animate-ping"
+                      />
+                    )}
+                    <div
+                      className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        isCompleted
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : isCurrent
+                          ? 'bg-slate-900 text-white ring-4 ring-emerald-300/70 shadow-[0_0_16px_rgba(16,185,129,0.55)]'
+                          : 'bg-white border-2 border-slate-200 text-slate-400'
+                      }`}
+                    >
+                      {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+                    </div>
                   </div>
                   <span
                     className={`text-[10px] sm:text-[11px] font-semibold mt-1.5 whitespace-nowrap ${
-                      isCurrent ? 'text-slate-900' : 'text-slate-400'
+                      isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-700' : 'text-slate-400'
                     }`}
                   >
                     {s.label}
@@ -303,7 +360,14 @@ function CourierDeliverPageContent() {
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 Current Status
               </span>
-              <h2 className="text-lg font-bold text-slate-900">{parcel.currentStatus}</h2>
+              <h2 className="text-lg font-bold text-slate-900">{formatStatusLabel(parcel.currentStatus)}</h2>
+              {(parcel.originZoneName || parcel.destinationZoneName) && (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                  <span className="font-medium text-slate-700">{parcel.originZoneName || 'Origin Hub'}</span>
+                  <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span className="font-medium text-indigo-700">{parcel.destinationZoneName || 'Destination Hub'}</span>
+                </p>
+              )}
             </div>
             {parcel.failureCount > 0 && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
@@ -312,6 +376,49 @@ function CourierDeliverPageContent() {
               </span>
             )}
           </div>
+
+          {/* Hub Routing Locations (Origin Hub -> Destination Hub) */}
+          {(parcel.originHubLocation || parcel.destinationHubLocation) && (
+            <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-xs space-y-2">
+              {parcel.originHubLocation && (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">
+                      Origin Hub ({parcel.originZoneName || 'Origin'})
+                    </span>
+                    <p className="font-medium text-slate-700">{parcel.originHubLocation}</p>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(parcel.originHubLocation)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+                  >
+                    Maps <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+
+              {parcel.destinationHubLocation && (
+                <div className="pt-2 border-t border-indigo-100 flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">
+                      Destination Hub ({parcel.destinationZoneName || 'Destination'})
+                    </span>
+                    <p className="font-semibold text-slate-800">{parcel.destinationHubLocation}</p>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(parcel.destinationHubLocation)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+                  >
+                    Maps <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Recipient Details & Click-to-Call */}
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 space-y-2 text-xs">
@@ -332,6 +439,28 @@ function CourierDeliverPageContent() {
                   Call Recipient
                 </a>
               )}
+            </div>
+
+            {/* Pickup Address with Google Maps link */}
+            <div className="pt-2 border-t border-slate-200/60 flex items-start justify-between gap-2">
+              <div className="flex items-start gap-1.5">
+                <MapPin className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Pickup Address
+                  </span>
+                  <p className="font-medium text-slate-700">{parcel.pickupAddress}</p>
+                </div>
+              </div>
+
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(parcel.pickupAddress)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+              >
+                Maps <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
             {/* Dropoff Address with Google Maps link */}
@@ -382,7 +511,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Package className="w-5 h-5" />}
-            Confirm Parcel Pickup (PICKED_UP)
+            Confirm Pickup
           </button>
         )}
 
@@ -393,7 +522,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-sky-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Truck className="w-5 h-5" />}
-            Mark In Transit to Hub (IN_TRANSIT)
+            Mark In Transit
           </button>
         )}
 
@@ -404,7 +533,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Navigation className="w-5 h-5" />}
-            Start Last-Mile Delivery (OUT_FOR_DELIVERY)
+            Mark Out for Delivery
           </button>
         )}
 
@@ -422,7 +551,7 @@ function CourierDeliverPageContent() {
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
               >
-                Complete Delivery (DELIVERED)
+                Complete Delivery
               </button>
 
               <button
@@ -434,7 +563,7 @@ function CourierDeliverPageContent() {
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
               >
-                Report Failure (FAILED)
+                Report Failed Attempt
               </button>
             </div>
 
@@ -526,7 +655,7 @@ function CourierDeliverPageContent() {
                   ) : (
                     <CheckCircle2 className="w-4 h-4" />
                   )}
-                  Upload Proof & Mark DELIVERED
+                  Confirm & Complete Delivery
                 </button>
               </div>
             ) : (
@@ -571,7 +700,7 @@ function CourierDeliverPageContent() {
                       <span className="font-bold">Threshold Warning:</span>
                       <p>
                         This will be the 3rd failed attempt. Under SwiftDrop logistics policy, this
-                        parcel will automatically transition to <strong>RETURNED_TO_SENDER</strong>.
+                        parcel will automatically transition to <strong>Returned to Sender</strong>.
                       </p>
                     </div>
                   </div>
@@ -588,7 +717,7 @@ function CourierDeliverPageContent() {
                   ) : (
                     <AlertTriangle className="w-4 h-4" />
                   )}
-                  Log Delivery Failure (FAILED)
+                  Submit Failed Attempt
                 </button>
               </div>
             )}
@@ -635,8 +764,19 @@ function CourierDeliverPageContent() {
 }
 
 export default function CourierDeliverPage() {
+  
+
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500">Loading delivery details...</p>
+          </div>
+        </div>
+      }
+    >
       <CourierDeliverPageContent />
     </Suspense>
   );

@@ -1,6 +1,8 @@
 package com.nyxora.swiftdrop.parcel.courier;
 
 import com.nyxora.swiftdrop.parcel.booking.config.RabbitMqConfig;
+import com.nyxora.swiftdrop.parcel.courier.dto.CourierDeliveryHistoryItemDto;
+import com.nyxora.swiftdrop.parcel.courier.dto.CourierHistoryResponseDto;
 import com.nyxora.swiftdrop.parcel.courier.dto.CourierParcelCardDto;
 import com.nyxora.swiftdrop.parcel.courier.dto.CourierRunsheetResponseDto;
 import com.nyxora.swiftdrop.parcel.courier.dto.ParcelStatusUpdateResponseDto;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -77,12 +80,14 @@ class CourierExecutionServiceTest {
                 .id(1)
                 .zoneCode("COL-01")
                 .zoneName("Colombo Fort")
+                .hubLocation("No. 120, Baseline Road, Colombo 09")
                 .build();
 
         destZone = DeliveryZone.builder()
                 .id(2)
                 .zoneCode("COL-03")
                 .zoneName("Kollupitiya")
+                .hubLocation("No. 32, William Gopallawa Mawatha, Kandy")
                 .build();
     }
 
@@ -404,6 +409,78 @@ class CourierExecutionServiceTest {
 
             assertThat(response).isNotNull();
             assertThat(response.getCurrentStatus()).isEqualTo(ParcelStatus.PICKED_UP);
+        }
+    }
+
+    @Nested
+    @DisplayName("Hub Location & Signature Proof Tests")
+    class HubAndSignatureProofTests {
+
+        @Test
+        @DisplayName("getCourierParcelById maps originHubLocation and destinationHubLocation from zones")
+        void getCourierParcelByIdIncludesOriginAndDestinationHubLocations() {
+            Parcel parcel = buildTestParcel(parcelId, ParcelStatus.IN_TRANSIT, courierId);
+            when(parcelRepository.findById(parcelId)).thenReturn(Optional.of(parcel));
+            when(parcelStatusHistoryRepository.countByParcel_IdAndStatus(parcelId, ParcelStatus.FAILED)).thenReturn(0L);
+
+            CourierParcelCardDto card = courierExecutionService.getCourierParcelById(courierId, parcelId);
+
+            assertThat(card.getOriginHubLocation()).isEqualTo("No. 120, Baseline Road, Colombo 09");
+            assertThat(card.getDestinationHubLocation()).isEqualTo("No. 32, William Gopallawa Mawatha, Kandy");
+        }
+
+        @Test
+        @DisplayName("updateParcelStatus persists both proofPhotoUrl and signatureImageUrl on history")
+        void updateParcelStatusPersistsSignatureImageUrl() {
+            Parcel parcel = buildTestParcel(parcelId, ParcelStatus.OUT_FOR_DELIVERY, courierId);
+            when(parcelRepository.findById(parcelId)).thenReturn(Optional.of(parcel));
+            when(parcelStatusHistoryRepository.countByParcel_IdAndStatus(parcelId, ParcelStatus.FAILED)).thenReturn(0L);
+
+            UpdateParcelStatusRequestDto req = UpdateParcelStatusRequestDto.builder()
+                    .targetStatus(ParcelStatus.DELIVERED)
+                    .recipientSignatureName("Nimal Silva")
+                    .proofPhotoUrl("https://cdn.example.com/photo.jpg")
+                    .signatureImageUrl("https://cdn.example.com/sig.png")
+                    .build();
+
+            courierExecutionService.updateParcelStatus(courierId, parcelId, req);
+
+            ArgumentCaptor<ParcelStatusHistory> historyCaptor = ArgumentCaptor.forClass(ParcelStatusHistory.class);
+            verify(parcelStatusHistoryRepository).save(historyCaptor.capture());
+
+            ParcelStatusHistory savedHistory = historyCaptor.getValue();
+            assertThat(savedHistory.getProofPhotoUrl()).isEqualTo("https://cdn.example.com/photo.jpg");
+            assertThat(savedHistory.getSignatureImageUrl()).isEqualTo("https://cdn.example.com/sig.png");
+            assertThat(savedHistory.getRecipientSignatureName()).isEqualTo("Nimal Silva");
+        }
+
+        @Test
+        @DisplayName("getCourierHistory returns signatureImageUrl, proofPhotoUrl, and pickup/dropoff addresses")
+        void getCourierHistoryMapsSignatureImageUrlAndAddresses() {
+            Parcel deliveredParcel = buildTestParcel(parcelId, ParcelStatus.DELIVERED, courierId);
+            when(parcelRepository.findByAssignedCourierId(courierId))
+                    .thenReturn(Collections.singletonList(deliveredParcel));
+
+            ParcelStatusHistory historyRecord = ParcelStatusHistory.builder()
+                    .parcel(deliveredParcel)
+                    .status(ParcelStatus.DELIVERED)
+                    .updatedByUserId(courierId)
+                    .proofPhotoUrl("https://cdn.example.com/photo.jpg")
+                    .signatureImageUrl("https://cdn.example.com/sig.png")
+                    .recipientSignatureName("Nimal Silva")
+                    .build();
+            when(parcelStatusHistoryRepository.findByParcel_IdOrderByCreatedAtAsc(parcelId))
+                    .thenReturn(Collections.singletonList(historyRecord));
+
+            CourierHistoryResponseDto history = courierExecutionService.getCourierHistory(courierId);
+
+            assertThat(history.getDeliveredCount()).isEqualTo(1);
+            assertThat(history.getHistory()).hasSize(1);
+            CourierDeliveryHistoryItemDto item = history.getHistory().get(0);
+            assertThat(item.getPickupAddress()).isEqualTo("123 Main St, Colombo 01");
+            assertThat(item.getDropoffAddress()).isEqualTo("456 Galle Rd, Colombo 03");
+            assertThat(item.getProofPhotoUrl()).isEqualTo("https://cdn.example.com/photo.jpg");
+            assertThat(item.getSignatureImageUrl()).isEqualTo("https://cdn.example.com/sig.png");
         }
     }
 }

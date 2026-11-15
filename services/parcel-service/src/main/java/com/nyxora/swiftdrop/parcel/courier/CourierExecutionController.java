@@ -54,6 +54,25 @@ public class CourierExecutionController {
         CourierRunsheetResponseDto response = courierExecutionService.getCourierRunsheet(courierId);
         return ResponseEntity.ok(response);
     }
+    @Operation(summary = "Get Courier Delivery History",
+            description = "Retrieves all completed, delivered, and terminal parcels for the courier along with proof of delivery details.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Delivery history retrieved successfully"),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid courier identity header"),
+            @ApiResponse(responseCode = "403", description = "Access denied: Missing ROLE_COURIER or ROLE_ADMIN")
+    })
+    @GetMapping("/courier/history")
+    @PreAuthorize("hasAnyRole('COURIER', 'ADMIN')")
+    public ResponseEntity<CourierHistoryResponseDto> getCourierHistory(
+            @Parameter(description = "Authenticated courier UUID (propagated by API Gateway)")
+            @RequestHeader(value = "X-Courier-Id", required = false) UUID xCourierId,
+            @RequestHeader(value = "X-User-Id", required = false) UUID xUserId) {
+
+        UUID courierId = resolveCourierId(xCourierId, xUserId);
+        log.info("Fetching delivery history for courier: {}", courierId);
+        CourierHistoryResponseDto response = courierExecutionService.getCourierHistory(courierId);
+        return ResponseEntity.ok(response);
+    }
 
     @Operation(summary = "Get Assigned Courier Parcel",
             description = "Retrieves details of a specific parcel assigned to the courier. Enforces ownership authorization.")
@@ -74,7 +93,6 @@ public class CourierExecutionController {
         CourierParcelCardDto parcel = courierExecutionService.getCourierParcelById(courierId, parcelId);
         return ResponseEntity.ok(parcel);
     }
-
     @Operation(summary = "Update Parcel Delivery Status",
             description = "Transitions a parcel's status (PICKED_UP, OUT_FOR_DELIVERY, DELIVERED, FAILED) with state machine validation.")
     @ApiResponses({
