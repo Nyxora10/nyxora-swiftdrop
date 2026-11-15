@@ -29,7 +29,9 @@ export interface CourierParcelCard {
   trackingNumber: string;
   currentStatus: ParcelStatus;
   originZoneName?: string | null;
+  originHubLocation?: string | null;
   destinationZoneName?: string | null;
+  destinationHubLocation?: string | null;
   pickupAddress: string;
   dropoffAddress: string;
   recipientName: string;
@@ -83,8 +85,10 @@ export interface CourierDeliveryHistoryItem {
   recipientPhone: string;
   pickupAddress?: string | null;
   originZoneName?: string | null;
+  originHubLocation?: string | null;
   dropoffAddress: string;
   destinationZoneName?: string | null;
+  destinationHubLocation?: string | null;
   weightKg: number;
   parcelSize: ParcelSize;
   estimatedFee: number;
