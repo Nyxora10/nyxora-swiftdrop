@@ -57,6 +57,9 @@ public class OrderSummaryDto {
     @Schema(description = "Estimated delivery fee in LKR", example = "530.00")
     private BigDecimal estimatedFee;
 
+    @Schema(description = "Merchant discount applied to the fee in LKR; null when no discount was recorded", example = "91.50")
+    private BigDecimal discountAmount;
+
     @Builder.Default
     @Schema(description = "Currency", example = "LKR")
     private String currency = "LKR";

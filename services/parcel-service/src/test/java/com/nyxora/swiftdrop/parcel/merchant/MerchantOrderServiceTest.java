@@ -126,7 +126,9 @@ class MerchantOrderServiceTest {
         assertEquals(ParcelStatus.CREATED, response.getCurrentStatus());
         assertEquals("DARAZ-PK-9812", response.getMerchantOrderReference());
 
-        verify(parcelRepository, times(1)).save(any(Parcel.class));
+        // The discount is persisted on the parcel so order history can report real savings.
+        verify(parcelRepository, times(1)).save(argThat((Parcel p) ->
+                new BigDecimal("135.00").equals(p.getDiscountAmount())));
         verify(parcelStatusHistoryRepository, times(1)).save(any(ParcelStatusHistory.class));
     }
 
