@@ -33,6 +33,9 @@ public class DeliveryZone {
     @Column(name = "district", nullable = false, length = 50)
     private String district;
 
+    @Column(name = "hub_location", length = 255)
+    private String hubLocation;
+
     @Column(name = "base_surcharge", nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal baseSurcharge = BigDecimal.ZERO;
@@ -41,4 +44,3 @@ public class DeliveryZone {
     @Builder.Default
     private Boolean isActive = true;
 }
-

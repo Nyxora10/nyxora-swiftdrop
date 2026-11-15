@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import { authStorage, useUserSession } from '@/lib/auth';
+import AiDeliveryAssistantWidget from '@/components/AiDeliveryAssistantWidget';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -40,6 +41,7 @@ export default function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      {user?.role === 'ROLE_CUSTOMER' && <AiDeliveryAssistantWidget />}
     </div>
   );
 }

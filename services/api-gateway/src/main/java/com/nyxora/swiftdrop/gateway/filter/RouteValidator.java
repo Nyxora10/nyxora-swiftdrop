@@ -15,6 +15,7 @@ public class RouteValidator {
 
     /**
      * Whitelist of public endpoints that bypass perimeter JWT validation.
+     * Task 4.2 additions: /api/v1/parcels/quote, /api/v1/webhooks/demo-receiver.
      */
     public static final List<String> OPEN_API_ENDPOINTS = List.of(
             "/api/v1/auth/login",
@@ -27,6 +28,7 @@ public class RouteValidator {
             "/api/v1/parcels/quote",
             "/api/v1/parcels/track",
             "/api/v1/public/zones",
+            "/api/v1/webhooks/demo-receiver",
             "/ws-swiftdrop",
             "/api/v1/parcels/quote",
             "/api/v1/webhooks/demo-receiver",

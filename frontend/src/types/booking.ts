@@ -6,6 +6,7 @@ export interface DeliveryZone {
   zoneCode: string;
   zoneName: string;
   district: string;
+  hubLocation: string;
   baseSurcharge?: number;
 }
 

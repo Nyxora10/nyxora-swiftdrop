@@ -61,6 +61,7 @@ public class PublicZoneQueryService {
                 .zoneCode(zone.getZoneCode())
                 .zoneName(zone.getZoneName())
                 .district(zone.getDistrict())
+                .hubLocation(zone.getHubLocation())
                 .build();
     }
 }

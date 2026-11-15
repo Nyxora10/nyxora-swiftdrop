@@ -77,10 +77,10 @@ class BulkOrderTransactionIntegrationTest {
     void mixedBatch_commitsValidRows_andReportsInvalidRows() {
         UUID merchantId = UUID.randomUUID();
         MerchantOrderRequest valid = order(colombo.getId(), kandy.getId(), "REF-OK");
-        MerchantOrderRequest sameZone = order(colombo.getId(), colombo.getId(), "REF-BAD");
+        MerchantOrderRequest missingDestination = order(colombo.getId(), Integer.MAX_VALUE, "REF-BAD");
 
         BulkOrderResponse response = bulkOrderService.processBulkOrders(
-                BulkOrderRequest.builder().orders(List.of(valid, sameZone)).build(),
+                BulkOrderRequest.builder().orders(List.of(valid, missingDestination)).build(),
                 merchantId, merchantId);
 
         assertThat(response.getSuccessfulCount()).isEqualTo(1);

@@ -25,6 +25,9 @@ public class UpdateZoneRequest {
     @Size(max = 50, message = "District must be at most 50 characters")
     private String district;
 
+    @Size(max = 255, message = "Hub location must be at most 255 characters")
+    private String hubLocation;
+
     @DecimalMin(value = "0.00", message = "Base surcharge cannot be negative")
     private BigDecimal baseSurcharge;
     private Boolean isActive;

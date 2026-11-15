@@ -1,8 +1,11 @@
 package com.nyxora.swiftdrop.parcel.pricing;
 
+import com.nyxora.swiftdrop.parcel.domain.entity.DefaultPricingRule;
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
+import com.nyxora.swiftdrop.parcel.domain.enums.RouteType;
+import com.nyxora.swiftdrop.parcel.domain.repository.DefaultPricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.pricing.strategy.ExpressSameDayPricingStrategy;
@@ -31,6 +34,9 @@ class PricingEngineTest {
     private PricingRuleRepository pricingRuleRepository;
 
     @Mock
+    private DefaultPricingRuleRepository defaultPricingRuleRepository;
+
+    @Mock
     private DeliveryZoneRepository deliveryZoneRepository;
 
     private PricingEngine pricingEngine;
@@ -46,7 +52,11 @@ class PricingEngineTest {
                 new MerchantDiscountPricingStrategy(),
                 new ExpressSameDayPricingStrategy()
         );
-        pricingEngine = new PricingEngine(strategies, pricingRuleRepository, deliveryZoneRepository);
+        pricingEngine = new PricingEngine(
+                strategies,
+                pricingRuleRepository,
+                defaultPricingRuleRepository,
+                deliveryZoneRepository);
 
         originZone = DeliveryZone.builder()
                 .id(1)
@@ -159,12 +169,15 @@ class PricingEngineTest {
     }
 
     @Test
-    @DisplayName("Throws IllegalArgumentException when no pricing rule exists for zone pair and size")
-    void calculateQuote_pricingRuleNotFound_throwsException() {
+    @DisplayName("Uses a different-zone default when no exact route override exists")
+    void calculateQuote_noOverride_usesDefaultRule() {
         when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(originZone));
         when(deliveryZoneRepository.findById(2)).thenReturn(Optional.of(destZone));
         when(pricingRuleRepository.findByOriginZone_IdAndDestinationZone_IdAndParcelSize(1, 2, ParcelSize.LARGE))
                 .thenReturn(Optional.empty());
+        when(defaultPricingRuleRepository.findByRouteTypeAndParcelSize(RouteType.DIFFERENT_ZONE, ParcelSize.LARGE))
+                .thenReturn(Optional.of(defaultRule(RouteType.DIFFERENT_ZONE, ParcelSize.LARGE,
+                        "450.00", "80.00", "1.50")));
 
         ParcelQuoteRequest request = ParcelQuoteRequest.builder()
                 .originZoneId(1)
@@ -174,14 +187,23 @@ class PricingEngineTest {
                 .tier(QuoteTier.STANDARD)
                 .build();
 
-        assertThatThrownBy(() -> pricingEngine.calculateQuote(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("No pricing rule found");
+        ParcelQuoteResponse quote = pricingEngine.calculateQuote(request);
+
+        assertThat(quote.getBaseFee()).isEqualByComparingTo("450.00");
+        assertThat(quote.getSizeMultiplier()).isEqualByComparingTo("1.50");
+        assertThat(quote.getTotalFee()).isEqualByComparingTo("1950.00");
     }
 
     @Test
-    @DisplayName("Rejects quote when origin and destination zones are the same")
-    void calculateQuote_sameZone_throwsException() {
+    @DisplayName("Uses a same-zone default for delivery within one district")
+    void calculateQuote_sameZone_usesDefaultRule() {
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(originZone));
+        when(pricingRuleRepository.findByOriginZone_IdAndDestinationZone_IdAndParcelSize(1, 1, ParcelSize.SMALL))
+                .thenReturn(Optional.empty());
+        when(defaultPricingRuleRepository.findByRouteTypeAndParcelSize(RouteType.SAME_ZONE, ParcelSize.SMALL))
+                .thenReturn(Optional.of(defaultRule(RouteType.SAME_ZONE, ParcelSize.SMALL,
+                        "350.00", "80.00", "1.00")));
+
         ParcelQuoteRequest request = ParcelQuoteRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(1)
@@ -190,8 +212,48 @@ class PricingEngineTest {
                 .tier(QuoteTier.STANDARD)
                 .build();
 
+        ParcelQuoteResponse quote = pricingEngine.calculateQuote(request);
+
+        assertThat(quote.getBaseFee()).isEqualByComparingTo("350.00");
+        assertThat(quote.getTotalFee()).isEqualByComparingTo("430.00");
+    }
+
+    @Test
+    @DisplayName("Fails clearly when neither an override nor a required default exists")
+    void calculateQuote_defaultMissing_throwsException() {
+        when(deliveryZoneRepository.findById(1)).thenReturn(Optional.of(originZone));
+        when(deliveryZoneRepository.findById(2)).thenReturn(Optional.of(destZone));
+        when(pricingRuleRepository.findByOriginZone_IdAndDestinationZone_IdAndParcelSize(1, 2, ParcelSize.SMALL))
+                .thenReturn(Optional.empty());
+        when(defaultPricingRuleRepository.findByRouteTypeAndParcelSize(RouteType.DIFFERENT_ZONE, ParcelSize.SMALL))
+                .thenReturn(Optional.empty());
+
+        ParcelQuoteRequest request = ParcelQuoteRequest.builder()
+                .originZoneId(1)
+                .destinationZoneId(2)
+                .weightKg(BigDecimal.ONE)
+                .parcelSize(ParcelSize.SMALL)
+                .tier(QuoteTier.STANDARD)
+                .build();
+
         assertThatThrownBy(() -> pricingEngine.calculateQuote(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Origin and destination zones must be different");
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No default pricing rule found");
+    }
+
+    private DefaultPricingRule defaultRule(
+            RouteType routeType,
+            ParcelSize parcelSize,
+            String baseFee,
+            String ratePerKg,
+            String sizeMultiplier
+    ) {
+        return DefaultPricingRule.builder()
+                .routeType(routeType)
+                .parcelSize(parcelSize)
+                .baseFee(new BigDecimal(baseFee))
+                .ratePerKg(new BigDecimal(ratePerKg))
+                .sizeMultiplier(new BigDecimal(sizeMultiplier))
+                .build();
     }
 }

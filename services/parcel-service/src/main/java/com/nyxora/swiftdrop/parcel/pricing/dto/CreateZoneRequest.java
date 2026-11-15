@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -30,8 +31,11 @@ public class CreateZoneRequest {
     @NotBlank(message = "District is required")
     private String district;
 
+    @NotBlank(message = "Hub location is required")
+    @Size(max = 255, message = "Hub location must be at most 255 characters")
+    private String hubLocation;
+
     @NotNull(message = "Base surcharge is required")
     @DecimalMin(value = "0.00", message = "Base surcharge cannot be negative")
     private BigDecimal baseSurcharge;
 }
-

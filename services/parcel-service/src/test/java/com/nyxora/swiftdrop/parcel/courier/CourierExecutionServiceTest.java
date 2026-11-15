@@ -13,7 +13,6 @@ import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.ParcelStatusHistoryRepository;
-import com.nyxora.swiftdrop.parcel.statemachine.InvalidStateTransitionException;
 import com.nyxora.swiftdrop.parcel.statemachine.ParcelStateMachine;
 import com.nyxora.swiftdrop.parcel.websocket.event.ParcelStatusChangedLocalEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,8 +20,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.AmqpException;
@@ -31,10 +30,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
