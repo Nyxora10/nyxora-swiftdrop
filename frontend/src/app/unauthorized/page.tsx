@@ -15,7 +15,7 @@ export default function UnauthorizedPage() {
 
   const handleGoHome = () => {
     const user = authStorage.getUser();
-    if (user?.role === 'ROLE_ADMIN') router.push('/admin/dispatch');
+    if (user?.role === 'ROLE_ADMIN') router.push('/admin/pricing');
     else if (user?.role === 'ROLE_MERCHANT') router.push('/merchant/dashboard');
     else if (user?.role === 'ROLE_COURIER') router.push('/courier/runsheet');
     else router.push('/customer/book');

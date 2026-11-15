@@ -2,6 +2,8 @@ package com.nyxora.swiftdrop.parcel.pricing;
 
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
+import com.nyxora.swiftdrop.parcel.domain.enums.RouteType;
+import com.nyxora.swiftdrop.parcel.domain.repository.DefaultPricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,16 +29,17 @@ public class PricingEngine {
 
     private final List<PricingStrategy> strategies;
     private final PricingRuleRepository pricingRuleRepository;
+    private final DefaultPricingRuleRepository defaultPricingRuleRepository;
     private final DeliveryZoneRepository deliveryZoneRepository;
 
     /**
      * Calculates a delivery fee quote for the given request.
-     * Resolves the applicable pricing rule from the inter-zone matrix,
+     * Resolves an exact route override first and otherwise uses one of six defaults,
      * selects the matching strategy, and returns an itemized quote.
      *
      * @param request the parcel quote request
      * @return itemized fee breakdown
-     * @throws IllegalArgumentException if no pricing rule exists for the zone pair + size
+     * @throws IllegalStateException    if the required default pricing rule is missing
      * @throws IllegalStateException    if no strategy supports the requested tier
      */
     public ParcelQuoteResponse calculateQuote(ParcelQuoteRequest request) {
@@ -44,10 +47,6 @@ public class PricingEngine {
         log.debug("Calculating quote: origin={}, dest={}, weight={}kg, size={}, tier={}",
                 request.getOriginZoneId(), request.getDestinationZoneId(),
                 request.getWeightKg(), request.getParcelSize(), request.getTier());
-
-        if (request.getOriginZoneId().equals(request.getDestinationZoneId())) {
-            throw new IllegalArgumentException("Origin and destination zones must be different");
-        }
 
         // Resolve destination zone for surcharge
         DeliveryZone destZone = deliveryZoneRepository.findById(request.getDestinationZoneId())
@@ -69,17 +68,22 @@ public class PricingEngine {
                     "Origin zone is not active: " + originZone.getZoneCode());
         }
 
-        // Look up the inter-zone pricing rule matrix entry
+        RouteType routeType = RouteType.between(
+                request.getOriginZoneId(),
+                request.getDestinationZoneId());
+
+        // Exact route rules are optional overrides; one of six defaults covers every other pair.
         PricingRule rule = pricingRuleRepository
                 .findByOriginZone_IdAndDestinationZone_IdAndParcelSize(
                         request.getOriginZoneId(),
                         request.getDestinationZoneId(),
                         request.getParcelSize())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        String.format("No pricing rule found for origin=%d, destination=%d, size=%s",
-                                request.getOriginZoneId(),
-                                request.getDestinationZoneId(),
-                                request.getParcelSize())));
+                .orElseGet(() -> defaultPricingRuleRepository
+                        .findByRouteTypeAndParcelSize(routeType, request.getParcelSize())
+                        .map(defaultRule -> defaultRule.toEffectiveRule(originZone, destZone))
+                        .orElseThrow(() -> new IllegalStateException(
+                                String.format("No default pricing rule found for routeType=%s, size=%s",
+                                        routeType, request.getParcelSize()))));
 
         // Select and apply the strategy
         PricingStrategy strategy = strategies.stream()

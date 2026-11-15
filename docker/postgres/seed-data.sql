@@ -65,29 +65,44 @@ ON CONFLICT (user_id) DO NOTHING;
 -- ========================================================
 \c parcel_db;
 
-INSERT INTO delivery_zones (id, zone_code, zone_name, district, base_surcharge, is_active) VALUES
-    (1, 'WP-COL-01', 'Colombo Central Metro',     'Colombo',    50.00, TRUE),
-    (2, 'WP-GAM-01', 'Gampaha Industrial Hub',    'Gampaha',    75.00, TRUE),
-    (3, 'CP-KAN-01', 'Kandy Central Highlands',   'Kandy',     100.00, TRUE),
-    (4, 'SP-GAL-01', 'Galle Southern Corridor',   'Galle',     120.00, TRUE),
-    (5, 'NP-JAF-01', 'Jaffna Northern Peninsula', 'Jaffna',    200.00, TRUE),
-    (6, 'NW-KUR-01', 'Kurunegala Wayamba Zone',   'Kurunegala', 90.00, TRUE)
+INSERT INTO delivery_zones (id, zone_code, zone_name, district, hub_location, base_surcharge, is_active) VALUES
+    (1,  'WP-COL-01', 'Colombo Central Hub',       'Colombo',       'No. 120, Baseline Road, Colombo 09',                    50.00, TRUE),
+    (2,  'WP-GAM-01', 'Gampaha District Hub',      'Gampaha',       'No. 45, Colombo Road, Gampaha',                         75.00, TRUE),
+    (3,  'WP-KAL-01', 'Kalutara District Hub',     'Kalutara',      'No. 78, Galle Road, Kalutara South',                    70.00, TRUE),
+    (4,  'CP-KAN-01', 'Kandy District Hub',        'Kandy',         'No. 32, William Gopallawa Mawatha, Kandy',             100.00, TRUE),
+    (5,  'CP-MTL-01', 'Matale District Hub',       'Matale',        'No. 18, Kandy-Jaffna Highway, Matale',                 110.00, TRUE),
+    (6,  'CP-NUW-01', 'Nuwara Eliya District Hub', 'Nuwara Eliya', 'No. 25, Badulla Road, Nuwara Eliya',                   140.00, TRUE),
+    (7,  'SP-GAL-01', 'Galle District Hub',        'Galle',         'No. 90, Wakwella Road, Galle',                         120.00, TRUE),
+    (8,  'SP-MTR-01', 'Matara District Hub',       'Matara',        'No. 55, Akuressa Road, Matara',                        130.00, TRUE),
+    (9,  'SP-HAM-01', 'Hambantota District Hub',   'Hambantota',    'No. 14, Main Street, Hambantota',                      150.00, TRUE),
+    (10, 'NP-JAF-01', 'Jaffna District Hub',       'Jaffna',        'No. 64, KKS Road, Jaffna',                             200.00, TRUE),
+    (11, 'NP-KIL-01', 'Kilinochchi District Hub',  'Kilinochchi',   'No. 22, A9 Road, Kilinochchi',                         210.00, TRUE),
+    (12, 'NP-MAN-01', 'Mannar District Hub',       'Mannar',        'No. 11, Hospital Road, Mannar',                        220.00, TRUE),
+    (13, 'NP-MUL-01', 'Mullaitivu District Hub',   'Mullaitivu',    'No. 16, Beach Road, Mullaitivu',                       230.00, TRUE),
+    (14, 'NP-VAV-01', 'Vavuniya District Hub',     'Vavuniya',      'No. 80, Kandy Road, Vavuniya',                         180.00, TRUE),
+    (15, 'EP-BAT-01', 'Batticaloa District Hub',   'Batticaloa',    'No. 36, Trinco Road, Batticaloa',                      190.00, TRUE),
+    (16, 'EP-AMP-01', 'Ampara District Hub',       'Ampara',        'No. 27, D.S. Senanayake Road, Ampara',                 200.00, TRUE),
+    (17, 'EP-TRI-01', 'Trincomalee District Hub',  'Trincomalee',   'No. 48, Kandy Road, Trincomalee',                      195.00, TRUE),
+    (18, 'NW-KUR-01', 'Kurunegala District Hub',   'Kurunegala',    'No. 70, Dambulla Road, Kurunegala',                     90.00, TRUE),
+    (19, 'NW-PUT-01', 'Puttalam District Hub',     'Puttalam',      'No. 29, Colombo Road, Puttalam',                       120.00, TRUE),
+    (20, 'NC-ANU-01', 'Anuradhapura District Hub', 'Anuradhapura',  'No. 88, Maithripala Senanayake Mawatha, Anuradhapura', 160.00, TRUE),
+    (21, 'NC-POL-01', 'Polonnaruwa District Hub',  'Polonnaruwa',   'No. 21, Habarana Road, Kaduruwela',                    170.00, TRUE),
+    (22, 'UV-BAD-01', 'Badulla District Hub',      'Badulla',       'No. 40, Passara Road, Badulla',                        165.00, TRUE),
+    (23, 'UV-MON-01', 'Monaragala District Hub',   'Monaragala',    'No. 19, Wellawaya Road, Monaragala',                   180.00, TRUE),
+    (24, 'SB-RAT-01', 'Ratnapura District Hub',    'Ratnapura',     'No. 66, Colombo Road, Ratnapura',                      110.00, TRUE),
+    (25, 'SB-KEG-01', 'Kegalle District Hub',      'Kegalle',       'No. 34, Colombo-Kandy Road, Kegalle',                   95.00, TRUE)
 ON CONFLICT (zone_code) DO NOTHING;
 
--- Keep the id sequence after the explicit ids, so zones created later in the admin UI get 7, 8, ...
+-- Keep the id sequence after the explicit ids, so zones created later in the admin UI get 26, 27, ...
 SELECT setval(pg_get_serial_sequence('delivery_zones', 'id'), (SELECT MAX(id) FROM delivery_zones));
 
--- Pricing matrix: every origin x destination x size (6 x 6 x 3 = 108 rules), same values as
--- ParcelDataInitializer: base fee LKR 350 inside a zone / 450 between zones, LKR 80 per kg,
--- size multiplier SMALL 1.00, MEDIUM 1.20, LARGE 1.50.
-INSERT INTO pricing_rules (origin_zone_id, destination_zone_id, base_fee, rate_per_kg, parcel_size, size_multiplier)
-SELECT o.id, d.id,
-       CASE WHEN o.id = d.id THEN 350.00 ELSE 450.00 END,
-       80.00, s.size, s.multiplier
-FROM delivery_zones o
-CROSS JOIN delivery_zones d
-CROSS JOIN (VALUES ('SMALL', 1.00), ('MEDIUM', 1.20), ('LARGE', 1.50)) AS s(size, multiplier)
-WHERE o.zone_code IN ('WP-COL-01','WP-GAM-01','CP-KAN-01','SP-GAL-01','NP-JAF-01','NW-KUR-01')
-  AND d.zone_code IN ('WP-COL-01','WP-GAM-01','CP-KAN-01','SP-GAL-01','NP-JAF-01','NW-KUR-01')
-ORDER BY o.id, d.id, s.multiplier
-ON CONFLICT ON CONSTRAINT uk_pricing_rule DO NOTHING;
+-- Six fallback rules cover all 25 x 25 district pairs. pricing_rules remains available
+-- for exceptional origin/destination overrides only.
+INSERT INTO default_pricing_rules (route_type, parcel_size, base_fee, rate_per_kg, size_multiplier) VALUES
+    ('SAME_ZONE',      'SMALL',  350.00, 80.00, 1.00),
+    ('SAME_ZONE',      'MEDIUM', 350.00, 80.00, 1.20),
+    ('SAME_ZONE',      'LARGE',  350.00, 80.00, 1.50),
+    ('DIFFERENT_ZONE', 'SMALL',  450.00, 80.00, 1.00),
+    ('DIFFERENT_ZONE', 'MEDIUM', 450.00, 80.00, 1.20),
+    ('DIFFERENT_ZONE', 'LARGE',  450.00, 80.00, 1.50)
+ON CONFLICT ON CONSTRAINT uk_default_pricing_rule DO NOTHING;

@@ -31,5 +31,8 @@ public class PublicDeliveryZoneResponse {
 
     @Schema(description = "Sri Lankan administrative district", example = "Colombo")
     private String district;
+
+    @Schema(description = "Physical SwiftDrop hub address for the district", example = "No. 120, Baseline Road, Colombo 09")
+    private String hubLocation;
 }
 

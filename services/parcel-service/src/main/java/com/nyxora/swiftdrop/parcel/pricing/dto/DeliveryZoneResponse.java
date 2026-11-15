@@ -15,6 +15,7 @@ public record DeliveryZoneResponse(
         String zoneCode,
         String zoneName,
         String district,
+        String hubLocation,
         BigDecimal baseSurcharge,
         Boolean isActive
 ) {
@@ -25,6 +26,7 @@ public record DeliveryZoneResponse(
                 zone.getZoneCode(),
                 zone.getZoneName(),
                 zone.getDistrict(),
+                zone.getHubLocation(),
                 zone.getBaseSurcharge(),
                 zone.getIsActive()
         );

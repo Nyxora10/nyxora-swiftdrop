@@ -89,11 +89,23 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
     zone_code VARCHAR(20) UNIQUE NOT NULL, -- e.g. 'WP-COL-01'
     zone_name VARCHAR(100) NOT NULL,
     district VARCHAR(50) NOT NULL,
+    hub_location VARCHAR(255),
     base_surcharge DECIMAL(10,2) DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- 2. Pricing Rules (Dynamic Strategy Pattern Matrix)
+-- 2. Default Pricing Rules (six rows cover every district pair)
+CREATE TABLE IF NOT EXISTS default_pricing_rules (
+    id SERIAL PRIMARY KEY,
+    route_type VARCHAR(30) NOT NULL,       -- 'SAME_ZONE', 'DIFFERENT_ZONE'
+    parcel_size VARCHAR(30) NOT NULL,      -- 'SMALL', 'MEDIUM', 'LARGE'
+    base_fee DECIMAL(10,2) NOT NULL,
+    rate_per_kg DECIMAL(10,2) NOT NULL,
+    size_multiplier DECIMAL(4,2) DEFAULT 1.00,
+    CONSTRAINT uk_default_pricing_rule UNIQUE (route_type, parcel_size)
+);
+
+-- 3. Optional exact-route overrides
 CREATE TABLE IF NOT EXISTS pricing_rules (
     id SERIAL PRIMARY KEY,
     origin_zone_id INT NOT NULL REFERENCES delivery_zones(id),
@@ -105,7 +117,7 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
     CONSTRAINT uk_pricing_rule UNIQUE (origin_zone_id, destination_zone_id, parcel_size)
 );
 
--- 3. Parcels Table (Core Delivery Bookings)
+-- 4. Parcels Table (Core Delivery Bookings)
 CREATE TABLE IF NOT EXISTS parcels (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tracking_number VARCHAR(50) UNIQUE NOT NULL, -- Format: SD-YYYYMMDD-XXXXXX
@@ -126,7 +138,7 @@ CREATE TABLE IF NOT EXISTS parcels (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Parcel Status History (Timeline & Proof of Delivery)
+-- 5. Parcel Status History (Timeline & Proof of Delivery)
 CREATE TABLE IF NOT EXISTS parcel_status_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
