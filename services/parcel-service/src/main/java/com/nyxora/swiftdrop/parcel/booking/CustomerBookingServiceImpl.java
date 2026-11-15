@@ -94,12 +94,14 @@ public class CustomerBookingServiceImpl implements CustomerBookingService {
         Parcel parcel = Parcel.builder()
                 .trackingNumber(trackingNumber)
                 .senderUserId(senderUserId)
+                .senderEmail(request.getSenderEmail())
                 .merchantId(request.getMerchantId())
                 .originZone(originZone)
                 .destinationZone(destZone)
                 .pickupAddress(request.getPickupAddress().trim())
                 .dropoffAddress(request.getDropoffAddress().trim())
                 .recipientName(request.getRecipientName().trim())
+                .recipientEmail(normalizeOptional(request.getRecipientEmail()))
                 .recipientPhone(request.getRecipientPhone().trim())
                 .weightKg(request.getWeightKg())
                 .parcelSize(request.getParcelSize())
@@ -150,6 +152,13 @@ public class CustomerBookingServiceImpl implements CustomerBookingService {
                 .build();
     }
 
+    private String normalizeOptional(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private void publishParcelCreatedEvent(Parcel parcel, Integer originZoneId, Integer destZoneId, QuoteTier tier) {
         try {
             ParcelCreatedEvent event = new ParcelCreatedEvent(
@@ -183,4 +192,3 @@ public class CustomerBookingServiceImpl implements CustomerBookingService {
         }
     }
 }
-

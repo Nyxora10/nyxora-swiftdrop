@@ -1,9 +1,10 @@
 -- docker/postgres/init-multi-db.sql
--- Initializes the three isolated logical databases for SwiftDrop microservices
+-- Initializes the isolated logical databases for SwiftDrop microservices and integration tests
 
 CREATE DATABASE auth_db;
 CREATE DATABASE parcel_db;
 CREATE DATABASE notification_db;
+CREATE DATABASE swiftdrop_it_db;
 
 -- ========================================================
 -- DATABASE 1: auth_db (Identity, RBAC, OAuth & Sessions)
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS parcels (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tracking_number VARCHAR(50) UNIQUE NOT NULL, -- Format: SD-YYYYMMDD-XXXXXX
     sender_user_id UUID NOT NULL,          -- Logical reference to auth_db.users.id
+    sender_email VARCHAR(255),
     merchant_id UUID,                      -- Logical reference to auth_db.merchants.id
     assigned_courier_id UUID,              -- Logical reference to auth_db.couriers.id
     origin_zone_id INT NOT NULL REFERENCES delivery_zones(id),
@@ -129,6 +131,7 @@ CREATE TABLE IF NOT EXISTS parcels (
     pickup_address TEXT NOT NULL,
     dropoff_address TEXT NOT NULL,
     recipient_name VARCHAR(150) NOT NULL,
+    recipient_email VARCHAR(255),
     recipient_phone VARCHAR(20) NOT NULL,
     weight_kg DECIMAL(6,2) NOT NULL,
     parcel_size VARCHAR(30) NOT NULL,
@@ -137,6 +140,9 @@ CREATE TABLE IF NOT EXISTS parcels (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS sender_email VARCHAR(255);
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS recipient_email VARCHAR(255);
 
 -- 5. Parcel Status History (Timeline & Proof of Delivery)
 CREATE TABLE IF NOT EXISTS parcel_status_history (

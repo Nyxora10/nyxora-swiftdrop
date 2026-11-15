@@ -25,7 +25,9 @@ public class CourierParcelCardDto {
     private String trackingNumber;
     private ParcelStatus currentStatus;
     private String originZoneName;
+    private String originHubLocation;
     private String destinationZoneName;
+    private String destinationHubLocation;
     private String pickupAddress;
     private String dropoffAddress;
     private String recipientName;

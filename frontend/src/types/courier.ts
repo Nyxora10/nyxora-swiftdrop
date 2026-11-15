@@ -29,7 +29,9 @@ export interface CourierParcelCard {
   trackingNumber: string;
   currentStatus: ParcelStatus;
   originZoneName?: string | null;
+  originHubLocation?: string | null;
   destinationZoneName?: string | null;
+  destinationHubLocation?: string | null;
   pickupAddress: string;
   dropoffAddress: string;
   recipientName: string;
@@ -55,6 +57,7 @@ export interface UpdateParcelStatusRequest {
   deliveryNote?: string;
   recipientSignatureName?: string;
   proofPhotoUrl?: string;
+  signatureImageUrl?: string;
   failureReason?: string;
 }
 
@@ -72,4 +75,37 @@ export interface ProofUploadResponse {
   filename: string;
   proofPhotoUrl: string;
   uploadedAt: string;
+}
+
+export interface CourierDeliveryHistoryItem {
+  parcelId: string;
+  trackingNumber: string;
+  finalStatus: ParcelStatus;
+  recipientName: string;
+  recipientPhone: string;
+  pickupAddress?: string | null;
+  originZoneName?: string | null;
+  originHubLocation?: string | null;
+  dropoffAddress: string;
+  destinationZoneName?: string | null;
+  destinationHubLocation?: string | null;
+  weightKg: number;
+  parcelSize: ParcelSize;
+  estimatedFee: number;
+  recipientSignatureName?: string | null;
+  proofPhotoUrl?: string | null;
+  signatureImageUrl?: string | null;
+  deliveryNote?: string | null;
+  failureReason?: string | null;
+  completedAt?: string | null;
+}
+
+export interface CourierHistoryResponse {
+  courierId: string;
+  totalCompleted: number;
+  deliveredCount: number;
+  failedCount: number;
+  returnedCount: number;
+  history: CourierDeliveryHistoryItem[];
+  generatedAt: string;
 }

@@ -16,6 +16,7 @@ export interface BookingFormData {
   senderAddress: string;
   originZoneId: string;
   recipientName: string;
+  recipientEmail: string;
   recipientPhone: string;
   recipientAddress: string;
   destinationZoneId: string;
@@ -71,6 +72,7 @@ export interface CustomerBookingPayload {
   pickupAddress: string;
   dropoffAddress: string;
   recipientName: string;
+  recipientEmail?: string;
   recipientPhone: string;
   weightKg: number;
   parcelSize: ParcelSize;

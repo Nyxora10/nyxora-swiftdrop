@@ -64,7 +64,7 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Generates a stateless Access Token (JWT) with claims: sub, email, role, fullName.
+     * Generates a stateless Access Token (JWT) with claims: sub, email, role, fullName, phoneNumber.
      * When the principal carries courierId or merchantId (Task 2.5), those are embedded
      * as additional claims so the API Gateway can inject X-Courier-Id / X-Merchant-Id headers.
      */
@@ -88,7 +88,8 @@ public class JwtTokenProvider {
                 .subject(userPrincipal.getId().toString())
                 .claim("email", userPrincipal.getEmail())
                 .claim("role", role)
-                .claim("fullName", userPrincipal.getFullName());
+                .claim("fullName", userPrincipal.getFullName())
+                .claim("phoneNumber", userPrincipal.getPhoneNumber());
 
         // Task 2.5 — embed courier/merchant profile IDs for downstream header enrichment
         if (userPrincipal.getCourierId() != null) {
@@ -193,4 +194,3 @@ public class JwtTokenProvider {
         return false;
     }
 }
-

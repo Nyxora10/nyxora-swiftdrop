@@ -81,7 +81,7 @@ class NotificationRouterTest {
     @DisplayName("Should fallback to recipientEmail when senderEmail is blank for BOOKED status")
     void shouldFallbackToRecipientEmailWhenSenderEmailBlank() {
         ParcelStatusUpdatedEvent event = createSampleEvent("BOOKED");
-        event.setSenderEmail("   ");
+        event = event.withSenderEmail("   ");
 
         router.dispatch(event);
 
@@ -96,9 +96,9 @@ class NotificationRouterTest {
     @Test
     @DisplayName("Should handle missing sender and recipient emails gracefully on CREATED")
     void shouldHandleMissingEmailsGracefullyOnCreated() {
-        ParcelStatusUpdatedEvent event = createSampleEvent("CREATED");
-        event.setSenderEmail(null);
-        event.setRecipientEmail(null);
+        ParcelStatusUpdatedEvent event = createSampleEvent("CREATED")
+                .withSenderEmail(null)
+                .withRecipientEmail(null);
 
         assertDoesNotThrow(() -> router.dispatch(event));
 
@@ -129,7 +129,7 @@ class NotificationRouterTest {
     @DisplayName("Should use fallback courier name in SMS when courierName is null on OUT_FOR_DELIVERY")
     void shouldUseFallbackCourierNameInSms() {
         ParcelStatusUpdatedEvent event = createSampleEvent("OUT_FOR_DELIVERY");
-        event.setCourierName(null);
+        event = event.withCourierName(null);
 
         router.dispatch(event);
 
@@ -142,7 +142,7 @@ class NotificationRouterTest {
     @DisplayName("Should handle missing phone number gracefully on OUT_FOR_DELIVERY")
     void shouldHandleMissingPhoneOnOutForDelivery() {
         ParcelStatusUpdatedEvent event = createSampleEvent("OUT_FOR_DELIVERY");
-        event.setRecipientPhone(null);
+        event = event.withRecipientPhone(null);
 
         router.dispatch(event);
 
@@ -154,12 +154,25 @@ class NotificationRouterTest {
     @DisplayName("Should handle missing email gracefully on OUT_FOR_DELIVERY")
     void shouldHandleMissingEmailOnOutForDelivery() {
         ParcelStatusUpdatedEvent event = createSampleEvent("OUT_FOR_DELIVERY");
-        event.setRecipientEmail(null);
+        event = event.withRecipientEmail(null);
 
         router.dispatch(event);
 
         verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
         verify(smsSender).sendSms(eq("+94771234567"), any());
+    }
+
+    @Test
+    @DisplayName("Should skip email and SMS when OUT_FOR_DELIVERY contacts are blank")
+    void shouldHandleBlankContactsOnOutForDelivery() {
+        ParcelStatusUpdatedEvent event = createSampleEvent("OUT_FOR_DELIVERY")
+                .withRecipientEmail(" ")
+                .withRecipientPhone(" ");
+
+        router.dispatch(event);
+
+        verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
+        verify(smsSender, never()).sendSms(any(), any());
     }
 
     @Test
@@ -186,7 +199,7 @@ class NotificationRouterTest {
     @DisplayName("Should handle missing phone gracefully on DELIVERED")
     void shouldHandleMissingPhoneOnDelivered() {
         ParcelStatusUpdatedEvent event = createSampleEvent("DELIVERED");
-        event.setRecipientPhone(null);
+        event = event.withRecipientPhone(null);
 
         router.dispatch(event);
 
@@ -198,12 +211,25 @@ class NotificationRouterTest {
     @DisplayName("Should handle missing email gracefully on DELIVERED")
     void shouldHandleMissingEmailOnDelivered() {
         ParcelStatusUpdatedEvent event = createSampleEvent("DELIVERED");
-        event.setRecipientEmail(null);
+        event = event.withRecipientEmail(null);
 
         router.dispatch(event);
 
         verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
         verify(smsSender).sendSms(eq("+94771234567"), any());
+    }
+
+    @Test
+    @DisplayName("Should skip email and SMS when DELIVERED contacts are blank")
+    void shouldHandleBlankContactsOnDelivered() {
+        ParcelStatusUpdatedEvent event = createSampleEvent("DELIVERED")
+                .withRecipientEmail(" ")
+                .withRecipientPhone(" ");
+
+        router.dispatch(event);
+
+        verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
+        verify(smsSender, never()).sendSms(any(), any());
     }
 
     @Test
@@ -229,11 +255,11 @@ class NotificationRouterTest {
     @Test
     @DisplayName("Should safely discard event with null or blank currentStatus")
     void shouldDiscardEventWithNullOrBlankStatus() {
-        ParcelStatusUpdatedEvent event = createSampleEvent(null);
-        assertDoesNotThrow(() -> router.dispatch(event));
+        ParcelStatusUpdatedEvent nullStatusEvent = createSampleEvent(null);
+        assertDoesNotThrow(() -> router.dispatch(nullStatusEvent));
 
-        event.setCurrentStatus("   ");
-        assertDoesNotThrow(() -> router.dispatch(event));
+        ParcelStatusUpdatedEvent blankStatusEvent = nullStatusEvent.withCurrentStatus("   ");
+        assertDoesNotThrow(() -> router.dispatch(blankStatusEvent));
 
         verify(emailDispatcher, never()).sendHtmlEmail(any(), any(), any(), any());
         verify(smsSender, never()).sendSms(any(), any());
@@ -243,7 +269,7 @@ class NotificationRouterTest {
     @DisplayName("Should populate model with fallback timestamp when event timestamp is null")
     void shouldHandleNullTimestampInModel() {
         ParcelStatusUpdatedEvent event = createSampleEvent("CREATED");
-        event.setTimestamp(null);
+        event = event.withTimestamp(null);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> modelCaptor = ArgumentCaptor.forClass(Map.class);
@@ -254,4 +280,3 @@ class NotificationRouterTest {
         assertNotNull(modelCaptor.getValue().get("timestamp"));
     }
 }
-
