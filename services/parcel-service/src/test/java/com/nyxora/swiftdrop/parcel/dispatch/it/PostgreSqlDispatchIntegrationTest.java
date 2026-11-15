@@ -44,8 +44,10 @@ class PostgreSqlDispatchIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
+        String defaultPort = System.getenv("CI") != null ? "5432" : "5433";
         String dbUrl = System.getProperty("it.postgres.url",
-                System.getenv().getOrDefault("IT_POSTGRES_URL", "jdbc:postgresql://localhost:5433/swiftdrop_it_db"));
+                System.getenv().getOrDefault("IT_POSTGRES_URL",
+                        "jdbc:postgresql://localhost:" + defaultPort + "/swiftdrop_it_db"));
         String dbUser = System.getProperty("it.postgres.username",
                 System.getenv().getOrDefault("IT_POSTGRES_USERNAME", "postgres"));
         String dbPassword = System.getProperty("it.postgres.password",
