@@ -143,7 +143,14 @@ export default function CourierRunsheetPage() {
     );
   };
 
-  const allParcels = runsheet ? [...runsheet.pickups, ...runsheet.deliveries] : [];
+  const sortByOldestFirst = (parcels: CourierParcelCard[]) =>
+    [...parcels].sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return timeA - timeB;
+    });
+
+  const allParcels = runsheet ? sortByOldestFirst([...runsheet.pickups, ...runsheet.deliveries]) : [];
   const assignedAll = allParcels.filter((p) => p.currentStatus === 'ASSIGNED' || p.currentStatus === 'CREATED');
   const pickedUpAll = allParcels.filter((p) => p.currentStatus === 'PICKED_UP');
   const inTransitAll = allParcels.filter((p) => p.currentStatus === 'IN_TRANSIT');
@@ -232,19 +239,24 @@ export default function CourierRunsheetPage() {
 
   return (
     <AppShell>
-      <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6 pb-12">
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 pb-12">
         {/* Top Header Card */}
         <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm shadow-emerald-200">
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                    Courier Runsheet
-                  </h1>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                      Courier Runsheet
+                    </h1>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      Active Total: {runsheet ? runsheet.totalActiveParcels : 0}
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 font-medium">
                     Daily Active Pickup & Delivery Tasks
                   </p>
@@ -258,17 +270,8 @@ export default function CourierRunsheetPage() {
             </div>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 mt-4 pt-4 border-t border-slate-100">
-            <div className="col-span-2 sm:col-span-1 bg-slate-50 rounded-xl p-2.5 sm:p-3 text-center border border-slate-200/60">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Active Total
-              </span>
-              <p className="text-xl sm:text-2xl font-extrabold text-slate-900">
-                {runsheet ? runsheet.totalActiveParcels : 0}
-              </p>
-            </div>
-
+          {/* Quick Stage Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-4 pt-4 border-t border-slate-100">
             {(['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] as RunsheetTab[]).map((tabKey) => {
               const cfg = stageConfig[tabKey];
               const rawCount =
@@ -283,16 +286,16 @@ export default function CourierRunsheetPage() {
                 <div
                   key={tabKey}
                   onClick={() => setActiveTab(tabKey)}
-                  className={`rounded-xl p-2.5 sm:p-3 text-center border cursor-pointer transition-all ${
+                  className={`rounded-xl p-3 flex flex-col items-center justify-between border cursor-pointer transition-all ${
                     activeTab === tabKey
                       ? cfg.metricActiveClass
                       : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/60'
                   }`}
                 >
-                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${cfg.metricLabelClass}`}>
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap ${cfg.metricLabelClass}`}>
                     {cfg.shortLabel}
                   </span>
-                  <p className={`text-xl sm:text-2xl font-extrabold ${cfg.metricValueClass}`}>
+                  <p className={`text-xl sm:text-2xl font-extrabold mt-1 ${cfg.metricValueClass}`}>
                     {rawCount}
                   </p>
                 </div>
