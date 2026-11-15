@@ -2,6 +2,7 @@ package com.nyxora.swiftdrop.notification.webhook.demo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.client.AuthInternalClient;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookEvent;
@@ -381,7 +382,7 @@ public class DemoWebhookController {
             }
         } catch (Exception ex) {
             log.warn("Failed to retrieve merchant webhook secret from Auth Service: merchantId={}, reason={}",
-                    merchantId, ex.getMessage());
+                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()));
         }
 
         // 2. Strict Dev/Demo Fallback: Disabled in production, requires explicit matching merchant ID

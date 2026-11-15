@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.ai_assistant_service.security;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -97,7 +98,8 @@ public class McpSecurityFilter extends OncePerRequestFilter {
                     return new UserIdentity(userId, role != null ? role : "USER", email);
                 }
             } catch (JwtException ex) {
-                log.warn("Invalid JWT presented to MCP server: {}", ex.getMessage());
+                log.warn("Invalid JWT presented to MCP server: {}",
+                        PiiMaskingUtil.maskText(ex.getMessage()));
                 return null;
             }
         }

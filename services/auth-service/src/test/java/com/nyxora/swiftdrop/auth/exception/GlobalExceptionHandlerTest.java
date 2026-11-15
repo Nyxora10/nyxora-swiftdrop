@@ -47,6 +47,8 @@ class GlobalExceptionHandlerTest {
         ProblemDetail problem = handler.handleEmailAlreadyExists(ex, request);
 
         assertEquals(HttpStatus.CONFLICT.value(), problem.getStatus());
+        assertEquals("An account with email 'Email already registered: u***r@swiftdrop.lk' already exists.",
+                problem.getDetail());
         assertEquals("Email Already Registered", problem.getTitle());
         assertEquals(URI.create("https://swiftdrop.lk/errors/email-already-exists"), problem.getType());
         assertEquals(URI.create("/api/v1/auth/test"), problem.getInstance());
@@ -94,7 +96,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED.value(), problem.getStatus());
         assertEquals("Authentication Failed", problem.getTitle());
-        assertEquals("Invalid email or password.", problem.getDetail());
+        assertEquals("Invalid credentials provided.", problem.getDetail());
         assertEquals(URI.create("https://swiftdrop.lk/errors/invalid-credentials"), problem.getType());
     }
 
@@ -113,10 +115,13 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("Generic AuthenticationException returns HTTP 401 Unauthorized ProblemDetail")
     void handleGenericAuthenticationException() {
-        InsufficientAuthenticationException ex = new InsufficientAuthenticationException("Full authentication is required");
+        InsufficientAuthenticationException ex = new InsufficientAuthenticationException(
+                "JWT parser exposed token=eyJsecret");
         ProblemDetail problem = handler.handleGenericAuthenticationException(ex, request);
 
         assertEquals(HttpStatus.UNAUTHORIZED.value(), problem.getStatus());
+        assertEquals("Authentication is required to access this resource.", problem.getDetail());
+        assertFalse(problem.getDetail().contains("eyJsecret"));
         assertEquals("Authentication Required", problem.getTitle());
         assertEquals(URI.create("https://swiftdrop.lk/errors/unauthorized"), problem.getType());
     }
@@ -148,10 +153,12 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("InvalidRefreshTokenException returns HTTP 401 Unauthorized ProblemDetail")
     void handleInvalidRefreshToken() {
-        InvalidRefreshTokenException ex = new InvalidRefreshTokenException("Refresh token expired or revoked");
+        InvalidRefreshTokenException ex = new InvalidRefreshTokenException(
+                "refresh_token=raw-refresh-token");
         ProblemDetail problem = handler.handleInvalidRefreshToken(ex, request);
 
         assertEquals(HttpStatus.UNAUTHORIZED.value(), problem.getStatus());
+        assertEquals("The refresh token is invalid or expired.", problem.getDetail());
         assertEquals("Invalid Refresh Token", problem.getTitle());
         assertEquals(URI.create("https://swiftdrop.lk/errors/invalid-refresh-token"), problem.getType());
     }

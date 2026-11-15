@@ -3,6 +3,7 @@ package com.nyxora.swiftdrop.auth.security;
 import com.nyxora.swiftdrop.auth.config.JwtProperties;
 import com.nyxora.swiftdrop.auth.entity.Merchant;
 import com.nyxora.swiftdrop.auth.entity.User;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -186,9 +187,9 @@ public class JwtTokenProvider {
                     .parseSignedClaims(token);
             return true;
         } catch (ExpiredJwtException ex) {
-            log.warn("[JwtTokenProvider] Expired JWT token: {}", ex.getMessage());
+            log.warn("[JwtTokenProvider] Expired JWT token: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         } catch (JwtException | IllegalArgumentException ex) {
-            log.error("[JwtTokenProvider] Invalid JWT token: {}", ex.getMessage());
+            log.error("[JwtTokenProvider] Invalid JWT token: {}", PiiMaskingUtil.maskText(ex.getMessage()));
         }
         return false;
     }

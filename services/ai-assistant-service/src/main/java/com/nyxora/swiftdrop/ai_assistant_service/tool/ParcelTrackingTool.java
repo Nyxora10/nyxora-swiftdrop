@@ -88,7 +88,7 @@ public class ParcelTrackingTool {
             trackingOpt = parcelServiceClient.getTracking(normalized);
         } catch (RestClientException ex) {
             log.error("Failed to connect to parcel service for tracking number {}: {}",
-                    PiiMaskingUtil.maskText(normalized), ex.getMessage());
+                    PiiMaskingUtil.maskText(normalized), PiiMaskingUtil.maskText(ex.getMessage()));
             return ParcelTrackingResult.unavailable(
                     "Live SwiftDrop parcel tracking service is currently synchronizing with the warehouse network and is temporarily unavailable."
             );

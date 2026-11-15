@@ -15,6 +15,7 @@ import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteRequest;
 import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteResponse;
 import com.nyxora.swiftdrop.parcel.pricing.PricingEngine;
 import com.nyxora.swiftdrop.parcel.pricing.QuoteTier;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -187,7 +188,7 @@ public class CustomerBookingServiceImpl implements CustomerBookingService {
             log.debug("Published parcel.created domain event to RabbitMQ for trackingNumber={}", parcel.getTrackingNumber());
         } catch (Exception ex) {
             log.warn("Non-fatal: Failed to publish parcel.created event to RabbitMQ (broker may be unreachable): {}",
-                    ex.getMessage());
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
     }
 }

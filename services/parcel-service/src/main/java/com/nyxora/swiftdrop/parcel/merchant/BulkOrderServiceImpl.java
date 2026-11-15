@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.merchant;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.merchant.dto.BulkOrderItemResult;
 import com.nyxora.swiftdrop.parcel.merchant.dto.BulkOrderRequest;
 import com.nyxora.swiftdrop.parcel.merchant.dto.BulkOrderResponse;
@@ -96,12 +97,13 @@ public class BulkOrderServiceImpl implements BulkOrderService {
                 successCount++;
             } catch (DataAccessException ex) {
                 // Don't echo SQL/driver details back to the merchant.
-                log.error("[BulkOrderService] Row {} failed with a database error; row rolled back", rowNumber, ex);
+                log.error("[BulkOrderService] Row {} failed with a database error; row rolled back", rowNumber);
                 results.add(failed(rowNumber, orderReq,
                         List.of("Order could not be saved due to a temporary storage error. Please retry this row.")));
                 failureCount++;
             } catch (RuntimeException ex) {
-                log.warn("[BulkOrderService] Row {} failed creation: {}", rowNumber, ex.getMessage());
+                log.warn("[BulkOrderService] Row {} failed creation: {}", rowNumber,
+                        PiiMaskingUtil.maskText(ex.getMessage()));
                 results.add(failed(rowNumber, orderReq,
                         List.of(ex.getMessage() != null ? ex.getMessage() : "Unknown error processing row")));
                 failureCount++;

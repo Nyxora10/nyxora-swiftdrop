@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.courier;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.booking.config.RabbitMqConfig;
 import com.nyxora.swiftdrop.parcel.courier.dto.*;
 import com.nyxora.swiftdrop.parcel.courier.event.ParcelStatusUpdatedEvent;
@@ -345,7 +346,8 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
 
             log.debug("Published RabbitMQ status event for parcel {}", parcel.getTrackingNumber());
         } catch (Exception ex) {
-            log.warn("Non-fatal: Failed to publish status update event to RabbitMQ: {}", ex.getMessage());
+            log.warn("Non-fatal: Failed to publish status update event to RabbitMQ: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
     }
 
@@ -369,7 +371,8 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
             eventPublisher.publishEvent(localEvent);
             log.debug("Published local application event for WebSocket broadcast of {}", parcel.getTrackingNumber());
         } catch (Exception ex) {
-            log.warn("Non-fatal: Failed to publish local application event: {}", ex.getMessage());
+            log.warn("Non-fatal: Failed to publish local application event: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
     }
 }

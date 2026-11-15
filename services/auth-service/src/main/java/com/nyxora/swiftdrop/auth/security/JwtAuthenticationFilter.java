@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.auth.security;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -67,7 +68,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception ex) {
-            log.error("[JwtAuthenticationFilter] Could not set user authentication in security context: {}", ex.getMessage());
+            log.error("[JwtAuthenticationFilter] Could not set user authentication in security context: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
         }
 
         filterChain.doFilter(request, response);
