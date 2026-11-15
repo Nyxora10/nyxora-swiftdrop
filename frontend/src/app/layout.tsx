@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,23 +34,52 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col text-slate-900 bg-slate-50">
         <ToastProvider>{children}</ToastProvider>
 
-        {/* PWA Service Worker Registration */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(reg) {
-                      console.log('[PWA] ServiceWorker registration successful with scope: ', reg.scope);
-                    },
-                    function(err) {
-                      console.warn('[PWA] ServiceWorker registration failed: ', err);
-                    }
-                  );
-                });
-              }
-            `,
+            __html: isProduction
+              ? `
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(
+                      function(reg) {
+                        console.log('[PWA] ServiceWorker registration successful with scope: ', reg.scope);
+                      },
+                      function(err) {
+                        console.warn('[PWA] ServiceWorker registration failed: ', err);
+                      }
+                    );
+                  });
+                }
+              `
+              : `
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                      return Promise.all(registrations
+                        .filter(function(reg) {
+                          return [reg.active, reg.waiting, reg.installing].some(function(worker) {
+                            return worker && new URL(worker.scriptURL).pathname === '/sw.js';
+                          });
+                        })
+                        .map(function(reg) {
+                          return reg.unregister();
+                        }));
+                    }).then(function() {
+                      return caches.keys().then(function(cacheNames) {
+                        return Promise.all(cacheNames
+                          .filter(function(cacheName) {
+                            return cacheName.startsWith('swiftdrop-');
+                          })
+                          .map(function(cacheName) {
+                            return caches.delete(cacheName);
+                          }));
+                      });
+                    }).catch(function(err) {
+                      console.warn('[PWA] Development service worker cleanup failed: ', err);
+                    });
+                  });
+                }
+              `,
           }}
         />
       </body>

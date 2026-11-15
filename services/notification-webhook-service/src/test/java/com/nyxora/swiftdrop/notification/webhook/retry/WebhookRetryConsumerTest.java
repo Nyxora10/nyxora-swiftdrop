@@ -18,7 +18,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,6 +78,14 @@ class WebhookRetryConsumerTest {
 
         verify(dispatcherService).dispatchRetryWebhook(sampleLog);
         verifyNoInteractions(retryPublisher);
+    }
+
+    @Test
+    @DisplayName("Should discard null or malformed retry messages")
+    void shouldDiscardNullOrMalformedMessage() {
+        retryConsumer.handleRetryMessage(null);
+        retryConsumer.handleRetryMessage(new WebhookRetryMessage(
+                UUID.randomUUID(), merchantId, parcelId, "parcel.status.updated", "{}", 1));
     }
 
     @Test

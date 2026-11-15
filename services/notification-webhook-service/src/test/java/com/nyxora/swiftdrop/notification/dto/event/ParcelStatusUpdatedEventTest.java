@@ -103,12 +103,12 @@ class ParcelStatusUpdatedEventTest {
     }
 
     @Test
-    @DisplayName("Should support full POJO getters, setters, equals, hashCode, and toString")
-    void shouldSupportPojoContract() {
-        ParcelStatusUpdatedEvent event1 = new ParcelStatusUpdatedEvent();
-        event1.setTrackingNumber("SWIFT-001");
-        event1.setCurrentStatus("CREATED");
-
+    @DisplayName("Should provide immutable value semantics")
+    void shouldProvideImmutableValueSemantics() {
+        ParcelStatusUpdatedEvent event1 = ParcelStatusUpdatedEvent.builder()
+                .trackingNumber("SWIFT-001")
+                .currentStatus("CREATED")
+                .build();
         ParcelStatusUpdatedEvent event2 = ParcelStatusUpdatedEvent.builder()
                 .trackingNumber("SWIFT-001")
                 .currentStatus("CREATED")
@@ -118,8 +118,6 @@ class ParcelStatusUpdatedEventTest {
         assertEquals(event1.hashCode(), event2.hashCode());
         assertTrue(event1.toString().contains("SWIFT-001"));
 
-        event2.setCurrentStatus("DELIVERED");
-        assertNotEquals(event1, event2);
+        assertNotEquals(event1, event2.withCurrentStatus("DELIVERED"));
     }
 }
-

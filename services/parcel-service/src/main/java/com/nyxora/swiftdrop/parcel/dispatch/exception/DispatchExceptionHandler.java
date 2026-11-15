@@ -32,4 +32,12 @@ public class DispatchExceptionHandler {
         problem.setTitle("Invalid Parcel State");
         return problem;
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("[DispatchExceptionHandler] Bad request: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid Request Parameters");
+        return problem;
+    }
 }

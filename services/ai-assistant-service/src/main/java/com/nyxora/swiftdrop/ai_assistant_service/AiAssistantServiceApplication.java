@@ -24,14 +24,16 @@ public class AiAssistantServiceApplication {
      * Automatically loads .env file into System properties so Spring Boot resolves
      * ${GEMINI_API_KEY}, ${GEMINI_MODEL}, and other environment variables seamlessly.
      */
-    private static void loadDotEnv() {
-        List<Path> candidatePaths = List.of(
+    static void loadDotEnv() {
+        loadDotEnvFromPaths(List.of(
                 Path.of(".env"),
                 Path.of("services/ai-assistant-service/.env"),
                 Path.of("../.env"),
                 Path.of("../../.env")
-        );
+        ));
+    }
 
+    static void loadDotEnvFromPaths(List<Path> candidatePaths) {
         for (Path path : candidatePaths) {
             if (Files.exists(path)) {
                 try {

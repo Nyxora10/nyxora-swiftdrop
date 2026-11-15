@@ -118,6 +118,7 @@ export async function bookParcel(formData: BookingFormData): Promise<BookingResp
     pickupAddress: formData.senderAddress.trim(),
     dropoffAddress: formData.recipientAddress.trim(),
     recipientName: formData.recipientName.trim(),
+    recipientEmail: formData.recipientEmail.trim() || undefined,
     recipientPhone: formData.recipientPhone.trim(),
     weightKg: Number(formData.weightKg),
     parcelSize: formData.parcelSize,

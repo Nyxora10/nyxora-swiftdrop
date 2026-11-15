@@ -5,7 +5,6 @@ import com.nyxora.swiftdrop.notification.webhook.dto.WebhookDispatchResult;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryLog;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryStatus;
 import com.nyxora.swiftdrop.notification.webhook.repository.WebhookDeliveryLogRepository;
-import com.nyxora.swiftdrop.notification.webhook.retry.WebhookRetryPolicy;
 import com.nyxora.swiftdrop.notification.webhook.retry.WebhookRetryPublisher;
 import com.nyxora.swiftdrop.notification.webhook.retry.dto.WebhookRetryMessage;
 import com.nyxora.swiftdrop.notification.webhook.service.WebhookDispatcherService;
@@ -32,8 +31,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.awaitility.Awaitility.await;

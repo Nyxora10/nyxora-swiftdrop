@@ -7,6 +7,7 @@ import com.nyxora.swiftdrop.parcel.history.ParcelHistoryService;
 import com.nyxora.swiftdrop.parcel.history.dto.MerchantOrderHistoryResponse;
 import com.nyxora.swiftdrop.parcel.history.dto.OrderSummaryDto;
 import com.nyxora.swiftdrop.parcel.history.dto.PagedOrderResponse;
+import com.nyxora.swiftdrop.parcel.merchant.MerchantIdentity;
 import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteRequest;
 import com.nyxora.swiftdrop.parcel.pricing.ParcelQuoteResponse;
 import com.nyxora.swiftdrop.parcel.receipt.ParcelReceiptService;
@@ -78,8 +79,10 @@ public class CustomerParcelController {
         @Operation(summary = "Book a new parcel delivery", description = "Protected endpoint for customers and merchants to book parcel deliveries. Requires ROLE_CUSTOMER, ROLE_MERCHANT, or ROLE_ADMIN.")
         public ResponseEntity<BookingResponse> bookParcel(
                         @Parameter(description = "Authenticated user UUID injected by API Gateway", required = true) @RequestHeader("X-User-Id") UUID senderUserId,
+                        @RequestHeader(value = "X-User-Email", required = false) String senderEmail,
                         @Valid @RequestBody CustomerBookingRequest request) {
                 log.info("Processing parcel booking request for senderUserId={}", senderUserId);
+                request.setSenderEmail(senderEmail);
                 BookingResponse response = customerBookingService.bookParcel(request, senderUserId);
                 return ResponseEntity.status(HttpStatus.CREATED).body(response);
         }
@@ -156,16 +159,20 @@ public class CustomerParcelController {
         @SecurityRequirement(name = "BearerAuth")
         @Operation(summary = "Get paginated order history and KPI metrics for merchant", description = "Returns aggregate status counters and paginated shipment history for corporate merchant accounts.")
         public ResponseEntity<MerchantOrderHistoryResponse> getMerchantOrders(
-                        @Parameter(description = "Authenticated merchant user UUID", required = true) @RequestHeader("X-User-Id") UUID merchantUserId,
+                        // Merchant entity UUID from the verified JWT (gateway-injected), the same ID that
+                        // merchant order creation stores in parcels.merchant_id. X-User-Id is the user
+                        // account UUID and would match no parcels.
+                        @Parameter(hidden = true) @RequestHeader(value = MerchantIdentity.HEADER, required = false) String merchantIdHeader,
                         @RequestParam(required = false) ParcelStatus status,
                         @RequestParam(defaultValue = "0") int page,
                         @RequestParam(defaultValue = "10") int size) {
+                UUID merchantId = MerchantIdentity.require(merchantIdHeader);
                 int sanitizedPage = Math.max(0, page);
                 int sanitizedSize = Math.max(1, Math.min(size, 50));
-                log.debug("Fetching merchant orders: merchantId={}, status={}, page={}, size={}", merchantUserId,
+                log.debug("Fetching merchant orders: merchantId={}, status={}, page={}, size={}", merchantId,
                                 status, sanitizedPage, sanitizedSize);
                 Pageable pageable = PageRequest.of(sanitizedPage, sanitizedSize,
                                 Sort.by(Sort.Direction.DESC, "createdAt"));
-                return ResponseEntity.ok(parcelHistoryService.getMerchantOrders(merchantUserId, status, pageable));
+                return ResponseEntity.ok(parcelHistoryService.getMerchantOrders(merchantId, status, pageable));
         }
 }

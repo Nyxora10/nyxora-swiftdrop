@@ -1,7 +1,9 @@
 package com.nyxora.swiftdrop.parcel.pricing;
 
 import com.nyxora.swiftdrop.parcel.domain.entity.DeliveryZone;
+import com.nyxora.swiftdrop.parcel.domain.entity.DefaultPricingRule;
 import com.nyxora.swiftdrop.parcel.domain.entity.PricingRule;
+import com.nyxora.swiftdrop.parcel.domain.repository.DefaultPricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.DeliveryZoneRepository;
 import com.nyxora.swiftdrop.parcel.domain.repository.PricingRuleRepository;
 import com.nyxora.swiftdrop.parcel.exception.ResourceConflictException;
@@ -26,6 +28,7 @@ public class ZonePricingService {
 
     private final DeliveryZoneRepository zoneRepository;
     private final PricingRuleRepository pricingRuleRepository;
+    private final DefaultPricingRuleRepository defaultPricingRuleRepository;
 
     // ─────────────────────────────────────────────
     //  DELIVERY ZONE OPERATIONS
@@ -64,6 +67,7 @@ public class ZonePricingService {
                 .zoneCode(request.getZoneCode())
                 .zoneName(request.getZoneName())
                 .district(request.getDistrict())
+                .hubLocation(request.getHubLocation())
                 .baseSurcharge(request.getBaseSurcharge())
                 .isActive(true)
                 .build();
@@ -79,12 +83,14 @@ public class ZonePricingService {
         DeliveryZone zone = getZoneById(id);
         if (request.getZoneName() == null
                 && request.getDistrict() == null
+                && request.getHubLocation() == null
                 && request.getBaseSurcharge() == null
                 && request.getIsActive() == null) {
             throw new IllegalArgumentException("At least one zone field must be provided for update");
         }
         if (request.getZoneName()      != null) zone.setZoneName(request.getZoneName());
         if (request.getDistrict()      != null) zone.setDistrict(request.getDistrict());
+        if (request.getHubLocation()   != null) zone.setHubLocation(request.getHubLocation());
         if (request.getBaseSurcharge() != null) zone.setBaseSurcharge(request.getBaseSurcharge());
         if (request.getIsActive()      != null) zone.setIsActive(request.getIsActive());
         return zoneRepository.save(zone);
@@ -94,7 +100,7 @@ public class ZonePricingService {
     //  PRICING RULE OPERATIONS
     // ─────────────────────────────────────────────
 
-    /** Returns all inter-zone pricing rules. Optionally filtered by origin zone. */
+    /** Returns all exact-route pricing overrides. Optionally filtered by origin zone. */
     @Transactional(readOnly = true)
     public List<PricingRule> getPricingRules(Integer originZoneId) {
         if (originZoneId != null) {
@@ -110,16 +116,35 @@ public class ZonePricingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found: " + id));
     }
 
+    /** Returns the six same-zone/different-zone defaults used when no override exists. */
+    @Transactional(readOnly = true)
+    public List<DefaultPricingRule> getDefaultPricingRules() {
+        return defaultPricingRuleRepository.findAll();
+    }
+
+    /** Updates the monetary values of a default without changing its route type or parcel size. */
+    @Transactional
+    public DefaultPricingRule updateDefaultPricingRule(Integer id, UpdateDefaultPricingRuleRequest request) {
+        DefaultPricingRule rule = defaultPricingRuleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Default pricing rule not found: " + id));
+        if (request.getBaseFee() == null
+                && request.getRatePerKg() == null
+                && request.getSizeMultiplier() == null) {
+            throw new IllegalArgumentException("At least one default pricing field must be provided for update");
+        }
+        if (request.getBaseFee()        != null) rule.setBaseFee(request.getBaseFee());
+        if (request.getRatePerKg()      != null) rule.setRatePerKg(request.getRatePerKg());
+        if (request.getSizeMultiplier() != null) rule.setSizeMultiplier(request.getSizeMultiplier());
+        return defaultPricingRuleRepository.save(rule);
+    }
+
     /**
-     * Creates a new inter-zone pricing rule.
+     * Creates a new exact-route pricing override.
      *
      * @throws IllegalArgumentException if a rule already exists for the same zone pair + size
      */
     @Transactional
     public PricingRule createPricingRule(CreatePricingRuleRequest request) {
-        if (request.getOriginZoneId().equals(request.getDestinationZoneId())) {
-            throw new IllegalArgumentException("Origin and destination zones must be different");
-        }
         DeliveryZone originZone = zoneRepository.findById(request.getOriginZoneId())
                 .orElseThrow(() -> new ResourceNotFoundException("Origin zone not found: " + request.getOriginZoneId()));
         DeliveryZone destZone = zoneRepository.findById(request.getDestinationZoneId())

@@ -125,7 +125,7 @@ function LoginForm() {
 
       // 2. Default landing destination per role
       if (role === 'ROLE_ADMIN') {
-        router.push('/admin/dispatch');
+        router.push('/admin/pricing');
       } else if (role === 'ROLE_MERCHANT') {
         router.push('/merchant/dashboard');
       } else if (role === 'ROLE_COURIER') {

@@ -1,0 +1,26 @@
+# Production-style settings: 2 replicas for availability, wider autoscaling,
+# more memory, bigger volumes, and secrets that are NOT created by the chart
+# (create swiftdrop-secrets with kubectl first, with real values).
+replicaCount: 2
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+secrets:
+  create: false
+frontend:
+  replicaCount: 2
+postgres:
+  storage: 10Gi
+rabbitmq:
+  storage: 5Gi
+uploads:
+  storage: 5Gi

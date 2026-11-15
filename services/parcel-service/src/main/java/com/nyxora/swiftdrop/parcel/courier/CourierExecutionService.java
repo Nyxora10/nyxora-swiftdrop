@@ -43,4 +43,7 @@ public interface CourierExecutionService {
      * @return ParcelStatusUpdateResponseDto containing status change summary
      */
     ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request);
+
+    ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request,
+                                                     String courierName, String courierPhone);
 }

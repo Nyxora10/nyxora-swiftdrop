@@ -37,6 +37,7 @@ class PublicZoneQueryServiceTest {
                 .zoneCode("WP-COL-01")
                 .zoneName("Colombo Central Metro")
                 .district("Colombo")
+                .hubLocation("No. 120, Baseline Road, Colombo 09")
                 .baseSurcharge(new BigDecimal("150.00"))
                 .isActive(true)
                 .build();
@@ -46,6 +47,7 @@ class PublicZoneQueryServiceTest {
                 .zoneCode("CP-KAN-01")
                 .zoneName("Kandy Central Highlands")
                 .district("Kandy")
+                .hubLocation("No. 32, William Gopallawa Mawatha, Kandy")
                 .baseSurcharge(new BigDecimal("200.00"))
                 .isActive(true)
                 .build();
@@ -64,6 +66,7 @@ class PublicZoneQueryServiceTest {
         assertThat(result.get(0).getZoneCode()).isEqualTo("WP-COL-01");
         assertThat(result.get(0).getZoneName()).isEqualTo("Colombo Central Metro");
         assertThat(result.get(0).getDistrict()).isEqualTo("Colombo");
+        assertThat(result.get(0).getHubLocation()).isEqualTo("No. 120, Baseline Road, Colombo 09");
         verify(zoneRepository).findByIsActiveTrueOrderByDistrictAscZoneNameAsc();
     }
 

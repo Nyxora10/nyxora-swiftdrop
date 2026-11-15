@@ -26,6 +26,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code GET/POST/PUT /api/v1/zones/**}</li>
  *   <li>{@code GET/POST/PUT /api/v1/pricing/rules/**}</li>
+ *   <li>{@code GET/PUT /api/v1/pricing/defaults/**}</li>
  * </ul>
  */
 @RestController
@@ -85,8 +86,8 @@ public class ZonePricingAdminController {
     // ══════════════════════════════════════════════════════════════════
 
     @GetMapping("/api/v1/pricing/rules")
-    @Operation(summary = "List pricing rules",
-               description = "Returns all inter-zone pricing rules. Optionally filter by origin zone ID. Requires ROLE_ADMIN.")
+    @Operation(summary = "List route overrides",
+               description = "Returns optional exact-route pricing overrides. Optionally filter by origin zone ID. Requires ROLE_ADMIN.")
     public ResponseEntity<List<PricingRuleResponse>> getPricingRules(
             @Parameter(description = "Optional: filter by origin zone ID")
             @RequestParam(required = false) Integer originZoneId
@@ -94,6 +95,26 @@ public class ZonePricingAdminController {
         return ResponseEntity.ok(zonePricingService.getPricingRules(originZoneId).stream()
                 .map(PricingRuleResponse::from)
                 .toList());
+    }
+
+    @GetMapping("/api/v1/pricing/defaults")
+    @Operation(summary = "List default pricing rules",
+               description = "Returns the six fallback rules covering same-zone and different-zone delivery for all parcel sizes.")
+    public ResponseEntity<List<DefaultPricingRuleResponse>> getDefaultPricingRules() {
+        return ResponseEntity.ok(zonePricingService.getDefaultPricingRules().stream()
+                .map(DefaultPricingRuleResponse::from)
+                .toList());
+    }
+
+    @PutMapping("/api/v1/pricing/defaults/{id}")
+    @Operation(summary = "Update a default pricing rule",
+               description = "Adjusts the default base fee, per-kg rate, or size multiplier. Requires ROLE_ADMIN.")
+    public ResponseEntity<DefaultPricingRuleResponse> updateDefaultPricingRule(
+            @PathVariable Integer id,
+            @Valid @RequestBody UpdateDefaultPricingRuleRequest request
+    ) {
+        return ResponseEntity.ok(DefaultPricingRuleResponse.from(
+                zonePricingService.updateDefaultPricingRule(id, request)));
     }
 
     @GetMapping("/api/v1/pricing/rules/{id}")
@@ -104,8 +125,8 @@ public class ZonePricingAdminController {
     }
 
     @PostMapping("/api/v1/pricing/rules")
-    @Operation(summary = "Create a pricing rule",
-               description = "Defines a new inter-zone base rate and per-kg rate. Unique per origin+destination+size. Requires ROLE_ADMIN.")
+    @Operation(summary = "Create a route override",
+               description = "Defines an exceptional route-specific rate. Unique per origin+destination+size. Requires ROLE_ADMIN.")
     public ResponseEntity<PricingRuleResponse> createPricingRule(
             @Valid @RequestBody CreatePricingRuleRequest request
     ) {

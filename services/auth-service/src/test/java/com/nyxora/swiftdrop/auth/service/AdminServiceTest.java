@@ -6,6 +6,7 @@ import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.Courier;
+import com.nyxora.swiftdrop.auth.entity.Merchant;
 import com.nyxora.swiftdrop.auth.entity.Role;
 import com.nyxora.swiftdrop.auth.entity.User;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
@@ -27,6 +28,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +53,9 @@ class AdminServiceTest {
 
     @Mock
     private RefreshTokenService refreshTokenService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AdminServiceImpl adminService;
@@ -156,6 +161,42 @@ class AdminServiceTest {
         assertNull(response.statusReason());
         assertEquals(userId, response.userId());
         verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    @DisplayName("approveUser on pending merchant initializes missing OAuth credentials and webhook secret")
+    void approveUser_PendingMerchant_InitializesMissingCredentials() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email("store@daraz.lk")
+                .role(merchantRole)
+                .status(UserStatus.PENDING_APPROVAL)
+                .build();
+
+        Merchant merchant = Merchant.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .businessName("Daraz Sri Lanka")
+                .registrationNumber("PV-DARAZ-001")
+                .build(); // oauthClientId, oauthClientSecretHash, webhookSecret are null
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(merchantRepository.findByUserId(userId)).thenReturn(Optional.of(merchant));
+        when(passwordEncoder.encode(any(CharSequence.class))).thenReturn("$2a$12$hashedSecretMock");
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AdminDecisionResponse response = adminService.approveUser(userId);
+
+        assertNotNull(response);
+        assertEquals(UserStatus.ACTIVE, response.status());
+        assertNotNull(merchant.getOauthClientId());
+        assertTrue(merchant.getOauthClientId().startsWith("mer_"));
+        assertEquals("$2a$12$hashedSecretMock", merchant.getOauthClientSecretHash());
+        assertNotNull(merchant.getWebhookSecret());
+        assertTrue(merchant.getWebhookSecret().startsWith("whsec_"));
+        verify(merchantRepository, times(1)).save(merchant);
     }
 
     @Test
@@ -310,6 +351,82 @@ class AdminServiceTest {
                 () -> adminService.suspendUser(adminId, targetAdminId, request)
         );
         assertTrue(ex.getMessage().contains("administrator account"));
+    }
+
+    @Test
+    @DisplayName("getUserDetails for Courier loads courier profile details")
+    void getUserDetails_Courier_LoadsProfile() {
+        UUID courierUserId = UUID.randomUUID();
+        User courierUser = User.builder()
+                .id(courierUserId)
+                .email("courier@swiftdrop.lk")
+                .fullName("Courier Test")
+                .role(courierRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        Courier courier = Courier.builder()
+                .id(UUID.randomUUID())
+                .user(courierUser)
+                .vehicleType(VehicleType.MOTORCYCLE)
+                .licensePlate("WP-BBD-1234")
+                .isAvailable(true)
+                .activeDeliveryCount(2)
+                .build();
+
+        when(userRepository.findById(courierUserId)).thenReturn(Optional.of(courierUser));
+        when(courierRepository.findByUserId(courierUserId)).thenReturn(Optional.of(courier));
+
+        AdminUserDetailResponse response = adminService.getUserDetails(courierUserId);
+        assertNotNull(response);
+        assertNotNull(response.courierProfile());
+        assertEquals("WP-BBD-1234", response.courierProfile().licensePlate());
+        assertNull(response.merchantProfile());
+    }
+
+    @Test
+    @DisplayName("getUserDetails for Merchant loads merchant profile details")
+    void getUserDetails_Merchant_LoadsProfile() {
+        UUID merchantUserId = UUID.randomUUID();
+        User merchantUser = User.builder()
+                .id(merchantUserId)
+                .email("merchant@daraz.lk")
+                .fullName("Daraz Merchant")
+                .role(merchantRole)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        com.nyxora.swiftdrop.auth.entity.Merchant merchant = com.nyxora.swiftdrop.auth.entity.Merchant.builder()
+                .id(UUID.randomUUID())
+                .user(merchantUser)
+                .businessName("Daraz Online Pvt Ltd")
+                .registrationNumber("PV00099887")
+                .build();
+
+        when(userRepository.findById(merchantUserId)).thenReturn(Optional.of(merchantUser));
+        when(merchantRepository.findByUserId(merchantUserId)).thenReturn(Optional.of(merchant));
+
+        AdminUserDetailResponse response = adminService.getUserDetails(merchantUserId);
+        assertNotNull(response);
+        assertNotNull(response.merchantProfile());
+        assertEquals("Daraz Online Pvt Ltd", response.merchantProfile().businessName());
+        assertNull(response.courierProfile());
+    }
+
+    @Test
+    @DisplayName("suspendUser throws IllegalStateException when user is already SUSPENDED")
+    void suspendUser_AlreadySuspended_ThrowsException() {
+        UUID adminId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User suspendedUser = User.builder()
+                .id(userId)
+                .role(courierRole)
+                .status(UserStatus.SUSPENDED)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(suspendedUser));
+
+        assertThrows(IllegalStateException.class, () -> adminService.suspendUser(adminId, userId, new AdminDecisionRequest("Reason")));
     }
 }
 

@@ -6,10 +6,10 @@ import {
   User,
   Building,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
   RefreshCw,
   Navigation,
+  Mail,
 } from 'lucide-react';
 import { BookingFormData, DeliveryZone } from '@/types/booking';
 import { SRI_LANKAN_PHONE_REGEX } from '@/constants/booking';
@@ -34,7 +34,6 @@ export default function Step1RouteContacts({
   zoneError,
   onRetryZones,
   onNext,
-  isLoggedIn,
 }: Step1RouteContactsProps) {
   // Validate phone numbers in real time
   const isSenderPhoneValid = useMemo(
@@ -194,6 +193,18 @@ export default function Step1RouteContacts({
               onChange={(e) => onChange({ recipientName: e.target.value })}
               placeholder="e.g. Nadeesha Perera"
               leftIcon={<User className="w-4 h-4" />}
+            />
+
+            {/* Recipient Email */}
+            <Input
+              id="recipientEmail"
+              type="email"
+              label="Recipient Email"
+              value={formData.recipientEmail}
+              onChange={(e) => onChange({ recipientEmail: e.target.value })}
+              placeholder="e.g. recipient@example.com"
+              helperText="Optional: used for delivery status notifications."
+              leftIcon={<Mail className="w-4 h-4" />}
             />
 
             {/* Recipient Phone */}

@@ -1,0 +1,13 @@
+SwiftDrop is deployed to namespace {{ .Release.Namespace }}.
+
+Check it:
+  kubectl get pods,svc,ingress,hpa -n {{ .Release.Namespace }}
+{{- if .Values.ingress.enabled }}
+
+Open: http://{{ .Values.ingress.host }}
+{{- end }}
+{{- if not .Values.secrets.create }}
+
+Secrets are NOT created by this release: create "{{ .Values.secrets.name }}" with kubectl first.
+{{- end }}
+The AI assistant needs: kubectl create secret generic {{ .Values.gemini.secretName }} -n {{ .Release.Namespace }} --from-literal=GEMINI_API_KEY=<key>

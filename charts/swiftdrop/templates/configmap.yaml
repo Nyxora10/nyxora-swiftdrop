@@ -1,0 +1,21 @@
+# Shared settings for the backend services. Services reach each other by Service DNS name.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftdrop-config
+  labels:
+    {{- include "swiftdrop.labels" . | nindent 4 }}
+data:
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: postgres
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  AUTH_SERVICE_URL: http://auth-service:{{ (index .Values.services "auth-service").port }}
+  PARCEL_SERVICE_URL: http://parcel-service:{{ (index .Values.services "parcel-service").port }}
+  PARCEL_SERVICE_WS_URL: ws://parcel-service:{{ (index .Values.services "parcel-service").port }}
+  NOTIFICATION_SERVICE_URL: http://notification-webhook-service:{{ (index .Values.services "notification-webhook-service").port }}
+  GATEWAY_URL: http://api-gateway:{{ (index .Values.services "api-gateway").port }}
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

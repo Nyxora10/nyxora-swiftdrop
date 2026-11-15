@@ -39,6 +39,9 @@ public class Parcel extends BaseAuditableEntity {
     @Column(name = "sender_user_id", nullable = false)
     private UUID senderUserId;
 
+    @Column(name = "sender_email", length = 255)
+    private String senderEmail;
+
     @Column(name = "merchant_id")
     private UUID merchantId;
 
@@ -62,6 +65,9 @@ public class Parcel extends BaseAuditableEntity {
     @Column(name = "recipient_name", nullable = false, length = 150)
     private String recipientName;
 
+    @Column(name = "recipient_email", length = 255)
+    private String recipientEmail;
+
     @Column(name = "recipient_phone", nullable = false, length = 20)
     private String recipientPhone;
 
@@ -80,4 +86,3 @@ public class Parcel extends BaseAuditableEntity {
     @Builder.Default
     private ParcelStatus currentStatus = ParcelStatus.CREATED;
 }
-

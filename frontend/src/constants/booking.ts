@@ -9,6 +9,7 @@ export const INITIAL_FORM_DATA: BookingFormData = {
   senderAddress: '',
   originZoneId: '',
   recipientName: '',
+  recipientEmail: '',
   recipientPhone: '',
   recipientAddress: '',
   destinationZoneId: '',

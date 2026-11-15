@@ -6,6 +6,7 @@ export interface PublicDeliveryZoneResponse {
   zoneCode: string;
   zoneName: string;
   district: string;
+  hubLocation: string;
 }
 
 /**
@@ -29,5 +30,6 @@ export async function getDeliveryZones(search?: string, district?: string): Prom
     zoneCode: z.zoneCode,
     zoneName: z.zoneName,
     district: z.district,
+    hubLocation: z.hubLocation,
   }));
 }

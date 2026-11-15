@@ -15,7 +15,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import io.jsonwebtoken.Claims;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -41,13 +48,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = extractJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
-                UUID userId = jwtTokenProvider.getUserIdFromToken(jwt);
+                Claims claims = jwtTokenProvider.getClaimsFromToken(jwt);
+                UUID userId = UUID.fromString(claims.getSubject());
 
                 UserDetails userDetails = customUserDetailsService.loadUserById(userId);
 
                 if (userDetails.isEnabled()) {
+                    // M2M (client_credentials) tokens get only their OAuth scopes, never the
+                    // merchant role, so they cannot reach interactive account-management endpoints.
+                    Collection<? extends GrantedAuthority> authorities = JwtTokenProvider.isM2mToken(claims)
+                            ? scopeAuthorities(claims)
+                            : userDetails.getAuthorities();
                     UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                            new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -58,6 +71,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private static List<GrantedAuthority> scopeAuthorities(Claims claims) {
+        String scope = claims.get(JwtTokenProvider.CLAIM_SCOPE, String.class);
+        if (!StringUtils.hasText(scope)) {
+            return List.of();
+        }
+        return Arrays.stream(scope.trim().split("\\s+"))
+                .<GrantedAuthority>map(s -> new SimpleGrantedAuthority("SCOPE_" + s))
+                .toList();
     }
 
     private String extractJwtFromRequest(HttpServletRequest request) {

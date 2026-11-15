@@ -1,9 +1,10 @@
 -- docker/postgres/init-multi-db.sql
--- Initializes the three isolated logical databases for SwiftDrop microservices
+-- Initializes the isolated logical databases for SwiftDrop microservices and integration tests
 
 CREATE DATABASE auth_db;
 CREATE DATABASE parcel_db;
 CREATE DATABASE notification_db;
+CREATE DATABASE swiftdrop_it_db;
 
 -- ========================================================
 -- DATABASE 1: auth_db (Identity, RBAC, OAuth & Sessions)
@@ -89,11 +90,23 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
     zone_code VARCHAR(20) UNIQUE NOT NULL, -- e.g. 'WP-COL-01'
     zone_name VARCHAR(100) NOT NULL,
     district VARCHAR(50) NOT NULL,
+    hub_location VARCHAR(255),
     base_surcharge DECIMAL(10,2) DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- 2. Pricing Rules (Dynamic Strategy Pattern Matrix)
+-- 2. Default Pricing Rules (six rows cover every district pair)
+CREATE TABLE IF NOT EXISTS default_pricing_rules (
+    id SERIAL PRIMARY KEY,
+    route_type VARCHAR(30) NOT NULL,       -- 'SAME_ZONE', 'DIFFERENT_ZONE'
+    parcel_size VARCHAR(30) NOT NULL,      -- 'SMALL', 'MEDIUM', 'LARGE'
+    base_fee DECIMAL(10,2) NOT NULL,
+    rate_per_kg DECIMAL(10,2) NOT NULL,
+    size_multiplier DECIMAL(4,2) DEFAULT 1.00,
+    CONSTRAINT uk_default_pricing_rule UNIQUE (route_type, parcel_size)
+);
+
+-- 3. Optional exact-route overrides
 CREATE TABLE IF NOT EXISTS pricing_rules (
     id SERIAL PRIMARY KEY,
     origin_zone_id INT NOT NULL REFERENCES delivery_zones(id),
@@ -105,11 +118,12 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
     CONSTRAINT uk_pricing_rule UNIQUE (origin_zone_id, destination_zone_id, parcel_size)
 );
 
--- 3. Parcels Table (Core Delivery Bookings)
+-- 4. Parcels Table (Core Delivery Bookings)
 CREATE TABLE IF NOT EXISTS parcels (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tracking_number VARCHAR(50) UNIQUE NOT NULL, -- Format: SD-YYYYMMDD-XXXXXX
     sender_user_id UUID NOT NULL,          -- Logical reference to auth_db.users.id
+    sender_email VARCHAR(255),
     merchant_id UUID,                      -- Logical reference to auth_db.merchants.id
     assigned_courier_id UUID,              -- Logical reference to auth_db.couriers.id
     origin_zone_id INT NOT NULL REFERENCES delivery_zones(id),
@@ -117,6 +131,7 @@ CREATE TABLE IF NOT EXISTS parcels (
     pickup_address TEXT NOT NULL,
     dropoff_address TEXT NOT NULL,
     recipient_name VARCHAR(150) NOT NULL,
+    recipient_email VARCHAR(255),
     recipient_phone VARCHAR(20) NOT NULL,
     weight_kg DECIMAL(6,2) NOT NULL,
     parcel_size VARCHAR(30) NOT NULL,
@@ -126,7 +141,10 @@ CREATE TABLE IF NOT EXISTS parcels (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Parcel Status History (Timeline & Proof of Delivery)
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS sender_email VARCHAR(255);
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS recipient_email VARCHAR(255);
+
+-- 5. Parcel Status History (Timeline & Proof of Delivery)
 CREATE TABLE IF NOT EXISTS parcel_status_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     parcel_id UUID NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
