@@ -154,6 +154,7 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                 .deliveryNote(request.getDeliveryNote())
                 .recipientSignatureName(request.getRecipientSignatureName())
                 .proofPhotoUrl(request.getProofPhotoUrl())
+                .signatureImageUrl(request.getSignatureImageUrl())
                 .failureReason(request.getFailureReason())
                 .build();
         parcelStatusHistoryRepository.save(history);
@@ -225,6 +226,7 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                     .estimatedFee(parcel.getEstimatedFee())
                     .recipientSignatureName(latest != null ? latest.getRecipientSignatureName() : null)
                     .proofPhotoUrl(latest != null ? latest.getProofPhotoUrl() : null)
+                    .signatureImageUrl(latest != null ? latest.getSignatureImageUrl() : null)
                     .deliveryNote(latest != null ? latest.getDeliveryNote() : null)
                     .failureReason(latest != null ? latest.getFailureReason() : null)
                     .completedAt(latest != null && latest.getCreatedAt() != null ? latest.getCreatedAt() : parcel.getUpdatedAt())
