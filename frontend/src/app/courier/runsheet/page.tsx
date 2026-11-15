@@ -300,6 +300,11 @@ export default function CourierRunsheetPage() {
                         <ArrowRight className="w-3 h-3 text-slate-400" />
                         <span>{parcel.destinationZoneName || 'Zone B'}</span>
                       </p>
+                      {parcel.destinationHubLocation && (
+                        <p className="text-[11px] text-indigo-600/80 mt-0.5 truncate max-w-md">
+                          Hub: {parcel.destinationHubLocation}
+                        </p>
+                      )}
                     </div>
                     {getStatusBadge(parcel.currentStatus)}
                   </div>
@@ -381,6 +386,11 @@ export default function CourierRunsheetPage() {
                         <ArrowRight className="w-3 h-3 text-slate-400" />
                         <span>{parcel.destinationZoneName || 'Zone B'}</span>
                       </p>
+                      {parcel.destinationHubLocation && (
+                        <p className="text-[11px] text-indigo-600/80 mt-0.5 truncate max-w-md">
+                          Hub: {parcel.destinationHubLocation}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
