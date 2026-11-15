@@ -85,6 +85,14 @@ public interface WebhookDeliveryLogRepository extends JpaRepository<WebhookDeliv
             WebhookDeliveryStatus deliveryStatus, Instant cutoff);
 
     /**
+     * Finds all delivery logs for a specific parcel, enabling duplicate initial delivery detection.
+     *
+     * @param parcelId the parcel UUID
+     * @return list of delivery logs for the specified parcel
+     */
+    List<WebhookDeliveryLog> findByParcelId(UUID parcelId);
+
+    /**
      * Finds a delivery log by its primary key while strictly scoping to the owning merchant.
      * Enforces tenant isolation at the database query level (Task 3.6).
      *

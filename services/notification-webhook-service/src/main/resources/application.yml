@@ -39,6 +39,10 @@ app:
     auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8081}
     # Shared key for auth-service internal endpoints; must equal auth-service's INTERNAL_API_KEY.
     internal-api-key: ${INTERNAL_API_KEY:dev-internal-api-key-change-me}
+  security:
+    # Gateway secret stamped on X-Gateway-Secret; trusted identity headers are honored only with this secret.
+    # Must match api-gateway's GATEWAY_SHARED_SECRET. Override outside local development.
+    gateway-shared-secret: ${GATEWAY_SHARED_SECRET:dev-gateway-shared-secret-change-me}
   notification:
     from-email: ${NOTIFICATION_FROM_EMAIL:no-reply@swiftdrop.lk}
     sms:
@@ -47,6 +51,8 @@ app:
     exchange: swiftdrop.events.topic
     notification-queue: notification.parcel.events
     parcel-routing-key: parcel.#
+    webhook-parcel-queue: ${WEBHOOK_PARCEL_EVENTS_QUEUE:swiftdrop.webhook.parcel.events}
+    webhook-parcel-routing-key: ${WEBHOOK_PARCEL_EVENTS_ROUTING_KEY:parcel.status.updated}
 
 logging:
   level:

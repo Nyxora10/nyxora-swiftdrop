@@ -67,7 +67,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
       return [
         { name: 'B2B Dashboard', href: '/merchant/dashboard', icon: LayoutDashboard },
         { name: 'Bulk Order Ingestion', href: '/merchant/bulk-upload', icon: UploadCloud },
-        { name: 'Webhook Management', href: '/merchant/webhooks', icon: Webhook },
+        { name: 'Delivery Notifications', href: '/merchant/webhooks', icon: Webhook },
         { name: 'Merchant Orders', href: '/merchant/orders', icon: Boxes },
       ];
     }
