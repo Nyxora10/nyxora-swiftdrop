@@ -27,7 +27,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         log.warn("Bad request: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Bad Request");
         return problem;
     }
@@ -35,7 +36,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex) {
         log.warn("Resource not found: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Resource Not Found");
         return problem;
     }
@@ -43,7 +45,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceConflictException.class)
     public ProblemDetail handleResourceConflict(ResourceConflictException ex) {
         log.warn("Resource conflict: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Resource Conflict");
         return problem;
     }
@@ -52,7 +55,8 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleInvalidStateTransition(InvalidStateTransitionException ex) {
         log.warn("Invalid parcel state transition: from={} to={}, reason={}",
                 ex.getFromStatus(), ex.getToStatus(), PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Invalid State Transition");
         if (ex.getFromStatus() != null) {
             problem.setProperty("fromStatus", ex.getFromStatus().name());
@@ -94,7 +98,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ProblemDetail handleIllegalState(IllegalStateException ex) {
         log.error("Internal state error: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected internal state error occurred.");
         problem.setTitle("Internal Server Error");
         return problem;
     }

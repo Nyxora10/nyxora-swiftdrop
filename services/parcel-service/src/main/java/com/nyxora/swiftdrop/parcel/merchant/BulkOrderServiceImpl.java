@@ -97,7 +97,7 @@ public class BulkOrderServiceImpl implements BulkOrderService {
                 successCount++;
             } catch (DataAccessException ex) {
                 // Don't echo SQL/driver details back to the merchant.
-                log.error("[BulkOrderService] Row {} failed with a database error; row rolled back", rowNumber, ex);
+                log.error("[BulkOrderService] Row {} failed with a database error; row rolled back", rowNumber);
                 results.add(failed(rowNumber, orderReq,
                         List.of("Order could not be saved due to a temporary storage error. Please retry this row.")));
                 failureCount++;

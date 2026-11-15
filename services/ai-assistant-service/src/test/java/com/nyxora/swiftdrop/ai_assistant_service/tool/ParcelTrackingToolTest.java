@@ -130,7 +130,7 @@ class ParcelTrackingToolTest {
     }
 
     @Test
-    @DisplayName("Should sanitize international phone numbers and embedded emails in delivery notes")
+    @DisplayName("Should sanitize Sri Lankan phone numbers and embedded emails in delivery notes")
     void shouldSanitizeInternationalPhoneAndEmailInDeliveryNote() {
         TrackingTimelineEventDto milestone = new TrackingTimelineEventDto(
                 "OUT_FOR_DELIVERY",

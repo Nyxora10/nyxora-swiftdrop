@@ -37,7 +37,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ProblemDetail handleEmailAlreadyExists(EmailAlreadyExistsException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Email conflict: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Email Already Registered");
         problem.setType(URI.create("https://swiftdrop.lk/errors/email-already-exists"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -48,7 +49,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountPendingApprovalException.class)
     public ProblemDetail handleAccountPendingApproval(AccountPendingApprovalException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Account pending approval: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Account Pending Approval");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-pending-approval"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -59,7 +61,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountSuspendedException.class)
     public ProblemDetail handleAccountSuspended(AccountSuspendedException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Suspended account access: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Account Suspended");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-suspended"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -70,7 +73,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountRejectedException.class)
     public ProblemDetail handleAccountRejected(AccountRejectedException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Rejected account login attempt: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Account Application Rejected");
         problem.setType(URI.create("https://swiftdrop.lk/errors/account-rejected"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -81,10 +85,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Failed login attempt: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        String detail = (ex.getMessage() != null && !ex.getMessage().isBlank())
-                ? ex.getMessage()
-                : "Invalid credentials provided.";
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, detail);
+        String detail = PiiMaskingUtil.maskText(ex.getMessage());
+        if (detail == null || detail.isBlank()) {
+            detail = "Invalid credentials provided.";
+        } else if ("Invalid email or password.".equals(detail)
+                || "Invalid client_id or client_secret.".equals(detail)) {
+            detail = "Invalid credentials provided.";
+        }
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED,
+                detail);
         problem.setTitle("Authentication Failed");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-credentials"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -96,7 +105,8 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleGenericAuthenticationException(AuthenticationException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Authentication error on {}: {}",
                 request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED,
+                "Authentication is required to access this resource.");
         problem.setTitle("Authentication Required");
         problem.setType(URI.create("https://swiftdrop.lk/errors/unauthorized"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -130,7 +140,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRefreshTokenException.class)
     public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Invalid refresh token: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED,
+                "The refresh token is invalid or expired.");
         problem.setTitle("Invalid Refresh Token");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-refresh-token"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -141,7 +152,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Resource not found: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Resource Not Found");
         problem.setType(URI.create("https://swiftdrop.lk/errors/resource-not-found"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -240,7 +252,8 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Illegal argument on {}: {}",
                 request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Bad Request");
         problem.setType(URI.create("https://swiftdrop.lk/errors/bad-request"));
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -252,7 +265,8 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
         log.warn("[GlobalExceptionHandler] Conflict/Invalid state transition on {}: {}",
                 request.getRequestURI(), PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Invalid State Transition");
         problem.setType(URI.create("https://swiftdrop.lk/errors/invalid-state-transition"));
         problem.setInstance(URI.create(request.getRequestURI()));

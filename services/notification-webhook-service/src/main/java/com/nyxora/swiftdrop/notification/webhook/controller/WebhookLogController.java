@@ -216,23 +216,25 @@ public class WebhookLogController {
 
         } catch (DeliveryLogNotFoundException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "NOT_FOUND", "message", ex.getMessage()));
+                    .body(Map.of("error", "NOT_FOUND", "message", PiiMaskingUtil.maskText(ex.getMessage())));
 
         } catch (InvalidDeliveryStatusException ex) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "INELIGIBLE_STATUS",
                             "currentStatus", ex.getCurrentStatus(),
-                            "message", ex.getMessage()));
+                            "message", PiiMaskingUtil.maskText(ex.getMessage())));
 
         } catch (ConcurrentRetryException ex) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "CONCURRENT_RETRY_CONFLICT", "message", ex.getMessage()));
+                    .body(Map.of("error", "CONCURRENT_RETRY_CONFLICT",
+                            "message", PiiMaskingUtil.maskText(ex.getMessage())));
 
         } catch (IllegalStateException ex) {
             log.error("Internal error executing manual retry for deliveryLogId={}: {}",
                     deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()));
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "RETRY_PUBLICATION_FAILED", "message", ex.getMessage()));
+                    .body(Map.of("error", "RETRY_PUBLICATION_FAILED",
+                            "message", "Webhook retry could not be published."));
         }
     }
 

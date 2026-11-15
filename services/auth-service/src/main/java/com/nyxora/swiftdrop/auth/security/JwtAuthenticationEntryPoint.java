@@ -40,9 +40,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         problemDetail.put("type", "https://swiftdrop.lk/errors/unauthorized");
         problemDetail.put("title", "Unauthorized");
         problemDetail.put("status", HttpServletResponse.SC_UNAUTHORIZED);
-        problemDetail.put("detail", authException.getMessage() != null
-                ? authException.getMessage()
-                : "Full authentication is required to access this resource.");
+        problemDetail.put("detail", "Full authentication is required to access this resource.");
         problemDetail.put("instance", request.getRequestURI());
         problemDetail.put("timestamp", Instant.now().toString());
 

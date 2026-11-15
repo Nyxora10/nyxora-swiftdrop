@@ -20,7 +20,8 @@ public class DispatchExceptionHandler {
     public ProblemDetail handleCourierWorkloadExceeded(CourierWorkloadExceededException ex) {
         log.warn("[DispatchExceptionHandler] Courier workload exceeded: {}",
                 PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Courier Workload Exceeded");
         problem.setProperty("courierId", ex.getCourierId());
         problem.setProperty("currentActiveCount", ex.getCurrentActiveCount());
@@ -31,7 +32,8 @@ public class DispatchExceptionHandler {
     public ProblemDetail handleInvalidParcelState(InvalidParcelStateException ex) {
         log.warn("[DispatchExceptionHandler] Invalid parcel state: {}",
                 PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Invalid Parcel State");
         return problem;
     }
@@ -39,7 +41,8 @@ public class DispatchExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         log.warn("[DispatchExceptionHandler] Bad request: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
         problem.setTitle("Invalid Request Parameters");
         return problem;
     }

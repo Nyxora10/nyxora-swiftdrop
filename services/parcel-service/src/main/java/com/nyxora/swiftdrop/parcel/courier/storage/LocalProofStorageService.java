@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.courier.storage;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.courier.dto.ProofUploadResponseDto;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -82,7 +83,8 @@ public class LocalProofStorageService implements ProofStorageService {
             Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
             log.info("Delivery proof stored locally: {}", targetPath);
         } catch (IOException e) {
-            log.error("Failed to store proof file {} for parcel {}", safeFilename, parcelId, e);
+            log.error("Failed to store proof file {} for parcel {}: {}",
+                    safeFilename, parcelId, PiiMaskingUtil.maskText(e.getMessage()));
             throw new IllegalStateException("Failed to store proof file on local disk.", e);
         }
 

@@ -109,7 +109,7 @@ class PiiMaskingUtilTest {
     class PhoneNumberMaskingTests {
 
         @Test
-        @DisplayName("Should mask Sri Lankan international phone number (+94)")
+        @DisplayName("Should mask Sri Lankan international-dialing phone number (+94)")
         void testSriLankaInternationalPhone() {
             assertThat(PiiMaskingUtil.maskPhoneNumber("+94771234567")).isEqualTo("+94*****4567");
             assertThat(PiiMaskingUtil.maskPhoneNumber("+94719876543")).isEqualTo("+94*****6543");
@@ -120,6 +120,12 @@ class PiiMaskingUtilTest {
         void testDomesticPhone() {
             assertThat(PiiMaskingUtil.maskPhoneNumber("0771234567")).isEqualTo("07****4567");
             assertThat(PiiMaskingUtil.maskPhoneNumber("0719876543")).isEqualTo("07****6543");
+        }
+
+        @Test
+        @DisplayName("Should mask Sri Lankan country-code phone number without plus sign")
+        void testSriLankaCountryCodePhone() {
+            assertThat(PiiMaskingUtil.maskPhoneNumber("94771234567")).isEqualTo("94*****4567");
         }
 
         @Test
@@ -139,6 +145,7 @@ class PiiMaskingUtilTest {
         void testShortPhone() {
             assertThat(PiiMaskingUtil.maskPhoneNumber("12345")).isEqualTo("12345");
             assertThat(PiiMaskingUtil.maskPhoneNumber("911")).isEqualTo("911");
+            assertThat(PiiMaskingUtil.maskPhoneNumber("14155552671")).isEqualTo("14155552671");
         }
 
         @Test
@@ -247,6 +254,31 @@ class PiiMaskingUtilTest {
         void testTextWithoutPii() {
             String rawLog = "Parcel SD-20261102-123456 transitioned to status IN_TRANSIT";
             assertThat(PiiMaskingUtil.maskText(rawLog)).isEqualTo(rawLog);
+        }
+
+        @Test
+        @DisplayName("Should preserve ordinary numbers and sanitize multiline diagnostics")
+        void testOrdinaryNumbersAndMultilineText() {
+            String rawLog = "attempt=2, timestamp=2026-11-15T10:13:27Z\n"
+                    + "email=first@example.com phone=+94771234567";
+
+            assertThat(PiiMaskingUtil.maskText(rawLog))
+                    .isEqualTo("attempt=2, timestamp=2026-11-15T10:13:27Z\n"
+                            + "email=f***t@example.com phone=+94*****4567");
+        }
+
+        @Test
+        @DisplayName("Should preserve already masked values without introducing additional masking")
+        void testAlreadyMaskedText() {
+            assertThat(PiiMaskingUtil.maskText("recipient=k***l@example.com phone=+94*****4567"))
+                    .isEqualTo("recipient=k***l@example.com phone=+94*****4567");
+        }
+
+        @Test
+        @DisplayName("Should preserve Unicode text while masking adjacent email")
+        void testUnicodeText() {
+            assertThat(PiiMaskingUtil.maskText("配送先: 山田太郎, contact=kamal@example.com"))
+                    .isEqualTo("配送先: 山田太郎, contact=k***l@example.com");
         }
 
         @Test
