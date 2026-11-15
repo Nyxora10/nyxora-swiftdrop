@@ -55,6 +55,7 @@ export interface UpdateParcelStatusRequest {
   deliveryNote?: string;
   recipientSignatureName?: string;
   proofPhotoUrl?: string;
+  signatureImageUrl?: string;
   failureReason?: string;
 }
 
@@ -89,6 +90,7 @@ export interface CourierDeliveryHistoryItem {
   estimatedFee: number;
   recipientSignatureName?: string | null;
   proofPhotoUrl?: string | null;
+  signatureImageUrl?: string | null;
   deliveryNote?: string | null;
   failureReason?: string | null;
   completedAt?: string | null;
