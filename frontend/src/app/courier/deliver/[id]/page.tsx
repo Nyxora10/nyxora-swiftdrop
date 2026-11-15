@@ -518,7 +518,7 @@ function CourierDeliverPageContent() {
             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 transition-colors disabled:opacity-50"
           >
             {updating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Navigation className="w-5 h-5" />}
-            Start Delivery
+            Mark Out for Delivery
           </button>
         )}
 
