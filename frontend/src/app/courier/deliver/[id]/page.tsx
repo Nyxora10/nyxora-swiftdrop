@@ -33,6 +33,29 @@ import {
   X,
 } from 'lucide-react';
 
+function formatStatusLabel(status: ParcelStatus): string {
+  switch (status) {
+    case 'CREATED':
+      return 'Created';
+    case 'ASSIGNED':
+      return 'Assigned';
+    case 'PICKED_UP':
+      return 'Picked Up';
+    case 'IN_TRANSIT':
+      return 'In Transit';
+    case 'OUT_FOR_DELIVERY':
+      return 'Out for Delivery';
+    case 'DELIVERED':
+      return 'Delivered';
+    case 'FAILED':
+      return 'Attempt Failed';
+    case 'RETURNED_TO_SENDER':
+      return 'Returned to Sender';
+    default:
+      return status;
+  }
+}
+
 function CourierDeliverPageContent() {
   const router = useRouter();
   const routeParams = useParams();
@@ -75,7 +98,9 @@ function CourierDeliverPageContent() {
       void fetchParcel();
     }, 0);
 
-    return () => window.clearTimeout(timeoutId);
+    
+
+  return () => window.clearTimeout(timeoutId);
   }, [fetchParcel]);
 
   // Handle Photo Selection from Camera or Gallery
@@ -225,7 +250,9 @@ function CourierDeliverPageContent() {
   const currentStep = parcel ? getStepIndex(parcel.currentStatus) : 0;
 
   if (loading) {
-    return (
+    
+
+  return (
       <AppShell>
         <div className="max-w-xl mx-auto p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-2xs mt-8">
           <RefreshCw className="w-8 h-8 mx-auto text-emerald-600 animate-spin mb-3" />
@@ -236,7 +263,9 @@ function CourierDeliverPageContent() {
   }
 
   if (!parcel) {
-    return (
+    
+
+  return (
       <AppShell>
         <div className="max-w-xl mx-auto p-8 text-center bg-white rounded-2xl border border-slate-200 mt-8 space-y-4">
           <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
@@ -254,6 +283,8 @@ function CourierDeliverPageContent() {
       </AppShell>
     );
   }
+
+  
 
   return (
     <AppShell>
@@ -279,7 +310,9 @@ function CourierDeliverPageContent() {
             {steps.map((s, idx) => {
               const isCompleted = idx < currentStep;
               const isCurrent = idx === currentStep;
-              return (
+              
+
+  return (
                 <div key={s.status} className="flex flex-col items-center relative z-10">
                   <div
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
@@ -312,7 +345,7 @@ function CourierDeliverPageContent() {
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 Current Status
               </span>
-              <h2 className="text-lg font-bold text-slate-900">{parcel.currentStatus}</h2>
+              <h2 className="text-lg font-bold text-slate-900">{formatStatusLabel(parcel.currentStatus)}</h2>
               {(parcel.originZoneName || parcel.destinationZoneName) && (
                 <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
                   <span className="font-medium text-slate-700">{parcel.originZoneName || 'Origin Hub'}</span>
@@ -652,7 +685,7 @@ function CourierDeliverPageContent() {
                       <span className="font-bold">Threshold Warning:</span>
                       <p>
                         This will be the 3rd failed attempt. Under SwiftDrop logistics policy, this
-                        parcel will automatically transition to <strong>RETURNED_TO_SENDER</strong>.
+                        parcel will automatically transition to <strong>Returned to Sender</strong>.
                       </p>
                     </div>
                   </div>
@@ -716,6 +749,8 @@ function CourierDeliverPageContent() {
 }
 
 export default function CourierDeliverPage() {
+  
+
   return (
     <Suspense
       fallback={
