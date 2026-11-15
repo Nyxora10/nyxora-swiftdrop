@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/components/layout/ToastContext';
 import {
   ArrowLeft,
+  ArrowRight,
   Package,
   Truck,
   MapPin,
@@ -130,14 +131,21 @@ function CourierDeliverPageContent() {
     setUpdating(true);
     try {
       let proofUrl = '';
+      let signatureUrl = '';
 
-      // Upload proof file (signature or photo)
+      // Upload doorstep photo and drawn signature independently when provided
       if (photoFile) {
         const uploadRes = await uploadDeliveryProof(parcel.id, photoFile, photoFile.name);
         proofUrl = uploadRes.proofPhotoUrl;
-      } else if (signatureBlob) {
-        const uploadRes = await uploadDeliveryProof(parcel.id, signatureBlob, `${parcel.id}_signature.png`);
-        proofUrl = uploadRes.proofPhotoUrl;
+      }
+      if (signatureBlob) {
+        const sigRes = await uploadDeliveryProof(parcel.id, signatureBlob, `${parcel.id}_signature.png`);
+        signatureUrl = sigRes.proofPhotoUrl;
+      }
+
+      // Satisfy backend state machine guard if courier captured only a signature
+      if (!proofUrl && signatureUrl) {
+        proofUrl = signatureUrl;
       }
 
       // Execute DELIVERED status transition
@@ -145,6 +153,7 @@ function CourierDeliverPageContent() {
         targetStatus: 'DELIVERED',
         recipientSignatureName: recipientName.trim(),
         proofPhotoUrl: proofUrl,
+        signatureImageUrl: signatureUrl || undefined,
         deliveryNote: deliveryNote.trim() || 'Successfully delivered to recipient',
       });
 
@@ -300,6 +309,13 @@ function CourierDeliverPageContent() {
                 Current Status
               </span>
               <h2 className="text-lg font-bold text-slate-900">{parcel.currentStatus}</h2>
+              {(parcel.originZoneName || parcel.destinationZoneName) && (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                  <span className="font-medium text-slate-700">{parcel.originZoneName || 'Origin Hub'}</span>
+                  <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span className="font-medium text-indigo-700">{parcel.destinationZoneName || 'Destination Hub'}</span>
+                </p>
+              )}
             </div>
             {parcel.failureCount > 0 && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
@@ -328,6 +344,28 @@ function CourierDeliverPageContent() {
                   Call Recipient
                 </a>
               )}
+            </div>
+
+            {/* Pickup Address with Google Maps link */}
+            <div className="pt-2 border-t border-slate-200/60 flex items-start justify-between gap-2">
+              <div className="flex items-start gap-1.5">
+                <MapPin className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Pickup Address
+                  </span>
+                  <p className="font-medium text-slate-700">{parcel.pickupAddress}</p>
+                </div>
+              </div>
+
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(parcel.pickupAddress)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 shrink-0 pt-0.5"
+              >
+                Maps <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
             {/* Dropoff Address with Google Maps link */}
