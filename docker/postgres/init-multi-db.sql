@@ -1,5 +1,5 @@
 -- docker/postgres/init-multi-db.sql
--- Initializes the three isolated logical databases for SwiftDrop microservices
+-- Initializes the isolated logical databases for SwiftDrop microservices and integration tests
 
 CREATE DATABASE auth_db;
 CREATE DATABASE parcel_db;
