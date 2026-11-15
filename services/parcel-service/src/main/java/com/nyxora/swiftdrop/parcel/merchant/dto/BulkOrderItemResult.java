@@ -1,7 +1,6 @@
 package com.nyxora.swiftdrop.parcel.merchant.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.nyxora.swiftdrop.parcel.domain.enums.ParcelStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

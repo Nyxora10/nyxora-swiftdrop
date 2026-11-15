@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GoogleTokenVerifier Unit Tests")
+@SuppressWarnings({"rawtypes", "unchecked"})
 class GoogleTokenVerifierTest {
 
     @Mock
@@ -93,7 +94,6 @@ class GoogleTokenVerifierTest {
 
     @Test
     @DisplayName("Valid Google Access token (ya29...) verifies via UserInfo endpoint")
-    @SuppressWarnings("unchecked")
     void verify_ValidAccessToken_ReturnsSocialUserProfile() {
         String mockAccessToken = "ya29.a0AehfTOnCKKkeYhyHN...";
         GoogleTokenVerifier.GoogleUserInfoResponse mockResponse =
