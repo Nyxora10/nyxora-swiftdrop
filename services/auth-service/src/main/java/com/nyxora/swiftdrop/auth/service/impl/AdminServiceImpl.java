@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,7 @@ public class AdminServiceImpl implements AdminService {
     private final CourierRepository courierRepository;
     private final MerchantRepository merchantRepository;
     private final RefreshTokenService refreshTokenService;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(readOnly = true)
@@ -90,6 +92,30 @@ public class AdminServiceImpl implements AdminService {
                 courier.setIsAvailable(true);
                 courierRepository.save(courier);
                 log.info("[AdminService] Restored courier availability for userId: {}", userId);
+            });
+        }
+
+        // If merchant is approved, auto-generate initial oauth credentials and webhook secret if missing
+        if (user.getRole().getName() == RoleName.ROLE_MERCHANT) {
+            merchantRepository.findByUserId(userId).ifPresent(merchant -> {
+                boolean updated = false;
+                if (merchant.getOauthClientId() == null || merchant.getOauthClientId().isBlank()) {
+                    merchant.setOauthClientId("mer_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16));
+                    updated = true;
+                }
+                if (merchant.getOauthClientSecretHash() == null || merchant.getOauthClientSecretHash().isBlank()) {
+                    String initialSecret = "cs_" + UUID.randomUUID().toString().replace("-", "");
+                    merchant.setOauthClientSecretHash(passwordEncoder.encode(initialSecret));
+                    updated = true;
+                }
+                if (merchant.getWebhookSecret() == null || merchant.getWebhookSecret().isBlank()) {
+                    merchant.setWebhookSecret("whsec_" + UUID.randomUUID().toString().replace("-", ""));
+                    updated = true;
+                }
+                if (updated) {
+                    merchantRepository.save(merchant);
+                    log.info("[AdminService] Initialized OAuth and webhook credentials for merchant: {}", merchant.getId());
+                }
             });
         }
 

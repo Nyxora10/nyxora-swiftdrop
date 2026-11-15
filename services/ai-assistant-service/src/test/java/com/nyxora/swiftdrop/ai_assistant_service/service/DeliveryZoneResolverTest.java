@@ -101,5 +101,37 @@ class DeliveryZoneResolverTest {
         assertThat(result.status()).isEqualTo(ZoneResolutionResult.Status.UNAVAILABLE);
         assertThat(result.message()).contains("temporarily unavailable");
     }
+
+    @Test
+    @DisplayName("Should retry with stripped noise word when initial lookup is empty")
+    void shouldRetryWithStrippedNoiseWord() {
+        PublicDeliveryZoneResponse zone = new PublicDeliveryZoneResponse(1, "WP-COL-01", "Colombo", "Colombo");
+
+        when(parcelServiceClient.getPublicZones("Colombo District", null)).thenReturn(List.of());
+        when(parcelServiceClient.getPublicZones("Colombo", null)).thenReturn(List.of(zone));
+
+        ZoneResolutionResult result = resolver.resolveZone("Colombo District");
+
+        assertThat(result.status()).isEqualTo(ZoneResolutionResult.Status.RESOLVED);
+        assertThat(result.matchedZone().zoneName()).isEqualTo("Colombo");
+    }
+
+    @Test
+    @DisplayName("Should resolve exact match by zoneName or numeric ID when multiple zones returned")
+    void shouldResolveExactMatchAmongMultipleZones() {
+        PublicDeliveryZoneResponse zone1 = new PublicDeliveryZoneResponse(1, "WP-COL-01", "Colombo", "Colombo");
+        PublicDeliveryZoneResponse zone2 = new PublicDeliveryZoneResponse(2, "WP-COL-02", "Colombo South", "Colombo");
+
+        when(parcelServiceClient.getPublicZones("Colombo", null)).thenReturn(List.of(zone1, zone2));
+
+        ZoneResolutionResult resultByName = resolver.resolveZone("Colombo");
+        assertThat(resultByName.status()).isEqualTo(ZoneResolutionResult.Status.RESOLVED);
+        assertThat(resultByName.matchedZone().id()).isEqualTo(1);
+
+        when(parcelServiceClient.getPublicZones("1", null)).thenReturn(List.of(zone1, zone2));
+        ZoneResolutionResult resultById = resolver.resolveZone("1");
+        assertThat(resultById.status()).isEqualTo(ZoneResolutionResult.Status.RESOLVED);
+        assertThat(resultById.matchedZone().zoneCode()).isEqualTo("WP-COL-01");
+    }
 }
 

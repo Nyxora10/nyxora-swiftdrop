@@ -33,6 +33,7 @@ class RouteValidatorTest {
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/parcels/track/SD-20261101-0001").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/public/zones").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/public/zones?search=Colombo").build()));
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/webhooks/demo-receiver").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/health").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/actuator/info").build()));
         assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.get("/v3/api-docs").build()));
@@ -52,6 +53,26 @@ class RouteValidatorTest {
         assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/couriers/available").build()));
         assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/admin/users").build()));
         assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.get("/api/v1/notifications").build()));
+    }
+
+    // ─── Task 4.2: Public Whitelist Additions ─────────────────────────────────
+
+    @Test
+    @DisplayName("Task 4.2: /api/v1/parcels/quote is recognized as public (not secured)")
+    void parcelsQuote_ReturnsNotSecured() {
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/parcels/quote").build()));
+    }
+
+    @Test
+    @DisplayName("Task 4.2: /api/v1/webhooks/demo-receiver is recognized as public (not secured)")
+    void webhooksDemoReceiver_ReturnsNotSecured() {
+        assertFalse(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/webhooks/demo-receiver").build()));
+    }
+
+    @Test
+    @DisplayName("Task 4.2: /api/v1/webhooks/other is secured (only demo-receiver is whitelisted)")
+    void otherWebhooks_ReturnSecured() {
+        assertTrue(routeValidator.isSecured.test(MockServerHttpRequest.post("/api/v1/webhooks/merchant-payload").build()));
     }
 
     @Test

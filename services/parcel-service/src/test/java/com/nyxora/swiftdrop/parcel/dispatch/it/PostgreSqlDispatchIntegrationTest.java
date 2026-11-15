@@ -1,11 +1,8 @@
 package com.nyxora.swiftdrop.parcel.dispatch.it;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nyxora.swiftdrop.parcel.dispatch.config.DispatchRabbitMqConfig;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.AssignCourierRequest;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.AssignCourierResponse;
 import com.nyxora.swiftdrop.parcel.dispatch.exception.CourierWorkloadExceededException;
-import com.nyxora.swiftdrop.parcel.dispatch.lock.CourierAdvisoryLockManager;
 import com.nyxora.swiftdrop.parcel.dispatch.outbox.DispatchOutboxEvent;
 import com.nyxora.swiftdrop.parcel.dispatch.outbox.DispatchOutboxPublisher;
 import com.nyxora.swiftdrop.parcel.dispatch.outbox.DispatchOutboxRepository;
@@ -75,9 +72,6 @@ class PostgreSqlDispatchIntegrationTest {
 
     @Autowired
     private DeliveryZoneRepository zoneRepository;
-
-    @Autowired
-    private CourierAdvisoryLockManager lockManager;
 
     @MockBean
     private DispatchOutboxPublisher outboxPublisher;

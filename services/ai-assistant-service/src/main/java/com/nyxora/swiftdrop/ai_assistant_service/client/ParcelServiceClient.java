@@ -36,18 +36,24 @@ public class ParcelServiceClient {
 
     @Autowired
     public ParcelServiceClient(
+            @Autowired(required = false) RestClient.Builder restClientBuilder,
             @Value("${services.parcel.url:http://localhost:8082}") String parcelServiceUrl) {
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5000);
         requestFactory.setReadTimeout(10000);
 
-        this.restClient = RestClient.builder()
+        RestClient.Builder builder = (restClientBuilder != null ? restClientBuilder : RestClient.builder())
                 .baseUrl(parcelServiceUrl)
-                .requestFactory(requestFactory)
-                .build();
+                .requestFactory(requestFactory);
+
+        this.restClient = builder.build();
 
         log.info("ParcelServiceClient initialized with base URL: {}", parcelServiceUrl);
+    }
+
+    public ParcelServiceClient(String parcelServiceUrl) {
+        this(null, parcelServiceUrl);
     }
 
     /**

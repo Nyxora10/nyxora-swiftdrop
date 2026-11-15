@@ -13,8 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.client.RestClient;
 
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPublicKey;
@@ -28,6 +26,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AppleIdTokenVerifier Unit Tests")
+@SuppressWarnings({"rawtypes", "unchecked"})
 class AppleIdTokenVerifierTest {
 
     private static final String CLIENT_ID = "com.swiftdrop.client";
@@ -399,4 +398,7 @@ class AppleIdTokenVerifierTest {
         assertThrows(BadCredentialsException.class, () -> verifier.verify(token, null));
     }
 }
+
+
+
 

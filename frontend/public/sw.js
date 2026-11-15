@@ -51,6 +51,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Service workers can observe requests initiated by browser extensions. Cache
+  // only same-origin HTTP(S) requests handled by this application.
+  if (
+    (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') ||
+    requestUrl.origin !== self.location.origin
+  ) {
+    return;
+  }
+
+  // Never cache Next.js development assets or webpack HMR requests.
+  if (requestUrl.pathname.startsWith('/_next/') || requestUrl.pathname === '/sw.js') {
+    return;
+  }
+
   // Network-First for API requests to ensure fresh parcel data
   if (requestUrl.pathname.startsWith('/api/')) {
     event.respondWith(
@@ -65,11 +79,15 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
+        if (networkResponse && networkResponse.ok && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          event.waitUntil(
+            caches.open(CACHE_NAME).then((cache) => {
+              return cache.put(event.request, responseToCache);
+            }).catch((err) => {
+              console.warn('[PWA ServiceWorker] Failed to cache response:', err);
+            })
+          );
         }
         return networkResponse;
       }).catch(() => {

@@ -28,7 +28,7 @@ export default function PendingApprovalPage() {
         const role = userProfile.role || currentUser?.role;
         if (role === 'ROLE_MERCHANT') router.push('/merchant/dashboard');
         else if (role === 'ROLE_COURIER') router.push('/courier/runsheet');
-        else if (role === 'ROLE_ADMIN') router.push('/admin/dispatch');
+        else if (role === 'ROLE_ADMIN') router.push('/admin/pricing');
         else router.push('/customer/book');
       } else {
         setMessage('Your account is still under administrative review. Please check back shortly.');

@@ -13,8 +13,6 @@ import {
   Truck,
   Users,
   Layers,
-  BarChart3,
-  Sliders,
   X,
   Boxes,
   LogOut,
@@ -83,10 +81,8 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
 
     if (role === 'ROLE_ADMIN') {
       return [
-        { name: 'Dispatch Board', href: '/admin/dispatch', icon: Sliders },
         { name: 'Partner Approvals', href: '/admin/approvals', icon: Users },
         { name: 'Zones & Pricing Rules', href: '/admin/pricing', icon: Layers },
-        { name: 'Reports & Analytics', href: '/admin/reports', icon: BarChart3 },
       ];
     }
 

@@ -14,7 +14,11 @@ import com.nyxora.swiftdrop.auth.repository.RoleRepository;
 import com.nyxora.swiftdrop.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
+import org.springframework.util.StringUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
  * 3. Default Demo Customer Account
  * 4. Default Demo Courier Account (Task 2.5)
  * 5. Default Demo Merchant Account
+ *
+ * <p>Items 2-5 use fixed, publicly known credentials and are created only when
+ * {@code app.seed.demo-data=true} (env {@code SEED_DEMO_DATA}) and the {@code prod} profile is
+ * not active. Without demo data, an admin can be bootstrapped from
+ * {@code ADMIN_BOOTSTRAP_EMAIL} / {@code ADMIN_BOOTSTRAP_PASSWORD}.</p>
  */
 @Slf4j
 @Component
@@ -37,6 +46,7 @@ public class DataInitializer implements CommandLineRunner {
     private final CourierRepository courierRepository;
     private final MerchantRepository merchantRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Environment environment;
 
     private static final String DEFAULT_ADMIN_EMAIL = "admin@swiftdrop.lk";
     private static final String DEFAULT_ADMIN_PASSWORD = "Admin@SwiftDrop2026!";
@@ -47,19 +57,52 @@ public class DataInitializer implements CommandLineRunner {
     private static final String DEFAULT_COURIER_EMAIL = "courier.kamal@swiftdrop.lk";
     private static final String DEFAULT_COURIER_PASSWORD = "Courier@123";
 
-    private static final String DEFAULT_MERCHANT_EMAIL = "merchant.daraz@swiftdrop.lk";
-    private static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@123";
+    public static final String DEFAULT_MERCHANT_EMAIL = "merchant.daraz@swiftdrop.lk";
+    public static final String DEFAULT_MERCHANT_PASSWORD = "Merchant@123";
+    // Member 2 (Task 2.3): demo OAuth 2.0 client_credentials for headless M2M order creation
+    public static final String DEFAULT_MERCHANT_CLIENT_ID = "mch_daraz_client_01";
+    public static final String DEFAULT_MERCHANT_CLIENT_SECRET = "sec_daraz_secret_2026";
+    public static final String DEFAULT_MERCHANT_WEBHOOK_SECRET = "whsec_daraz_hmac_secret_2026";
+
+    @Value("${app.seed.demo-data:false}")
+    private boolean demoDataEnabled;
+
+    @Value("${app.seed.admin-email:}")
+    private String bootstrapAdminEmail;
+
+    @Value("${app.seed.admin-password:}")
+    private String bootstrapAdminPassword;
 
     @Override
     @Transactional
     public void run(String... args) {
         log.info("[DataInitializer] Verifying database seeding for auth_db...");
         seedRoles();
-        seedDefaultAdmin();
-        seedDefaultCustomer();
-        seedDefaultCourier();
-        seedDefaultMerchant();
+
+        if (isDemoSeedingAllowed()) {
+            log.warn("[DataInitializer] Seeding DEMO accounts with well-known credentials. "
+                    + "Set SEED_DEMO_DATA=false or use the 'prod' profile outside local development.");
+            seedDefaultAdmin(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD);
+            seedDefaultCustomer();
+            seedDefaultCourier();
+            seedDefaultMerchant();
+        } else if (StringUtils.hasText(bootstrapAdminEmail) && StringUtils.hasText(bootstrapAdminPassword)) {
+            seedDefaultAdmin(bootstrapAdminEmail.trim(), bootstrapAdminPassword);
+        } else {
+            log.info("[DataInitializer] Demo seeding disabled and no ADMIN_BOOTSTRAP_EMAIL/PASSWORD set; only roles were seeded.");
+        }
         log.info("[DataInitializer] Database verification complete.");
+    }
+
+    /** Demo accounts are never created under the 'prod' profile, even if the flag is set. */
+    private boolean isDemoSeedingAllowed() {
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            if (demoDataEnabled) {
+                log.warn("[DataInitializer] app.seed.demo-data ignored: demo accounts are never seeded in the 'prod' profile.");
+            }
+            return false;
+        }
+        return demoDataEnabled;
     }
 
     private void seedRoles() {
@@ -80,15 +123,15 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    private void seedDefaultAdmin() {
-        if (!userRepository.existsByEmail(DEFAULT_ADMIN_EMAIL)) {
+    private void seedDefaultAdmin(String adminEmail, String adminPassword) {
+        if (!userRepository.existsByEmail(adminEmail)) {
             Role adminRole = roleRepository.findByName(RoleName.ROLE_ADMIN)
                     .orElseThrow(() -> new IllegalStateException("ROLE_ADMIN not found during admin seeding"));
 
             User admin = User.builder()
                     .role(adminRole)
-                    .email(DEFAULT_ADMIN_EMAIL)
-                    .passwordHash(passwordEncoder.encode(DEFAULT_ADMIN_PASSWORD))
+                    .email(adminEmail)
+                    .passwordHash(passwordEncoder.encode(adminPassword))
                     .fullName("SwiftDrop Administrator")
                     .phoneNumber("+94770000000")
                     .status(UserStatus.ACTIVE)
@@ -96,7 +139,7 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
 
             userRepository.save(admin);
-            log.info("[DataInitializer] Successfully created default admin account: {}", DEFAULT_ADMIN_EMAIL);
+            log.info("[DataInitializer] Successfully created admin account: {}", adminEmail);
         } else {
             log.info("[DataInitializer] Default admin account already exists.");
         }
@@ -179,14 +222,35 @@ public class DataInitializer implements CommandLineRunner {
                     .businessName("Daraz Sri Lanka PVT LTD")
                     .registrationNumber("PV-123456")
                     .webhookUrl("http://localhost:8083/api/v1/webhooks/demo-receiver")
-                    .webhookSecret("demo-secret-12345")
-                    .oauthClientId("mer_daraz123456")
+                    .webhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET)
+                    .oauthClientId(DEFAULT_MERCHANT_CLIENT_ID)
+                    .oauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET))
                     .build();
 
             merchantRepository.save(merchant);
-            log.info("[DataInitializer] Successfully created default merchant account: {}", DEFAULT_MERCHANT_EMAIL);
+            log.info("[DataInitializer] Successfully created default merchant account: {} (client_id: {})",
+                    DEFAULT_MERCHANT_EMAIL, DEFAULT_MERCHANT_CLIENT_ID);
         } else {
+            backfillDemoMerchantCredentials();
             log.info("[DataInitializer] Default merchant account already exists.");
         }
+    }
+
+    /**
+     * Databases seeded by an earlier build may hold the demo merchant without OAuth
+     * client credentials, which breaks the client_credentials grant. Fill them in once.
+     */
+    private void backfillDemoMerchantCredentials() {
+        userRepository.findByEmail(DEFAULT_MERCHANT_EMAIL)
+                .flatMap(user -> merchantRepository.findByUserId(user.getId()))
+                .filter(merchant -> merchant.getOauthClientSecretHash() == null)
+                .ifPresent(merchant -> {
+                    merchant.setOauthClientId(DEFAULT_MERCHANT_CLIENT_ID);
+                    merchant.setOauthClientSecretHash(passwordEncoder.encode(DEFAULT_MERCHANT_CLIENT_SECRET));
+                    merchant.setWebhookSecret(DEFAULT_MERCHANT_WEBHOOK_SECRET);
+                    merchantRepository.save(merchant);
+                    log.info("[DataInitializer] Backfilled OAuth client credentials for demo merchant (client_id: {})",
+                            DEFAULT_MERCHANT_CLIENT_ID);
+                });
     }
 }
