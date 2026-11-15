@@ -28,8 +28,10 @@ public class CourierDeliveryHistoryItemDto {
     private String recipientPhone;
     private String pickupAddress;
     private String originZoneName;
+    private String originHubLocation;
     private String dropoffAddress;
     private String destinationZoneName;
+    private String destinationHubLocation;
     private BigDecimal weightKg;
     private ParcelSize parcelSize;
     private BigDecimal estimatedFee;
