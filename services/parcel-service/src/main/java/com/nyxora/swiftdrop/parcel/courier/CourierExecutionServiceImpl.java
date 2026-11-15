@@ -219,8 +219,10 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                     .recipientPhone(parcel.getRecipientPhone())
                     .pickupAddress(parcel.getPickupAddress())
                     .originZoneName(parcel.getOriginZone() != null ? parcel.getOriginZone().getZoneName() : null)
+                    .originHubLocation(parcel.getOriginZone() != null ? parcel.getOriginZone().getHubLocation() : null)
                     .dropoffAddress(parcel.getDropoffAddress())
                     .destinationZoneName(parcel.getDestinationZone() != null ? parcel.getDestinationZone().getZoneName() : null)
+                    .destinationHubLocation(parcel.getDestinationZone() != null ? parcel.getDestinationZone().getHubLocation() : null)
                     .weightKg(parcel.getWeightKg())
                     .parcelSize(parcel.getParcelSize())
                     .estimatedFee(parcel.getEstimatedFee())
@@ -258,14 +260,18 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
     private CourierParcelCardDto toCourierParcelCardDto(Parcel parcel) {
         int failureCount = (int) parcelStatusHistoryRepository.countByParcel_IdAndStatus(parcel.getId(), ParcelStatus.FAILED);
         String originZoneName = parcel.getOriginZone() != null ? parcel.getOriginZone().getZoneName() : null;
+        String originHubLocation = parcel.getOriginZone() != null ? parcel.getOriginZone().getHubLocation() : null;
         String destinationZoneName = parcel.getDestinationZone() != null ? parcel.getDestinationZone().getZoneName() : null;
+        String destinationHubLocation = parcel.getDestinationZone() != null ? parcel.getDestinationZone().getHubLocation() : null;
 
         return CourierParcelCardDto.builder()
                 .id(parcel.getId())
                 .trackingNumber(parcel.getTrackingNumber())
                 .currentStatus(parcel.getCurrentStatus())
                 .originZoneName(originZoneName)
+                .originHubLocation(originHubLocation)
                 .destinationZoneName(destinationZoneName)
+                .destinationHubLocation(destinationHubLocation)
                 .pickupAddress(parcel.getPickupAddress())
                 .dropoffAddress(parcel.getDropoffAddress())
                 .recipientName(parcel.getRecipientName())
