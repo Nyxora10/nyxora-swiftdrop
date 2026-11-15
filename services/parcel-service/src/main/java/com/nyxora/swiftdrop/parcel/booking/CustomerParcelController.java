@@ -79,8 +79,10 @@ public class CustomerParcelController {
         @Operation(summary = "Book a new parcel delivery", description = "Protected endpoint for customers and merchants to book parcel deliveries. Requires ROLE_CUSTOMER, ROLE_MERCHANT, or ROLE_ADMIN.")
         public ResponseEntity<BookingResponse> bookParcel(
                         @Parameter(description = "Authenticated user UUID injected by API Gateway", required = true) @RequestHeader("X-User-Id") UUID senderUserId,
+                        @RequestHeader(value = "X-User-Email", required = false) String senderEmail,
                         @Valid @RequestBody CustomerBookingRequest request) {
                 log.info("Processing parcel booking request for senderUserId={}", senderUserId);
+                request.setSenderEmail(senderEmail);
                 BookingResponse response = customerBookingService.bookParcel(request, senderUserId);
                 return ResponseEntity.status(HttpStatus.CREATED).body(response);
         }
