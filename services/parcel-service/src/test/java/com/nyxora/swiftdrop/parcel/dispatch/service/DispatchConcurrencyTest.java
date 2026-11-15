@@ -70,15 +70,14 @@ class DispatchConcurrencyTest {
         UUID parcelId1 = UUID.randomUUID();
         UUID parcelId2 = UUID.randomUUID();
 
-        Parcel parcel1 = Parcel.builder().id(parcelId1).trackingNumber("SD-1").currentStatus(ParcelStatus.CREATED).build();
-        Parcel parcel2 = Parcel.builder().id(parcelId2).trackingNumber("SD-2").currentStatus(ParcelStatus.CREATED).build();
-
-        when(dispatchParcelRepository.findById(parcelId1)).thenReturn(Optional.of(parcel1));
-        when(dispatchParcelRepository.findById(parcelId2)).thenReturn(Optional.of(parcel2));
+        when(dispatchParcelRepository.findById(parcelId1)).thenReturn(Optional.of(
+                Parcel.builder().id(parcelId1).trackingNumber("SD-1").currentStatus(ParcelStatus.CREATED).build()));
+        when(dispatchParcelRepository.findById(parcelId2)).thenReturn(Optional.of(
+                Parcel.builder().id(parcelId2).trackingNumber("SD-2").currentStatus(ParcelStatus.CREATED).build()));
 
         // Simulate state transition: first call sees 19, second call sees 20
         AtomicInteger activeCount = new AtomicInteger(19);
-        when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any(Collection.class)))
+        when(dispatchParcelRepository.countByAssignedCourierIdAndCurrentStatusIn(eq(courierId), any()))
                 .thenAnswer(inv -> (long) activeCount.getAndIncrement());
 
         when(dispatchParcelRepository.save(any(Parcel.class))).thenAnswer(inv -> inv.getArgument(0));

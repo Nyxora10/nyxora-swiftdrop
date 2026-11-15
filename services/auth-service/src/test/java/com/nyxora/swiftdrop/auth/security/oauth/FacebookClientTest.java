@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("FacebookClient Unit Tests")
+@SuppressWarnings({"rawtypes", "unchecked"})
 class FacebookClientTest {
 
     private static final String APP_SECRET = "fb_test_app_secret_123456";
@@ -73,7 +74,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Valid Facebook response with name returns normalized SocialUserProfile")
-    @SuppressWarnings("unchecked")
     void verify_ValidToken_ReturnsSocialUserProfile() {
         FacebookClient.FacebookUserResponse mockResponse =
                 new FacebookClient.FacebookUserResponse("fb-user-999", "Kamal Perera", "kamal.perera@facebook.com");
@@ -94,7 +94,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Valid Facebook response without name defaults name to email prefix")
-    @SuppressWarnings("unchecked")
     void verify_ValidToken_NullName_DefaultsToEmailPrefix() {
         FacebookClient.FacebookUserResponse mockResponse =
                 new FacebookClient.FacebookUserResponse("fb-user-888", null, "sunil.fernando@facebook.com");
@@ -112,7 +111,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Valid Facebook response with blank name defaults name to email prefix")
-    @SuppressWarnings("unchecked")
     void verify_ValidToken_BlankName_DefaultsToEmailPrefix() {
         FacebookClient.FacebookUserResponse mockResponse =
                 new FacebookClient.FacebookUserResponse("fb-user-777", "   ", "dilani@facebook.com");
@@ -130,7 +128,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Facebook Graph API call throwing exception throws BadCredentialsException")
-    @SuppressWarnings("unchecked")
     void verify_NetworkException_ThrowsBadCredentialsException() {
         when(restClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersUriSpec);
@@ -142,7 +139,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Empty or null ID in Facebook response throws BadCredentialsException")
-    @SuppressWarnings("unchecked")
     void verify_NullResponseOrId_ThrowsBadCredentialsException() {
         when(restClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersUriSpec);
@@ -156,7 +152,6 @@ class FacebookClientTest {
 
     @Test
     @DisplayName("Null or blank email in Facebook response throws BadCredentialsException")
-    @SuppressWarnings("unchecked")
     void verify_NullOrBlankEmail_ThrowsBadCredentialsException() {
         when(restClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersUriSpec);
