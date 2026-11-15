@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.AmqpException;
@@ -103,6 +104,8 @@ class CourierExecutionServiceTest {
                 .pickupAddress("123 Main St, Colombo 01")
                 .dropoffAddress("456 Galle Rd, Colombo 03")
                 .recipientName("Nimal Silva")
+                .senderEmail("sender@example.com")
+                .recipientEmail("recipient@example.com")
                 .recipientPhone("+94771234567")
                 .weightKg(new BigDecimal("2.50"))
                 .parcelSize(ParcelSize.MEDIUM)
@@ -299,6 +302,34 @@ class CourierExecutionServiceTest {
             verify(rabbitTemplate).convertAndSend(eq(RabbitMqConfig.SWIFTDROP_EVENTS_TOPIC),
                     eq(RabbitMqConfig.ROUTING_KEY_STATUS_UPDATED), any(ParcelStatusUpdatedEvent.class));
             verify(eventPublisher).publishEvent(any(ParcelStatusChangedLocalEvent.class));
+        }
+
+        @Test
+        @DisplayName("Publishes contact fields in status event")
+        void publishesContactFieldsInStatusEvent() {
+            Parcel parcel = buildTestParcel(parcelId, ParcelStatus.ASSIGNED, courierId);
+            when(parcelRepository.findById(parcelId)).thenReturn(Optional.of(parcel));
+            when(parcelStatusHistoryRepository.countByParcel_IdAndStatus(parcelId, ParcelStatus.FAILED)).thenReturn(0L);
+
+            UpdateParcelStatusRequestDto req = UpdateParcelStatusRequestDto.builder()
+                    .targetStatus(ParcelStatus.PICKED_UP)
+                    .build();
+
+            courierExecutionService.updateParcelStatus(
+                    courierId, parcelId, req, "Courier Name", "+94770000000");
+
+            ArgumentCaptor<ParcelStatusUpdatedEvent> eventCaptor =
+                    ArgumentCaptor.forClass(ParcelStatusUpdatedEvent.class);
+            verify(rabbitTemplate).convertAndSend(
+                    eq(RabbitMqConfig.SWIFTDROP_EVENTS_TOPIC),
+                    eq(RabbitMqConfig.ROUTING_KEY_STATUS_UPDATED),
+                    eventCaptor.capture());
+
+            ParcelStatusUpdatedEvent event = eventCaptor.getValue();
+            assertThat(event.getSenderEmail()).isEqualTo("sender@example.com");
+            assertThat(event.getRecipientEmail()).isEqualTo("recipient@example.com");
+            assertThat(event.getCourierName()).isEqualTo("Courier Name");
+            assertThat(event.getCourierPhone()).isEqualTo("+94770000000");
         }
 
         @Test

@@ -2,8 +2,10 @@ package com.nyxora.swiftdrop.parcel.booking.dto;
 
 import com.nyxora.swiftdrop.parcel.domain.enums.ParcelSize;
 import com.nyxora.swiftdrop.parcel.pricing.QuoteTier;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -75,5 +77,15 @@ public class CustomerBookingRequest {
 
     @Schema(description = "Optional merchant ID if booking on behalf of an approved merchant", example = "9dc3fc04-5d14-4dd8-b93d-2b19474a49a6")
     private UUID merchantId;
-}
 
+    @Email(message = "Recipient email must be valid")
+    @Size(max = 255, message = "Recipient email cannot exceed 255 characters")
+    @Schema(description = "Optional recipient email for delivery notifications", example = "recipient@example.com")
+    private String recipientEmail;
+
+    /**
+     * Trusted sender email injected from the API Gateway; never accepted from client JSON.
+     */
+    @JsonIgnore
+    private String senderEmail;
+}

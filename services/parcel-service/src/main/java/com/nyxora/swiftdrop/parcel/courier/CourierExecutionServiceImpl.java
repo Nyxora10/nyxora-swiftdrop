@@ -106,6 +106,13 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
     @Override
     @Transactional
     public ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request) {
+        return updateParcelStatus(courierId, parcelId, request, null, null);
+    }
+
+    @Override
+    @Transactional
+    public ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request,
+                                                            String courierName, String courierPhone) {
         if (courierId == null) {
             throw new IllegalArgumentException("Courier ID cannot be null.");
         }
@@ -163,7 +170,7 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                 courierId, parcel.getId(), parcel.getTrackingNumber(), previousStatus, targetStatus);
 
         // 6. Asynchronously publish RabbitMQ domain event
-        publishRabbitMqStatusUpdatedEvent(parcel, previousStatus, targetStatus, courierId, request);
+        publishRabbitMqStatusUpdatedEvent(parcel, previousStatus, targetStatus, courierId, courierName, courierPhone, request);
 
         // 7. Publish local application event for transactional WebSocket tracking push
         publishLocalWebSocketTrackingEvent(parcel, previousStatus, targetStatus, request);
@@ -286,7 +293,8 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
     }
 
     private void publishRabbitMqStatusUpdatedEvent(Parcel parcel, ParcelStatus previousStatus, ParcelStatus targetStatus,
-                                                   UUID courierId, UpdateParcelStatusRequestDto request) {
+                                                   UUID courierId, String courierName, String courierPhone,
+                                                   UpdateParcelStatusRequestDto request) {
         try {
             ParcelStatusUpdatedEvent event = ParcelStatusUpdatedEvent.builder()
                     .eventId(UUID.randomUUID())
@@ -299,8 +307,12 @@ public class CourierExecutionServiceImpl implements CourierExecutionService {
                     .courierId(courierId)
                     .merchantId(parcel.getMerchantId())
                     .senderUserId(parcel.getSenderUserId())
+                    .senderEmail(parcel.getSenderEmail())
                     .recipientName(parcel.getRecipientName())
+                    .recipientEmail(parcel.getRecipientEmail())
                     .recipientPhone(parcel.getRecipientPhone())
+                    .courierName(courierName)
+                    .courierPhone(courierPhone)
                     .deliveryNote(request.getDeliveryNote())
                     .failureReason(request.getFailureReason())
                     .timestamp(Instant.now())

@@ -41,6 +41,9 @@ public interface CourierExecutionService {
      */
     ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request);
 
+    ParcelStatusUpdateResponseDto updateParcelStatus(UUID courierId, UUID parcelId, UpdateParcelStatusRequestDto request,
+                                                     String courierName, String courierPhone);
+
     /**
      * Retrieves the historical completed, failed, and returned deliveries for the given courier.
      *

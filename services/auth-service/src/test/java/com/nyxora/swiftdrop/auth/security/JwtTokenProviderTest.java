@@ -84,6 +84,7 @@ class JwtTokenProviderTest {
         assertEquals(merchantId.toString(), claims.get("merchantId", String.class));
         assertEquals("ROLE_COURIER", claims.get("role", String.class));
         assertEquals("Test User", claims.get("fullName", String.class));
+        assertEquals("+94771234567", claims.get("phoneNumber", String.class));
     }
 
     @Test

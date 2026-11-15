@@ -44,6 +44,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     public static final String HEADER_USER_EMAIL = "X-User-Email";
     public static final String HEADER_MERCHANT_ID = "X-Merchant-Id";
     public static final String HEADER_COURIER_ID = "X-Courier-Id";
+    public static final String HEADER_COURIER_NAME = "X-Courier-Name";
+    public static final String HEADER_COURIER_PHONE = "X-Courier-Phone";
     public static final String HEADER_TOKEN_TYPE = "X-Token-Type";
     /** Proves to downstream services that identity headers were set by this gateway. */
     public static final String HEADER_GATEWAY_SECRET = "X-Gateway-Secret";
@@ -51,7 +53,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     /** Every header downstream services treat as trusted identity. Always stripped from callers. */
     static final List<String> TRUSTED_HEADERS = List.of(
             HEADER_USER_ID, HEADER_USER_ROLE, HEADER_USER_EMAIL,
-            HEADER_MERCHANT_ID, HEADER_COURIER_ID, HEADER_TOKEN_TYPE, HEADER_GATEWAY_SECRET);
+            HEADER_MERCHANT_ID, HEADER_COURIER_ID, HEADER_COURIER_NAME, HEADER_COURIER_PHONE,
+            HEADER_TOKEN_TYPE, HEADER_GATEWAY_SECRET);
 
     /** Service-to-service routes that must never be reachable from outside the cluster. */
     static final List<String> INTERNAL_PATH_PREFIXES = List.of(
@@ -129,6 +132,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String userId = claims.getSubject();
         String role = claims.get("role", String.class);
         String email = claims.get("email", String.class);
+        String fullName = claims.get("fullName", String.class);
+        String phoneNumber = claims.get("phoneNumber", String.class);
         String merchantId = uuidClaim(claims, "merchantId");
         String courierId = uuidClaim(claims, "courierId");
         boolean m2m = TOKEN_TYPE_M2M.equals(claims.get("token_type", String.class));
@@ -158,6 +163,12 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                     }
                     if (courierId != null) {
                         h.set(HEADER_COURIER_ID, courierId);
+                    }
+                    if (fullName != null && courierId != null) {
+                        h.set(HEADER_COURIER_NAME, fullName);
+                    }
+                    if (phoneNumber != null && courierId != null) {
+                        h.set(HEADER_COURIER_PHONE, phoneNumber);
                     }
                 })
                 .build();
@@ -240,4 +251,3 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         return -1;
     }
 }
-
