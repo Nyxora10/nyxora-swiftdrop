@@ -4,6 +4,7 @@
 CREATE DATABASE auth_db;
 CREATE DATABASE parcel_db;
 CREATE DATABASE notification_db;
+CREATE DATABASE swiftdrop_it_db;
 
 -- ========================================================
 -- DATABASE 1: auth_db (Identity, RBAC, OAuth & Sessions)
