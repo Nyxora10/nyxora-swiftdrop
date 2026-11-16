@@ -119,6 +119,35 @@ public class CourierExecutionController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(summary = "Generate Pre-signed URL for Direct S3 Upload",
+            description = "Returns a short-lived AWS S3 pre-signed PUT URL allowing direct frontend-to-S3 upload (Task 1.8 Enterprise Pattern). " +
+                          "Returns HTTP 204 No Content if running in local storage mode without S3.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pre-signed URL generated successfully"),
+            @ApiResponse(responseCode = "204", description = "S3 not configured or set to local mode (client should use multipart upload)"),
+            @ApiResponse(responseCode = "403", description = "Access denied: Parcel not assigned to this courier")
+    })
+    @GetMapping("/{id}/proof-presigned-url")
+    @PreAuthorize("hasAnyRole('COURIER', 'ADMIN')")
+    public ResponseEntity<PresignedProofResponseDto> getProofPresignedUrl(
+            @PathVariable("id") UUID parcelId,
+            @RequestParam("filename") String filename,
+            @RequestParam(value = "contentType", required = false, defaultValue = "image/png") String contentType,
+            @RequestHeader(value = "X-Courier-Id", required = false) UUID xCourierId,
+            @RequestHeader(value = "X-User-Id", required = false) UUID xUserId) {
+
+        UUID courierId = resolveCourierId(xCourierId, xUserId);
+
+        // Security check: Verify the courier owns this parcel before granting upload authorization
+        courierExecutionService.getCourierParcelById(courierId, parcelId);
+
+        PresignedProofResponseDto response = proofStorageService.generatePresignedUrl(parcelId, filename, contentType);
+        if (response == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(response);
+    }
+
     @Operation(summary = "Upload Delivery Proof Artifact",
             description = "Uploads a recipient signature or photo proof (PNG, JPEG, WEBP) to AWS S3 or local storage.")
     @ApiResponses({
