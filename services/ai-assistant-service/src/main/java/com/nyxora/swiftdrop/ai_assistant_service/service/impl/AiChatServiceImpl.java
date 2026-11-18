@@ -56,8 +56,8 @@ public class AiChatServiceImpl implements AiChatService {
     @Override
     public String chat(String message, String conversationId) {
 
-        log.info("Processing chat request for conversationId '{}' with message: '{}'",
-                conversationId, PiiMaskingUtil.maskText(message));
+        log.info("Processing chat request for conversationId '{}' with messageLength={} characters",
+                conversationId, message == null ? 0 : message.length());
 
         return chatClient.prompt()
                 .user(message)

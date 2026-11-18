@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.notification.webhook.retry;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.config.WebhookRabbitConfig;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryLog;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryStatus;
@@ -109,7 +110,7 @@ public class WebhookRetryPublisher {
 
         } catch (Exception ex) {
             log.error("Failed to publish retry message to RabbitMQ for deliveryLogId={}, routingKey={}: {}",
-                    deliveryLog.getId(), routingKey, ex.getMessage(), ex);
+                    deliveryLog.getId(), routingKey, PiiMaskingUtil.maskText(ex.getMessage()));
             // Re-throw so caller knows publication failed; DB is NOT updated with the unqueued attempt count!
             throw new IllegalStateException("RabbitMQ retry publication failed for deliveryLogId=" + deliveryLog.getId(), ex);
         }
@@ -178,7 +179,7 @@ public class WebhookRetryPublisher {
 
         } catch (Exception ex) {
             log.error("Failed to publish manual retry message to RabbitMQ for deliveryLogId={}: {}",
-                    deliveryLog.getId(), ex.getMessage(), ex);
+                    deliveryLog.getId(), PiiMaskingUtil.maskText(ex.getMessage()));
             throw new IllegalStateException("RabbitMQ manual retry publication failed for deliveryLogId=" + deliveryLog.getId(), ex);
         }
     }

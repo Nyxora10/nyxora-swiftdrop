@@ -6,6 +6,7 @@ import com.nyxora.swiftdrop.auth.entity.User;
 import com.nyxora.swiftdrop.auth.exception.InvalidRefreshTokenException;
 import com.nyxora.swiftdrop.auth.repository.RefreshTokenRepository;
 import com.nyxora.swiftdrop.auth.service.RefreshTokenService;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,7 +55,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .orElseThrow(() -> new InvalidRefreshTokenException("Refresh token is invalid or has expired."));
 
         if (token.getRevoked()) {
-            log.warn("[RefreshTokenService] Potential token reuse attack detected for user: {}", token.getUser().getEmail());
+            log.warn("[RefreshTokenService] Potential token reuse attack detected for user: {}",
+                    PiiMaskingUtil.maskEmail(token.getUser().getEmail()));
             refreshTokenRepository.revokeAllByUserId(token.getUser().getId());
             throw new InvalidRefreshTokenException("Token reuse detected. All active sessions have been invalidated.");
         }

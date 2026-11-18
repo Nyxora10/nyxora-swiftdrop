@@ -121,10 +121,12 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             log.warn("[AuthenticationFilter] Expired JWT presented on path: {}", path);
             return onError(exchange, "JWT token has expired. Please refresh your session.", HttpStatus.UNAUTHORIZED);
         } catch (JwtException e) {
-            log.warn("[AuthenticationFilter] Invalid JWT presented on path {}: {}", path, e.getMessage());
-            return onError(exchange, "Invalid JWT token: " + e.getMessage(), HttpStatus.UNAUTHORIZED);
+            log.warn("[AuthenticationFilter] Invalid JWT presented on path {}: {}",
+                    path, PiiMaskingUtil.maskText(e.getMessage()));
+            return onError(exchange, "Invalid JWT token.", HttpStatus.UNAUTHORIZED);
         } catch (Exception e) {
-            log.error("[AuthenticationFilter] Unexpected error parsing JWT on path {}: {}", path, e.getMessage());
+            log.error("[AuthenticationFilter] Unexpected error parsing JWT on path {}: {}",
+                    path, e.getClass().getSimpleName());
             return onError(exchange, "Authentication failed.", HttpStatus.UNAUTHORIZED);
         }
 

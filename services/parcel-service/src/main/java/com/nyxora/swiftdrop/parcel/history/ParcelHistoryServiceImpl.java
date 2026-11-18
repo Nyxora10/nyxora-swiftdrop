@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -89,12 +90,14 @@ public class ParcelHistoryServiceImpl implements ParcelHistoryService {
                 + parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.OUT_FOR_DELIVERY);
         long deliveredCount = parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.DELIVERED);
         long failedCount = parcelRepository.countByMerchantIdAndCurrentStatus(merchantId, ParcelStatus.FAILED);
+        BigDecimal totalSavings = parcelRepository.sumDiscountAmountByMerchantId(merchantId);
 
         return MerchantOrderHistoryResponse.builder()
                 .totalOrders(totalOrders)
                 .inTransitCount(inTransitCount)
                 .deliveredCount(deliveredCount)
                 .failedCount(failedCount)
+                .totalSavings(totalSavings != null ? totalSavings : BigDecimal.ZERO)
                 .orders(pagedOrders)
                 .build();
     }
@@ -112,6 +115,7 @@ public class ParcelHistoryServiceImpl implements ParcelHistoryService {
                 .weightKg(parcel.getWeightKg())
                 .parcelSize(parcel.getParcelSize())
                 .estimatedFee(parcel.getEstimatedFee())
+                .discountAmount(parcel.getDiscountAmount())
                 .currency("LKR")
                 .createdAt(parcel.getCreatedAt())
                 .updatedAt(parcel.getUpdatedAt())

@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>Person/recipient names (e.g., {@code Kamal Perera} &rarr; {@code K***l P***a})</li>
  *   <li>Email addresses (e.g., {@code kamal@gmail.com} &rarr; {@code k***l@gmail.com})</li>
- *   <li>Phone numbers (e.g., {@code +94771234567} &rarr; {@code +94*****4567}, {@code 0771234567} &rarr; {@code 07*****4567})</li>
+ *   <li>Sri Lankan phone numbers (e.g., {@code +94771234567} &rarr; {@code +94*****4567}, {@code 0771234567} &rarr; {@code 07****4567})</li>
  *   <li>Physical residential street numbers (e.g., {@code 123/A Galle Road} &rarr; {@code *** Galle Road})</li>
  *   <li>Free-text log messages with embedded emails and phone numbers</li>
  * </ul>
@@ -19,12 +19,22 @@ import java.util.regex.Pattern;
 public final class PiiMaskingUtil {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
-            "\\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})\\b"
+            "(?<!\\*)\\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})\\b"
     );
 
-    // Matches Sri Lankan and international phone numbers (e.g., +94771234567, 0771234567, +94 77 123 4567, 077-123-4567)
+    // Matches Sri Lankan local (07), country-code (94), and international-dialing (+94) formats.
     private static final Pattern PHONE_PATTERN = Pattern.compile(
-            "(?:\\+94|0)(?:[\\s\\-]?[0-9]){8,10}\\b"
+            "(?<![A-Za-z0-9+])(?:\\+?94[\\s-]?7(?:[\\s-]?\\d){8}|07(?:[\\s-]?\\d){8})(?!\\d)"
+    );
+
+    private static final Pattern BEARER_TOKEN_PATTERN = Pattern.compile(
+            "(?i)(\\bBearer\\s+)[A-Za-z0-9._~+/=-]+"
+    );
+
+    private static final Pattern SENSITIVE_VALUE_PATTERN = Pattern.compile(
+            "(?i)(\\b(?:password|passwd|secret|token|access[_-]?token|refresh[_-]?token|"
+                    + "api[_-]?key|authorization|webhook[_-]?secret|client[_-]?secret)\\b\\s*[=:]\\s*)"
+                    + "(?!Bearer\\b)(\"[^\"]*\"|'[^']*'|[^\\s,;}]+)"
     );
 
     // Matches leading street/house/unit numbers (e.g., "123/A", "45", "No. 12/B", "No 45")
@@ -34,6 +44,19 @@ public final class PiiMaskingUtil {
 
     private PiiMaskingUtil() {
         throw new UnsupportedOperationException("PiiMaskingUtil is a utility class and cannot be instantiated.");
+    }
+
+    /**
+     * Completely redacts a credential, token, or secret for diagnostic output.
+     *
+     * @param value Sensitive value
+     * @return Redaction marker, or the original null/blank state
+     */
+    public static String redactSecret(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.isBlank() ? value : "[REDACTED]";
     }
 
     /**
@@ -124,10 +147,11 @@ public final class PiiMaskingUtil {
     }
 
     /**
-     * Masks a phone number while retaining the country/domestic prefix and trailing digits.
+     * Masks a Sri Lankan phone number while retaining its country/domestic prefix and trailing digits.
      *
      * <ul>
      *   <li>{@code +94771234567} &rarr; {@code +94*****4567}</li>
+     *   <li>{@code 94771234567} &rarr; {@code 94*****4567}</li>
      *   <li>{@code 0771234567} &rarr; {@code 07*****4567}</li>
      *   <li>{@code +94 77 123 4567} &rarr; {@code +94 ** *** 4567}</li>
      *   <li>{@code 077-123-4567} &rarr; {@code 07*-***-4567}</li>
@@ -145,6 +169,10 @@ public final class PiiMaskingUtil {
             return trimmed;
         }
 
+        if (!PHONE_PATTERN.matcher(trimmed).matches()) {
+            return trimmed;
+        }
+
         // Count actual digits
         int digitCount = 0;
         for (int i = 0; i < trimmed.length(); i++) {
@@ -158,9 +186,8 @@ public final class PiiMaskingUtil {
             return trimmed;
         }
 
-        // Determine number of unmasked prefix digits (2 for "07...", 3 for "+94...")
-        boolean isPlusPrefix = trimmed.startsWith("+");
-        int prefixDigitsToKeep = isPlusPrefix ? 2 : 2; // For +94 (9,4 = 2 digits) or 07 (0,7 = 2 digits)
+        // Both the Sri Lankan country-code and domestic prefixes contain two digits.
+        int prefixDigitsToKeep = 2;
         int suffixDigitsToKeep = 4;
 
         int digitsSeen = 0;
@@ -222,8 +249,7 @@ public final class PiiMaskingUtil {
     }
 
     /**
-     * Scans an arbitrary free-text log message and masks all embedded email addresses
-     * and phone numbers.
+     * Scans an arbitrary free-text log message and masks embedded PII and credentials.
      *
      * @param text Raw log text or exception message
      * @return Sanitized text with all PII masked
@@ -255,6 +281,10 @@ public final class PiiMaskingUtil {
         }
         phoneMatcher.appendTail(sbPhone);
 
-        return sbPhone.toString();
+        // 3. Completely redact credentials and authorization material.
+        Matcher bearerMatcher = BEARER_TOKEN_PATTERN.matcher(sbPhone);
+        String withBearerRedacted = bearerMatcher.replaceAll("$1[REDACTED]");
+        Matcher sensitiveValueMatcher = SENSITIVE_VALUE_PATTERN.matcher(withBearerRedacted);
+        return sensitiveValueMatcher.replaceAll("$1[REDACTED]");
     }
 }

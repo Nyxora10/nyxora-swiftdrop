@@ -128,8 +128,8 @@ public class GeminiClient {
             );
         }
 
-        log.info("Sending request to Gemini model '{}' with prompt: '{}'",
-                model, PiiMaskingUtil.maskText(prompt));
+        log.info("Sending request to Gemini model '{}' with promptLength={} characters",
+                model, prompt.length());
 
         Map<String, Object> requestBody;
         if (systemInstruction != null && !systemInstruction.isBlank()) {

@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.websocket.broadcaster;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.websocket.dto.ParcelTrackingUpdateDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,8 +54,7 @@ public class ParcelWebSocketBroadcaster {
         } catch (Exception ex) {
             log.error("Failed to broadcast STOMP update to destination='{}': {}",
                     destination,
-                    ex.getMessage(),
-                    ex);
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             return false;
         }
     }

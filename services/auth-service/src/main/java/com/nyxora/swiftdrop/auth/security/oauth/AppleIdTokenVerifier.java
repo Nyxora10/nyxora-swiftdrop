@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.auth.dto.SocialUserProfile;
 import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import lombok.extern.slf4j.Slf4j;
@@ -112,7 +113,8 @@ public class AppleIdTokenVerifier {
             }
 
             if (!emailVerified) {
-                log.warn("[AppleVerifier] Apple ID token email is unverified for: {}", claims.get("email"));
+                log.warn("[AppleVerifier] Apple ID token email is unverified for: {}",
+                        PiiMaskingUtil.maskEmail(claims.get("email", String.class)));
                 throw new BadCredentialsException("Apple ID token email is not verified.");
             }
 
@@ -137,7 +139,8 @@ public class AppleIdTokenVerifier {
         } catch (BadCredentialsException e) {
             throw e;
         } catch (Exception e) {
-            log.error("[AppleVerifier] Exception while verifying Apple identity token: {}", e.getMessage());
+            log.error("[AppleVerifier] Exception while verifying Apple identity token: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Apple identity token is invalid or expired.");
         }
     }
@@ -179,7 +182,8 @@ public class AppleIdTokenVerifier {
         } catch (BadCredentialsException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("[AppleVerifier] Failed to extract kid from Apple token header: {}", e.getMessage());
+            log.warn("[AppleVerifier] Failed to extract key identifier from Apple token header: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Failed to parse Apple identity token header.");
         }
     }
@@ -220,7 +224,8 @@ public class AppleIdTokenVerifier {
                             KeyFactory factory = KeyFactory.getInstance("RSA");
                             keyCache.put(key.kid(), factory.generatePublic(spec));
                         } catch (Exception ex) {
-                            log.warn("[AppleVerifier] Failed to parse Apple key for kid {}: {}", key.kid(), ex.getMessage());
+                            log.warn("[AppleVerifier] Failed to parse Apple key for kid {}: {}",
+                                    key.kid(), PiiMaskingUtil.maskText(ex.getMessage()));
                         }
                     }
                 }
@@ -228,7 +233,8 @@ public class AppleIdTokenVerifier {
                 log.info("[AppleVerifier] Successfully cached {} Apple public keys", keyCache.size());
             }
         } catch (Exception e) {
-            log.error("[AppleVerifier] Failed to fetch Apple JWKS keys: {}", e.getMessage());
+            log.error("[AppleVerifier] Failed to fetch Apple JWKS keys: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Failed to fetch Apple public keys for token verification.");
         }
     }

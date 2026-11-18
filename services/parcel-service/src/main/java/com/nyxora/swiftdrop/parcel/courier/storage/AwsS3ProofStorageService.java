@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.courier.storage;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.parcel.courier.dto.ProofUploadResponseDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -109,7 +110,8 @@ public class AwsS3ProofStorageService implements ProofStorageService {
                     .build();
 
         } catch (Exception ex) {
-            log.warn("Failed to upload proof to AWS S3. Gracefully falling back to local disk storage: {}", ex.getMessage());
+            log.warn("Failed to upload proof to AWS S3. Gracefully falling back to local disk storage: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             return localFallback.storeProof(parcelId, file);
         }
     }
@@ -135,7 +137,8 @@ public class AwsS3ProofStorageService implements ProofStorageService {
             return new InputStreamResource(s3Stream);
 
         } catch (Exception ex) {
-            log.warn("Failed to stream proof from AWS S3. Attempting to load from local storage fallback: {}", ex.getMessage());
+            log.warn("Failed to stream proof from AWS S3. Attempting to load from local storage fallback: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             return localFallback.loadProofAsResource(filename);
         }
     }

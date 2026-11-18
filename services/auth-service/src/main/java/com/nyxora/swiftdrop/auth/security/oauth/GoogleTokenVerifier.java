@@ -4,6 +4,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.nyxora.swiftdrop.auth.dto.SocialUserProfile;
 import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -69,11 +70,13 @@ public class GoogleTokenVerifier {
         try {
             googleIdToken = googleIdTokenVerifier.verify(idToken);
         } catch (Exception e) {
-            log.warn("[GoogleTokenVerifier] Google ID token cryptographic verification threw: {}. Attempting UserInfo fallback...", e.getMessage());
+            log.warn("[GoogleTokenVerifier] Google ID token verification failed: {}. Attempting UserInfo fallback...",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             try {
                 return verifyAccessToken(idToken);
             } catch (Exception fallbackEx) {
-                log.warn("[GoogleTokenVerifier] Fallback UserInfo verification also failed: {}", fallbackEx.getMessage());
+                log.warn("[GoogleTokenVerifier] Fallback UserInfo verification also failed: {}",
+                        PiiMaskingUtil.maskText(fallbackEx.getMessage()));
                 throw new BadCredentialsException("Failed to verify Google ID token. Please ensure the token is valid, unexpired, and issued for your Google Client ID.");
             }
         }
@@ -83,7 +86,8 @@ public class GoogleTokenVerifier {
             try {
                 return verifyAccessToken(idToken);
             } catch (Exception fallbackEx) {
-                log.warn("[GoogleTokenVerifier] Fallback UserInfo verification also failed: {}", fallbackEx.getMessage());
+                log.warn("[GoogleTokenVerifier] Fallback UserInfo verification also failed: {}",
+                        PiiMaskingUtil.maskText(fallbackEx.getMessage()));
                 throw new BadCredentialsException("Google ID token is invalid, expired, or issued for an unrecognized client audience.");
             }
         }
@@ -91,7 +95,8 @@ public class GoogleTokenVerifier {
         GoogleIdToken.Payload payload = googleIdToken.getPayload();
         Boolean emailVerified = payload.getEmailVerified();
         if (!Boolean.TRUE.equals(emailVerified)) {
-            log.warn("[GoogleTokenVerifier] Google ID token email is unverified for: {}", payload.getEmail());
+            log.warn("[GoogleTokenVerifier] Google ID token email is unverified for: {}",
+                    PiiMaskingUtil.maskEmail(payload.getEmail()));
             throw new BadCredentialsException("Google email address is not verified.");
         }
 
@@ -114,7 +119,8 @@ public class GoogleTokenVerifier {
                     .retrieve()
                     .body(GoogleUserInfoResponse.class);
         } catch (Exception e) {
-            log.warn("[GoogleTokenVerifier] Failed to verify Google access token via UserInfo API: {}", e.getMessage());
+            log.warn("[GoogleTokenVerifier] Failed to verify Google access token via UserInfo API: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Google access token is invalid or expired.");
         }
 
@@ -124,7 +130,8 @@ public class GoogleTokenVerifier {
         }
 
         if (!Boolean.TRUE.equals(userInfo.email_verified())) {
-            log.warn("[GoogleTokenVerifier] Google access token email is unverified: {}", userInfo.email());
+            log.warn("[GoogleTokenVerifier] Google access token email is unverified: {}",
+                    PiiMaskingUtil.maskEmail(userInfo.email()));
             throw new BadCredentialsException("Google email address is not verified.");
         }
 

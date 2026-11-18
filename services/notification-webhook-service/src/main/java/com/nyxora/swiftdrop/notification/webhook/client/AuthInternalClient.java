@@ -116,7 +116,8 @@ public class AuthInternalClient {
             log.warn("Client error querying auth-service webhook config for merchantId={}: status={}", merchantId, ex.getStatusCode());
             return Optional.empty();
         } catch (HttpServerErrorException ex) {
-            log.error("Auth-service 5xx server error while querying webhook config for merchantId={}: status={}", merchantId, ex.getStatusCode());
+            log.error("Auth-service 5xx server error while querying webhook config for merchantId={}: status={}",
+                    merchantId, ex.getStatusCode());
             return Optional.empty();
         } catch (ResourceAccessException ex) {
             log.error("Network I/O failure reaching auth-service at configured endpoint for merchantId={}: {}",
@@ -124,7 +125,7 @@ public class AuthInternalClient {
             return Optional.empty();
         } catch (Exception ex) {
             log.error("Unexpected error retrieving merchant webhook configuration for merchantId={}: {}",
-                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()), ex);
+                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()));
             return Optional.empty();
         }
     }

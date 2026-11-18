@@ -32,7 +32,7 @@ class JwtAuthenticationEntryPointTest {
     }
 
     @Test
-    @DisplayName("Commence writes HTTP 401 ProblemDetail JSON with exception message")
+    @DisplayName("Commence writes HTTP 401 ProblemDetail JSON with safe detail")
     void commence_WithExceptionMessage_WritesProblemDetail() throws IOException {
         InsufficientAuthenticationException ex =
                 new InsufficientAuthenticationException("Full authentication is required to access this resource.");

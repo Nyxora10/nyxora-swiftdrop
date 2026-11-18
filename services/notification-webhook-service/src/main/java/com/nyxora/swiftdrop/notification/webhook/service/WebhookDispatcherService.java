@@ -149,8 +149,8 @@ public class WebhookDispatcherService {
             }
             payloadBytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
         } catch (Exception ex) {
-            log.error("Failed to serialize webhook payload to JSON for merchantId={}, parcelId={}", merchantId,
-                    parcelId, ex);
+            log.error("Failed to serialize webhook payload to JSON for merchantId={}, parcelId={}, category={}",
+                    merchantId, parcelId, ex.getClass().getSimpleName());
             return WebhookDispatchResult.permanentFailure(null, "PAYLOAD_SERIALIZATION_ERROR",
                     "Unable to serialize payload", null);
         }
@@ -370,7 +370,7 @@ public class WebhookDispatcherService {
 
         } catch (Exception ex) {
             log.error("Unexpected error dispatching webhook for merchantId={}, parcelId={}, retryCount={}: {}",
-                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()), ex);
+                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()));
 
             deliveryLog.setHttpStatusCode(null);
             deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);

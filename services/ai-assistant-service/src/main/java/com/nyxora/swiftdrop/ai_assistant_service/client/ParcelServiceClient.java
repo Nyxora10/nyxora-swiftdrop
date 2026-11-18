@@ -87,15 +87,15 @@ public class ParcelServiceClient {
             return Optional.empty();
         } catch (RestClientResponseException ex) {
             if (ex.getStatusCode().value() == 404 || ex.getStatusCode().value() == 400) {
-                log.warn("Parcel tracking returned HTTP {}: {}",
-                        ex.getStatusCode().value(), ex.getResponseBodyAsString());
+                log.warn("Parcel tracking returned HTTP {}", ex.getStatusCode().value());
                 return Optional.empty();
             }
-            log.error("Downstream Parcel Service error: status={}, body={}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString(), ex);
+            log.error("Downstream Parcel Service error: status={}, category={}",
+                    ex.getStatusCode(), ex.getClass().getSimpleName());
             throw ex;
         } catch (RestClientException ex) {
-            log.error("Connection failure while calling Parcel Service: {}", ex.getMessage(), ex);
+            log.error("Connection failure while calling Parcel Service: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             throw ex;
         }
     }
@@ -128,7 +128,8 @@ public class ParcelServiceClient {
 
             return zones != null ? zones : List.of();
         } catch (RestClientException ex) {
-            log.error("Failed to query public delivery zones from Parcel Service: {}", ex.getMessage(), ex);
+            log.error("Failed to query public delivery zones from Parcel Service: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             throw ex;
         }
     }
@@ -152,7 +153,8 @@ public class ParcelServiceClient {
                     .retrieve()
                     .body(ParcelQuoteResponse.class);
         } catch (RestClientException ex) {
-            log.error("Error executing parcel rate quote with Parcel Service: {}", ex.getMessage(), ex);
+            log.error("Error executing parcel rate quote with Parcel Service: {}",
+                    PiiMaskingUtil.maskText(ex.getMessage()));
             throw ex;
         }
     }
