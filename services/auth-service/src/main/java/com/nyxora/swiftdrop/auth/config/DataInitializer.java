@@ -168,7 +168,7 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void seedDefaultCourier() {
-        if (!userRepository.existsByEmail(DEFAULT_COURIER_EMAIL)) {
+        if (!userRepository.existsByEmail(DEFAULT_COURIER_EMAIL) && !courierRepository.existsByLicensePlate("WP-BAM-1234")) {
             Role courierRole = roleRepository.findByName(RoleName.ROLE_COURIER)
                     .orElseThrow(() -> new IllegalStateException("ROLE_COURIER not found during courier seeding"));
 

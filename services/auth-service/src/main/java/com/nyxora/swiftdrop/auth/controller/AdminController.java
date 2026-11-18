@@ -4,6 +4,7 @@ import com.nyxora.swiftdrop.auth.dto.request.AdminDecisionRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AdminDecisionResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
+import com.nyxora.swiftdrop.auth.dto.response.AvailableCourierResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
 import com.nyxora.swiftdrop.auth.entity.enums.UserStatus;
@@ -22,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -80,6 +82,17 @@ public class AdminController {
             @Valid @RequestBody AdminDecisionRequest request) {
         UUID currentAdminId = currentAdmin != null ? currentAdmin.getId() : null;
         AdminDecisionResponse response = adminService.suspendUser(currentAdminId, userId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/couriers/available")
+    @Operation(
+            summary = "Get available couriers for dispatch",
+            description = "Retrieves active on-duty couriers and their current delivery workload, optionally filtered by delivery zone."
+    )
+    public ResponseEntity<List<AvailableCourierResponse>> getAvailableCouriers(
+            @RequestParam(required = false) Integer zoneId) {
+        List<AvailableCourierResponse> response = adminService.getAvailableCouriers(zoneId);
         return ResponseEntity.ok(response);
     }
 }
