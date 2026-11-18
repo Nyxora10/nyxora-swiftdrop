@@ -102,6 +102,19 @@ class WebhookRetryConsumerTest {
     }
 
     @Test
+    @DisplayName("Should schedule subsequent retry when temporary DNS resolution failure occurs and retries remain")
+    void shouldScheduleNextRetryWhenDnsResolutionFailsAndRetriesRemain() {
+        when(logRepository.findById(logId)).thenReturn(Optional.of(sampleLog));
+        when(dispatcherService.dispatchRetryWebhook(sampleLog)).thenReturn(
+                WebhookDispatchResult.retryableFailure(null, "DNS_RESOLUTION_FAILURE", "DNS resolution failed for webhook destination host: api.merchant.com", sampleLog));
+
+        retryConsumer.handleRetryMessage(sampleMessage);
+
+        verify(dispatcherService).dispatchRetryWebhook(sampleLog);
+        verify(retryPublisher).scheduleRetry(sampleLog);
+    }
+
+    @Test
     @DisplayName("Should transition to DEAD_LETTER when failure is permanently non-retryable (e.g. 400 Bad Request)")
     void shouldMarkDeadLetterOnNonRetryableFailure() {
         when(logRepository.findById(logId)).thenReturn(Optional.of(sampleLog));
@@ -127,6 +140,26 @@ class WebhookRetryConsumerTest {
         when(logRepository.findById(logId)).thenReturn(Optional.of(sampleLog));
         when(dispatcherService.dispatchRetryWebhook(sampleLog)).thenReturn(
                 WebhookDispatchResult.retryableFailure(504, "GATEWAY_TIMEOUT", "Gateway Timeout", sampleLog));
+
+        retryConsumer.handleRetryMessage(finalAttemptMessage);
+
+        verify(dispatcherService).dispatchRetryWebhook(sampleLog);
+        verifyNoInteractions(retryPublisher);
+        assertEquals(WebhookDeliveryStatus.DEAD_LETTER, sampleLog.getDeliveryStatus());
+        assertNull(sampleLog.getNextRetryAt());
+        verify(logRepository).save(sampleLog);
+    }
+
+    @Test
+    @DisplayName("Should transition to DEAD_LETTER when temporary DNS resolution failure occurs on final retry attempt 5")
+    void shouldMarkDeadLetterWhenDnsResolutionFailureExhaustsRetries() {
+        sampleLog.setRetryCount(5);
+        WebhookRetryMessage finalAttemptMessage = new WebhookRetryMessage(
+                logId, merchantId, parcelId, "parcel.status.updated", "{}", 5);
+
+        when(logRepository.findById(logId)).thenReturn(Optional.of(sampleLog));
+        when(dispatcherService.dispatchRetryWebhook(sampleLog)).thenReturn(
+                WebhookDispatchResult.retryableFailure(null, "DNS_RESOLUTION_FAILURE", "DNS resolution failed", sampleLog));
 
         retryConsumer.handleRetryMessage(finalAttemptMessage);
 

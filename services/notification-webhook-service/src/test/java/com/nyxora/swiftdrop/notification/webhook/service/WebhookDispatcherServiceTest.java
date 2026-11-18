@@ -16,6 +16,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -256,6 +259,110 @@ class WebhookDispatcherServiceTest {
         server.verify();
     }
 
+    @Test
+    void allowsSafePublicHttpsUrlAndDispatchesSuccessfully() throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestClient client = builder.build();
+        server.expect(requestTo("https://api.merchant.com/webhook"))
+                .andRespond(withSuccess());
+
+        when(authClient.getMerchantWebhookConfig(merchantId)).thenReturn(Optional.of(
+                new MerchantWebhookConfigResponse(merchantId, "https://api.merchant.com/webhook", "secret", true)));
+
+        WebhookDispatcherService.DnsResolver publicResolver = host -> new InetAddress[]{
+                InetAddress.getByAddress("api.merchant.com", new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34})
+        };
+
+        var result = service(client, false, publicResolver)
+                .dispatchWebhook(merchantId, parcelId, "parcel.updated", "{\"status\":\"OK\"}");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.httpStatusCode()).isEqualTo(200);
+        assertThat(result.deliveryLog().getDeliveryStatus()).isEqualTo(WebhookDeliveryStatus.DELIVERED);
+        server.verify();
+    }
+
+    @Test
+    void permanentlyRejectsProhibitedAddresses() throws Exception {
+        List<String> prohibitedIps = List.of(
+                "127.0.0.1",
+                "127.0.0.2",
+                "10.0.0.1",
+                "172.16.0.1",
+                "192.168.1.1",
+                "169.254.169.254",
+                "169.254.1.1",
+                "0.0.0.0",
+                "::1",
+                "fe80::1",
+                "fc00::1",
+                "fd00::1"
+        );
+
+        for (String ip : prohibitedIps) {
+            InetAddress prohibitedAddr = InetAddress.getByName(ip);
+            WebhookDispatcherService.DnsResolver resolver = host -> new InetAddress[]{prohibitedAddr};
+
+            when(authClient.getMerchantWebhookConfig(merchantId)).thenReturn(Optional.of(
+                    new MerchantWebhookConfigResponse(merchantId, "https://target.host/webhook", "secret", true)));
+
+            var result = service(false, resolver)
+                    .dispatchWebhook(merchantId, parcelId, "parcel.updated", "{}");
+
+            assertThat(result.retryable()).as("IP " + ip + " should be non-retryable").isFalse();
+            assertThat(result.errorCategory()).as("IP " + ip + " should be SSRF_BLOCKED").isEqualTo("SSRF_BLOCKED");
+            assertThat(result.deliveryLog().getDeliveryStatus()).as("IP " + ip + " should be DEAD_LETTER")
+                    .isEqualTo(WebhookDeliveryStatus.DEAD_LETTER);
+
+            reset(authClient);
+        }
+    }
+
+    @Test
+    void classifiesDnsResolutionFailureAsRetryableWhenAttemptsRemain() {
+        when(authClient.getMerchantWebhookConfig(merchantId)).thenReturn(Optional.of(
+                new MerchantWebhookConfigResponse(merchantId, "https://unresolvable.merchant.com/webhook", "secret", true)));
+
+        WebhookDispatcherService.DnsResolver failingResolver = host -> {
+            throw new UnknownHostException("Name resolution failed for " + host);
+        };
+
+        var result = service(false, failingResolver)
+                .dispatchWebhook(merchantId, parcelId, "parcel.updated", "{}");
+
+        assertThat(result.retryable()).isTrue();
+        assertThat(result.errorCategory()).isEqualTo("DNS_RESOLUTION_FAILURE");
+        assertThat(result.errorMessage()).contains("unresolvable.merchant.com");
+        assertThat(result.deliveryLog().getDeliveryStatus()).isEqualTo(WebhookDeliveryStatus.RETRYING);
+    }
+
+    @Test
+    void classifiesDnsResolutionFailureAsDeadLetterWhenRetriesExhausted() {
+        when(authClient.getMerchantWebhookConfig(merchantId)).thenReturn(Optional.of(
+                new MerchantWebhookConfigResponse(merchantId, "https://unresolvable.merchant.com/webhook", "secret", true)));
+
+        WebhookDispatcherService.DnsResolver failingResolver = host -> {
+            throw new UnknownHostException("Name resolution failed for " + host);
+        };
+
+        WebhookDeliveryLog deliveryLog = new WebhookDeliveryLog();
+        deliveryLog.setId(UUID.randomUUID());
+        deliveryLog.setMerchantId(merchantId);
+        deliveryLog.setParcelId(parcelId);
+        deliveryLog.setEventType("parcel.updated");
+        deliveryLog.setPayload("{\"status\":\"IN_TRANSIT\"}");
+        deliveryLog.setRetryCount(5); // Final attempt (exhausted)
+        deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);
+
+        var result = service(false, failingResolver).dispatchRetryWebhook(deliveryLog);
+
+        assertThat(result.retryable()).isTrue();
+        assertThat(result.errorCategory()).isEqualTo("DNS_RESOLUTION_FAILURE");
+        assertThat(result.deliveryLog().getDeliveryStatus()).isEqualTo(WebhookDeliveryStatus.DEAD_LETTER);
+        assertThat(result.deliveryLog().getNextRetryAt()).isNull();
+    }
+
     private WebhookDispatcherService service(boolean allowLocalhost) {
         return service(new ObjectMapper(), allowLocalhost);
     }
@@ -267,5 +374,13 @@ class WebhookDispatcherServiceTest {
 
     private WebhookDispatcherService service(RestClient client, boolean allowLocalhost) {
         return new WebhookDispatcherService(authClient, repository, new ObjectMapper(), client, allowLocalhost);
+    }
+
+    private WebhookDispatcherService service(RestClient client, boolean allowLocalhost, WebhookDispatcherService.DnsResolver dnsResolver) {
+        return new WebhookDispatcherService(authClient, repository, new ObjectMapper(), client, allowLocalhost, dnsResolver);
+    }
+
+    private WebhookDispatcherService service(boolean allowLocalhost, WebhookDispatcherService.DnsResolver dnsResolver) {
+        return new WebhookDispatcherService(authClient, repository, new ObjectMapper(), RestClient.builder().build(), allowLocalhost, dnsResolver);
     }
 }
