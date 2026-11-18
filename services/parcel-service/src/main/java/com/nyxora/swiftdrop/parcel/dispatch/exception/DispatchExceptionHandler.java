@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
 
 /**
  * Isolated exception handler for Member 5's Dispatch controller.
@@ -17,33 +19,34 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class DispatchExceptionHandler {
 
     @ExceptionHandler(CourierWorkloadExceededException.class)
-    public ProblemDetail handleCourierWorkloadExceeded(CourierWorkloadExceededException ex) {
+    public ProblemDetail handleCourierWorkloadExceeded(CourierWorkloadExceededException ex,
+                                                       HttpServletRequest request) {
         log.warn("[DispatchExceptionHandler] Courier workload exceeded: {}",
                 PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.CONFLICT, PiiMaskingUtil.maskText(ex.getMessage()));
-        problem.setTitle("Courier Workload Exceeded");
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, "Courier Workload Exceeded",
+                "courier-workload-exceeded",
+                "The courier has reached the maximum active parcel workload.", request);
         problem.setProperty("courierId", ex.getCourierId());
         problem.setProperty("currentActiveCount", ex.getCurrentActiveCount());
         return problem;
     }
 
     @ExceptionHandler(InvalidParcelStateException.class)
-    public ProblemDetail handleInvalidParcelState(InvalidParcelStateException ex) {
+    public ProblemDetail handleInvalidParcelState(InvalidParcelStateException ex,
+                                                  HttpServletRequest request) {
         log.warn("[DispatchExceptionHandler] Invalid parcel state: {}",
                 PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
-        problem.setTitle("Invalid Parcel State");
-        return problem;
+        return problem(HttpStatus.CONFLICT, "Invalid Parcel State",
+                "invalid-parcel-state",
+                "The parcel is not in a state that allows courier assignment.", request);
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("[DispatchExceptionHandler] Bad request: {}", PiiMaskingUtil.maskText(ex.getMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, PiiMaskingUtil.maskText(ex.getMessage()));
-        problem.setTitle("Invalid Request Parameters");
+    private ProblemDetail problem(HttpStatus status, String title, String type,
+                                  String detail, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        problem.setType(URI.create("https://swiftdrop.lk/errors/" + type));
+        problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
 }

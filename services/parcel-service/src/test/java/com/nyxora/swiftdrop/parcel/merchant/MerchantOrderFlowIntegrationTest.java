@@ -179,11 +179,11 @@ class MerchantOrderFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("bulk envelope is still validated: an empty batch is rejected with 422 (project validation status)")
+    @DisplayName("bulk envelope is still validated: an empty batch is rejected with 400")
     void bulkEmptyBatch_isRejected() throws Exception {
         mockMvc.perform(asMerchant(post("/api/v1/parcels/bulk"), Merchant.random())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"orders\":[]}"))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isBadRequest());
     }
 }

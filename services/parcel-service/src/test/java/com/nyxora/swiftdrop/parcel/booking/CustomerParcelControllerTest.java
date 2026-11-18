@@ -100,8 +100,8 @@ class CustomerParcelControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/parcels/quote returns 422 when validation fails (missing origin zone)")
-    void calculateQuote_invalidPayload_returns422() throws Exception {
+    @DisplayName("POST /api/v1/parcels/quote returns 400 when validation fails (missing origin zone)")
+    void calculateQuote_invalidPayload_returns400() throws Exception {
         ParcelQuoteRequest invalidRequest = ParcelQuoteRequest.builder()
                 .destinationZoneId(2)
                 .weightKg(new BigDecimal("2.50"))
@@ -112,7 +112,10 @@ class CustomerParcelControllerTest {
         mockMvc.perform(post("/api/v1/parcels/quote")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").exists())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.instance").exists())
                 .andExpect(jsonPath("$.fieldErrors.originZoneId").exists());
     }
 
@@ -121,8 +124,8 @@ class CustomerParcelControllerTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("POST /api/v1/parcels/book returns 403 Forbidden when unauthenticated (no role header)")
-    void bookParcel_unauthenticated_returns403() throws Exception {
+    @DisplayName("POST /api/v1/parcels/book returns 401 when unauthenticated")
+    void bookParcel_unauthenticated_returns401() throws Exception {
         CustomerBookingRequest request = CustomerBookingRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -138,12 +141,12 @@ class CustomerParcelControllerTest {
         mockMvc.perform(post("/api/v1/parcels/book")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("POST /api/v1/parcels/book returns 403 Forbidden when X-User-Id header is missing")
-    void bookParcel_missingUserIdHeader_returns403() throws Exception {
+    @DisplayName("POST /api/v1/parcels/book returns 401 when X-User-Id header is missing")
+    void bookParcel_missingUserIdHeader_returns401() throws Exception {
         CustomerBookingRequest request = CustomerBookingRequest.builder()
                 .originZoneId(1)
                 .destinationZoneId(2)
@@ -156,12 +159,12 @@ class CustomerParcelControllerTest {
                 .tier(QuoteTier.STANDARD)
                 .build();
 
-        // Without X-User-Id, GatewayHeaderAuthFilter cannot establish auth, so Spring Security denies with 403
+        // Without X-User-Id, GatewayHeaderAuthFilter cannot establish auth, so Spring Security denies with 401
         mockMvc.perform(post("/api/v1/parcels/book")
                         .header("X-User-Role", "ROLE_CUSTOMER")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -186,7 +189,7 @@ class CustomerParcelControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Type Mismatch"))
-                .andExpect(jsonPath("$.detail").value("Invalid format for parameter or header 'X-User-Id'."));
+                .andExpect(jsonPath("$.detail").value("A request parameter or header has an invalid format."));
     }
 
     @Test
@@ -245,8 +248,8 @@ class CustomerParcelControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/parcels/book returns 422 when recipient phone format is invalid")
-    void bookParcel_invalidPhone_returns422() throws Exception {
+    @DisplayName("POST /api/v1/parcels/book returns 400 when recipient phone format is invalid")
+    void bookParcel_invalidPhone_returns400() throws Exception {
         UUID userId = UUID.randomUUID();
 
         CustomerBookingRequest invalidPhoneRequest = CustomerBookingRequest.builder()
@@ -266,7 +269,7 @@ class CustomerParcelControllerTest {
                         .header("X-User-Role", "ROLE_CUSTOMER")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidPhoneRequest)))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.recipientPhone").exists());
     }
 
@@ -328,7 +331,7 @@ class CustomerParcelControllerTest {
         mockMvc.perform(get("/api/v1/parcels/track/" + code))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Resource Not Found"))
-                .andExpect(jsonPath("$.detail").value("Parcel with tracking number 'SD-UNKNOWN-000000' was not found."));
+                .andExpect(jsonPath("$.detail").value("The requested resource was not found."));
     }
 
     // ─────────────────────────────────────────────
@@ -336,12 +339,12 @@ class CustomerParcelControllerTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/v1/parcels/{id}/receipt/pdf returns 403 when unauthenticated")
-    void downloadReceiptPdf_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/parcels/{id}/receipt/pdf returns 401 when unauthenticated")
+    void downloadReceiptPdf_unauthenticated_returns401() throws Exception {
         UUID parcelId = UUID.randomUUID();
 
         mockMvc.perform(get("/api/v1/parcels/" + parcelId + "/receipt/pdf"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -368,10 +371,10 @@ class CustomerParcelControllerTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/v1/parcels/customer/orders returns 403 when unauthenticated")
-    void getCustomerOrders_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/parcels/customer/orders returns 401 when unauthenticated")
+    void getCustomerOrders_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/parcels/customer/orders"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -442,10 +445,10 @@ class CustomerParcelControllerTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/v1/parcels/merchant/orders returns 403 when unauthenticated")
-    void getMerchantOrders_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/parcels/merchant/orders returns 401 when unauthenticated")
+    void getMerchantOrders_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/parcels/merchant/orders"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

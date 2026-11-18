@@ -53,10 +53,10 @@ class ZonePricingAdminControllerTest {
     // ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/v1/zones requires ROLE_ADMIN - returns 403 when unauthenticated")
-    void getAllZones_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/zones requires ROLE_ADMIN - returns 401 when unauthenticated")
+    void getAllZones_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/zones"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -186,13 +186,13 @@ class ZonePricingAdminControllerTest {
 
     @Test
     @DisplayName("PUT /api/v1/zones/{id} validates partial update values")
-    void updateZone_negativeSurcharge_returns422() throws Exception {
+    void updateZone_negativeSurcharge_returns400() throws Exception {
         mockMvc.perform(put("/api/v1/zones/1")
                         .header("X-User-Id", "99999999-9999-9999-9999-999999999999")
                         .header("X-User-Role", "ROLE_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"baseSurcharge\":-1}"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Validation Failed"));
 
         verifyNoInteractions(zonePricingService);

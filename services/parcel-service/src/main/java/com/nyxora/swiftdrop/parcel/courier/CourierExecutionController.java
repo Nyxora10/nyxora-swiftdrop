@@ -167,6 +167,7 @@ public class CourierExecutionController {
         if (xUserId != null) {
             return xUserId;
         }
-        throw new IllegalArgumentException("Required courier identity header ('X-Courier-Id' or 'X-User-Id') is missing.");
+        throw new IllegalArgumentException(
+                "Required courier identity header ('X-Courier-Id' or 'X-User-Id') is missing.");
     }
 }

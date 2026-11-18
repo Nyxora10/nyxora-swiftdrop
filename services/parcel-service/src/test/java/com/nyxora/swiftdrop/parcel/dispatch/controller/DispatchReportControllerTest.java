@@ -59,10 +59,10 @@ class DispatchReportControllerTest {
     private static final String CUSTOMER_USER_ID = "00000000-0000-0000-0000-000000000002";
 
     @Test
-    @DisplayName("GET /api/v1/parcels/unassigned requires authentication - returns 403 when unauthenticated")
-    void getUnassignedParcels_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/parcels/unassigned requires authentication - returns 401 when unauthenticated")
+    void getUnassignedParcels_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/parcels/unassigned"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -157,8 +157,8 @@ class DispatchReportControllerTest {
     }
 
     @Test
-    @DisplayName("PUT /api/v1/parcels/{id}/assign when parcel is not in CREATED status returns 400 Bad Request")
-    void assignCourier_whenInvalidParcelState_returns400BadRequest() throws Exception {
+    @DisplayName("PUT /api/v1/parcels/{id}/assign when parcel is not in CREATED status returns 409 Conflict")
+    void assignCourier_whenInvalidParcelState_returns409Conflict() throws Exception {
         UUID parcelId = UUID.randomUUID();
         UUID courierId = UUID.randomUUID();
 
@@ -172,14 +172,14 @@ class DispatchReportControllerTest {
                         .header("X-User-Role", "ROLE_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Invalid Parcel State"))
-                .andExpect(jsonPath("$.status").value(400));
+                .andExpect(jsonPath("$.status").value(409));
     }
 
     @Test
-    @DisplayName("PUT /api/v1/parcels/{id}/assign with empty payload returns 422 Unprocessable Entity")
-    void assignCourier_withInvalidPayload_returns422() throws Exception {
+    @DisplayName("PUT /api/v1/parcels/{id}/assign with empty payload returns 400 Bad Request")
+    void assignCourier_withInvalidPayload_returns400() throws Exception {
         UUID parcelId = UUID.randomUUID();
 
         mockMvc.perform(put("/api/v1/parcels/" + parcelId + "/assign")
@@ -187,7 +187,7 @@ class DispatchReportControllerTest {
                         .header("X-User-Role", "ROLE_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -296,10 +296,10 @@ class DispatchReportControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/parcels/reports/summary requires authentication - returns 403 when unauthenticated")
-    void getOperationalSummary_unauthenticated_returns403() throws Exception {
+    @DisplayName("GET /api/v1/parcels/reports/summary requires authentication - returns 401 when unauthenticated")
+    void getOperationalSummary_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/parcels/reports/summary"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -375,7 +375,7 @@ class DispatchReportControllerTest {
                         .header("X-User-Id", ADMIN_USER_ID)
                         .header("X-User-Role", "ROLE_ADMIN"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid Request Parameters"))
-                .andExpect(jsonPath("$.detail").value("'from' date cannot be after 'to' date."));
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.detail").value("The supplied request is invalid."));
     }
 }

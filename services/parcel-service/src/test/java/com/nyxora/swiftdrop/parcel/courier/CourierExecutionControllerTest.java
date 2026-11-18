@@ -108,7 +108,7 @@ class CourierExecutionControllerTest {
         mockMvc.perform(get("/api/v1/parcels/courier/runsheet"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Bad Request"))
-                .andExpect(jsonPath("$.detail").value("Required courier identity header ('X-Courier-Id' or 'X-User-Id') is missing."));
+                .andExpect(jsonPath("$.detail").value("The supplied request is invalid."));
     }
 
     @Test

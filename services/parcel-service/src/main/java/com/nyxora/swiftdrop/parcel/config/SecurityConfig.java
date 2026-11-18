@@ -1,5 +1,10 @@
 package com.nyxora.swiftdrop.parcel.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,6 +15,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.io.IOException;
+import java.net.URI;
 
 /**
  * Parcel Service Security Configuration.
@@ -37,11 +45,21 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-            GatewayHeaderAuthFilter gatewayHeaderAuthFilter) throws Exception {
+            GatewayHeaderAuthFilter gatewayHeaderAuthFilter,
+            ObjectMapper objectMapper) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(gatewayHeaderAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, authException) ->
+                                writeProblem(response, objectMapper, request.getRequestURI(),
+                                        HttpStatus.UNAUTHORIZED, "Unauthorized", "unauthorized",
+                                        "Authentication is required to access this resource."))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                writeProblem(response, objectMapper, request.getRequestURI(),
+                                        HttpStatus.FORBIDDEN, "Forbidden", "forbidden",
+                                        "You do not have permission to perform this action.")))
                 .authorizeHttpRequests(auth -> auth
                         // Swagger UI & OpenAPI docs — open for exploration
                         .requestMatchers(
@@ -94,5 +112,21 @@ public class SecurityConfig {
                         .anyRequest().authenticated());
 
         return http.build();
+    }
+
+    private static void writeProblem(HttpServletResponse response,
+                                     ObjectMapper objectMapper,
+                                     String requestUri,
+                                     HttpStatus status,
+                                     String title,
+                                     String type,
+                                     String detail) throws IOException {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        problem.setType(URI.create("https://swiftdrop.lk/errors/" + type));
+        problem.setInstance(URI.create(requestUri));
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        objectMapper.writeValue(response.getWriter(), problem);
     }
 }
