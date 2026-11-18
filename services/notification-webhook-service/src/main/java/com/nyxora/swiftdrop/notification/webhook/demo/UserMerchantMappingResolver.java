@@ -6,16 +6,16 @@ import java.util.UUID;
 /**
  * Strategy interface for resolving a verified merchant UUID from an authenticated user session.
  *
- * <p><strong>Security Architecture (Defense-in-Depth):</strong>
- * <ul>
- *   <li>Enforces zero-trust: Rejects relying on caller-controlled headers (such as raw {@code X-Merchant-Id}).</li>
- *   <li>Separation of concerns: Recognizes that {@code users.id} (user account) and {@code merchants.id}
- *       (merchant profile) are separate database identifiers.</li>
- *   <li>Fail-Closed: If no verified, trusted server-side mapping is available, implementations must return
- *       {@link Optional#empty()} to prevent unauthorized horizontal privilege escalation.</li>
- * </ul>
+ * <p><strong>Note:</strong> With Gateway claim enrichment (Task 4.3) and Auth Service JWT embedding (Task 2.5),
+ * the API Gateway validates user sessions, extracts the {@code merchantId} claim, and relays verified
+ * {@code X-Merchant-Id} headers stamped with {@code X-Gateway-Secret}.
+ * Protected endpoints now authenticate through {@link com.nyxora.swiftdrop.notification.webhook.security.GatewaySecurityValidator}.
+ * This interface is retained for backward compatibility.
  * </p>
+ *
+ * @deprecated Superceded by Gateway identity relay and {@link com.nyxora.swiftdrop.notification.webhook.security.GatewaySecurityValidator}.
  */
+@Deprecated(since = "dev-gateway-enrichment")
 @FunctionalInterface
 public interface UserMerchantMappingResolver {
 
@@ -27,4 +27,3 @@ public interface UserMerchantMappingResolver {
      */
     Optional<UUID> resolveMerchantId(UUID userId);
 }
-

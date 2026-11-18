@@ -46,6 +46,9 @@ public class WebhookRabbitConfig {
     public static final String RETRY_PARKING_LOT_QUEUE = "swiftdrop.webhook.retry.parking-lot";
     public static final String RETRY_PARKING_LOT_ROUTING_KEY = "webhook.retry.parking-lot";
 
+    public static final String WEBHOOK_PARCEL_EVENTS_QUEUE = "swiftdrop.webhook.parcel.events";
+    public static final String WEBHOOK_PARCEL_EVENTS_ROUTING_KEY = "parcel.status.updated";
+
     public static final String RETRY_QUEUE_10S = "swiftdrop.webhook.retry.10s";
     public static final String RETRY_QUEUE_30S = "swiftdrop.webhook.retry.30s";
     public static final String RETRY_QUEUE_2M = "swiftdrop.webhook.retry.2m";
@@ -63,6 +66,12 @@ public class WebhookRabbitConfig {
 
     @Value("${app.rabbitmq.dlx-exchange:" + DEAD_LETTER_EXCHANGE + "}")
     private String dlxExchangeName;
+
+    @Value("${app.rabbitmq.webhook-parcel-queue:" + WEBHOOK_PARCEL_EVENTS_QUEUE + "}")
+    private String webhookParcelQueueName;
+
+    @Value("${app.rabbitmq.webhook-parcel-routing-key:" + WEBHOOK_PARCEL_EVENTS_ROUTING_KEY + "}")
+    private String webhookParcelRoutingKey;
 
     // ─── Exchanges ──────────────────────────────────────────────────────
 
@@ -114,6 +123,23 @@ public class WebhookRabbitConfig {
         return BindingBuilder.bind(webhookRetryParkingLotQueue)
                 .to(webhookDeadLetterExchange)
                 .with(RETRY_PARKING_LOT_ROUTING_KEY);
+    }
+
+    // ─── Dedicated Member 8 Parcel Status Events Inbound Queue ───────────
+
+    @Bean
+    public Queue webhookParcelEventsQueue() {
+        return QueueBuilder.durable(webhookParcelQueueName)
+                .build();
+    }
+
+    @Bean
+    public Binding webhookParcelEventsBinding(
+            Queue webhookParcelEventsQueue,
+            TopicExchange webhookEventsTopicExchange) {
+        return BindingBuilder.bind(webhookParcelEventsQueue)
+                .to(webhookEventsTopicExchange)
+                .with(webhookParcelRoutingKey);
     }
 
     // ─── 5-Tier TTL Delay Queues (Dead-Letter back to RETRY_PROCESS_QUEUE) ─
