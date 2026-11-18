@@ -4,6 +4,7 @@ import com.nyxora.swiftdrop.auth.dto.request.AdminDecisionRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AdminDecisionResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
+import com.nyxora.swiftdrop.auth.dto.response.AvailableCourierResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.Courier;
 import com.nyxora.swiftdrop.auth.entity.Merchant;
@@ -427,6 +428,117 @@ class AdminServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.of(suspendedUser));
 
         assertThrows(IllegalStateException.class, () -> adminService.suspendUser(adminId, userId, new AdminDecisionRequest("Reason")));
+    }
+
+    @Test
+    @DisplayName("getAvailableCouriers returns all available couriers when zoneId is null")
+    void getAvailableCouriers_WithoutZone_ReturnsAllAvailableCouriers() {
+        UUID courierId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .fullName("Kamal Perera")
+                .email("kamal@swiftdrop.lk")
+                .phoneNumber("+94771234567")
+                .status(UserStatus.ACTIVE)
+                .build();
+        Courier courier = Courier.builder()
+                .id(courierId)
+                .user(user)
+                .vehicleType(VehicleType.MOTORCYCLE)
+                .licensePlate("WP-BBO-1234")
+                .activeDeliveryCount(5)
+                .assignedZoneId(1)
+                .isAvailable(true)
+                .build();
+
+        when(courierRepository.findAvailableCouriersByZone(null)).thenReturn(List.of(courier));
+
+        List<AvailableCourierResponse> result = adminService.getAvailableCouriers(null);
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        AvailableCourierResponse dto = result.get(0);
+        assertEquals(courierId, dto.courierId());
+        assertEquals(userId, dto.userId());
+        assertEquals("Kamal Perera", dto.fullName());
+        assertEquals("kamal@swiftdrop.lk", dto.email());
+        assertEquals("+94771234567", dto.phoneNumber());
+        assertEquals("MOTORCYCLE", dto.vehicleType());
+        assertEquals("WP-BBO-1234", dto.licensePlate());
+        assertEquals(5, dto.activeDeliveryCount());
+        assertEquals(20, dto.maxWorkload());
+        assertEquals(1, dto.assignedZoneId());
+        assertTrue(dto.isAvailable());
+        assertTrue(dto.canAssign());
+        verify(courierRepository).findAvailableCouriersByZone(null);
+    }
+
+    @Test
+    @DisplayName("getAvailableCouriers filters by zoneId when provided")
+    void getAvailableCouriers_WithZone_FiltersByAssignedZone() {
+        when(courierRepository.findAvailableCouriersByZone(2)).thenReturn(List.of());
+
+        List<AvailableCourierResponse> result = adminService.getAvailableCouriers(2);
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+        verify(courierRepository).findAvailableCouriersByZone(2);
+    }
+
+    @Test
+    @DisplayName("getAvailableCouriers sets canAssign=false when active deliveries reach 20 workload limit")
+    void getAvailableCouriers_WorkloadLimit_SetsCanAssignFalse() {
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .fullName("Sunil Silva")
+                .status(UserStatus.ACTIVE)
+                .build();
+        Courier busyCourier = Courier.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .vehicleType(VehicleType.VAN)
+                .licensePlate("WP-CAR-9988")
+                .activeDeliveryCount(20)
+                .isAvailable(true)
+                .build();
+
+        when(courierRepository.findAvailableCouriersByZone(1)).thenReturn(List.of(busyCourier));
+
+        List<AvailableCourierResponse> result = adminService.getAvailableCouriers(1);
+
+        assertEquals(1, result.size());
+        AvailableCourierResponse dto = result.get(0);
+        assertEquals(20, dto.activeDeliveryCount());
+        assertTrue(dto.isAvailable());
+        assertFalse(dto.canAssign(), "Couriers with 20 active deliveries must not be assignable");
+    }
+
+    @Test
+    @DisplayName("getAvailableCouriers sets canAssign=false when courier is not available")
+    void getAvailableCouriers_NotAvailable_SetsCanAssignFalse() {
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .fullName("Nimal Jay")
+                .status(UserStatus.ACTIVE)
+                .build();
+        Courier unavailableCourier = Courier.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .vehicleType(VehicleType.MOTORCYCLE)
+                .licensePlate("WP-MOTO-1122")
+                .activeDeliveryCount(2)
+                .isAvailable(false)
+                .build();
+
+        when(courierRepository.findAvailableCouriersByZone(null)).thenReturn(List.of(unavailableCourier));
+
+        List<AvailableCourierResponse> result = adminService.getAvailableCouriers(null);
+
+        assertEquals(1, result.size());
+        AvailableCourierResponse dto = result.get(0);
+        assertFalse(dto.isAvailable());
+        assertFalse(dto.canAssign(), "Unavailable courier must not be assignable");
     }
 }
 

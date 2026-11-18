@@ -4,6 +4,7 @@ import com.nyxora.swiftdrop.auth.dto.request.AdminDecisionRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AdminDecisionResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
+import com.nyxora.swiftdrop.auth.dto.response.AvailableCourierResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.Courier;
 import com.nyxora.swiftdrop.auth.entity.Merchant;
@@ -25,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -186,6 +188,16 @@ public class AdminServiceImpl implements AdminService {
 
         User savedUser = userRepository.save(user);
         return AdminDecisionResponse.of("User account suspended successfully.", savedUser);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableCourierResponse> getAvailableCouriers(Integer zoneId) {
+        log.info("[AdminService] Fetching available couriers for dispatch (zoneId: {})", zoneId);
+        List<Courier> couriers = courierRepository.findAvailableCouriersByZone(zoneId);
+        return couriers.stream()
+                .map(AvailableCourierResponse::fromEntity)
+                .toList();
     }
 }
 

@@ -5,6 +5,7 @@ import com.nyxora.swiftdrop.auth.dto.request.AdminDecisionRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AdminDecisionResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
+import com.nyxora.swiftdrop.auth.dto.response.AvailableCourierResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
@@ -189,6 +190,69 @@ class AdminControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Invalid State Transition"))
                 .andExpect(jsonPath("$.detail").value("User account is already ACTIVE."));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/auth/admin/couriers/available returns HTTP 200 OK with available couriers")
+    void getAvailableCouriers_Returns200WithList() throws Exception {
+        UUID courierId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AvailableCourierResponse courierDto = AvailableCourierResponse.builder()
+                .courierId(courierId)
+                .userId(userId)
+                .fullName("Kamal Perera")
+                .email("kamal@swiftdrop.lk")
+                .phoneNumber("+94771234567")
+                .vehicleType("MOTORCYCLE")
+                .licensePlate("WP-BBO-1234")
+                .activeDeliveryCount(3)
+                .maxWorkload(20)
+                .assignedZoneId(1)
+                .isAvailable(true)
+                .canAssign(true)
+                .build();
+
+        when(adminService.getAvailableCouriers(null)).thenReturn(List.of(courierDto));
+
+        mockMvc.perform(get("/api/v1/auth/admin/couriers/available")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].courierId").value(courierId.toString()))
+                .andExpect(jsonPath("$[0].fullName").value("Kamal Perera"))
+                .andExpect(jsonPath("$[0].email").value("kamal@swiftdrop.lk"))
+                .andExpect(jsonPath("$[0].vehicleType").value("MOTORCYCLE"))
+                .andExpect(jsonPath("$[0].licensePlate").value("WP-BBO-1234"))
+                .andExpect(jsonPath("$[0].activeDeliveryCount").value(3))
+                .andExpect(jsonPath("$[0].maxWorkload").value(20))
+                .andExpect(jsonPath("$[0].assignedZoneId").value(1))
+                .andExpect(jsonPath("$[0].isAvailable").value(true))
+                .andExpect(jsonPath("$[0].canAssign").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/auth/admin/couriers/available with zoneId parameter filters by zone")
+    void getAvailableCouriers_WithZoneId_ReturnsFilteredList() throws Exception {
+        UUID courierId = UUID.randomUUID();
+        AvailableCourierResponse courierDto = AvailableCourierResponse.builder()
+                .courierId(courierId)
+                .fullName("Nimal Silva")
+                .activeDeliveryCount(20)
+                .maxWorkload(20)
+                .assignedZoneId(2)
+                .isAvailable(true)
+                .canAssign(false)
+                .build();
+
+        when(adminService.getAvailableCouriers(2)).thenReturn(List.of(courierDto));
+
+        mockMvc.perform(get("/api/v1/auth/admin/couriers/available")
+                        .param("zoneId", "2")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].courierId").value(courierId.toString()))
+                .andExpect(jsonPath("$[0].fullName").value("Nimal Silva"))
+                .andExpect(jsonPath("$[0].activeDeliveryCount").value(20))
+                .andExpect(jsonPath("$[0].canAssign").value(false));
     }
 }
 
