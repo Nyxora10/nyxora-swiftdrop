@@ -5,6 +5,7 @@ import com.nyxora.swiftdrop.notification.webhook.client.AuthInternalClient;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookEvent;
 import com.nyxora.swiftdrop.notification.webhook.util.HmacSignatureUtil;
+import com.nyxora.swiftdrop.notification.webhook.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -72,7 +73,9 @@ class DemoWebhookControllerTest {
                 null,
                 null
         );
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
 
         samplePayload = "{\"eventType\":\"parcel.status.updated\",\"parcelId\":\"" + UUID.randomUUID()
                 + "\",\"status\":\"IN_TRANSIT\"}";
@@ -113,7 +116,11 @@ class DemoWebhookControllerTest {
                         .header("X-Merchant-Id", merchantId.toString())
                         .content(samplePayload))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("MISSING_SIGNATURE"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.title").value("Missing Signature"))
+                .andExpect(jsonPath("$.type").exists())
+                .andExpect(jsonPath("$.detail").exists())
+                .andExpect(jsonPath("$.instance").exists());
 
         assertEquals(0, eventStore.getRecentEvents(merchantId).size());
     }
@@ -129,7 +136,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, malformedSig)
                         .content(samplePayload))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("MALFORMED_SIGNATURE"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.title").value("Malformed Signature"));
 
         assertEquals(0, eventStore.getRecentEvents(merchantId).size());
     }
@@ -149,7 +157,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, invalidSignature)
                         .content(samplePayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("INVALID_SIGNATURE"));
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Invalid Signature"));
 
         assertEquals(0, eventStore.getRecentEvents(merchantId).size());
     }
@@ -169,7 +178,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(tamperedPayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("INVALID_SIGNATURE"));
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Invalid Signature"));
 
         assertEquals(0, eventStore.getRecentEvents(merchantId).size());
     }
@@ -185,7 +195,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(samplePayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("CONFIG_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
 
         assertEquals(0, eventStore.getRecentEvents(merchantId).size());
     }
@@ -198,7 +209,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(samplePayload))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("MISSING_MERCHANT_ID"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.title").value("Missing Merchant"));
 
         verifyNoInteractions(authInternalClient);
     }
@@ -212,7 +224,8 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(""))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.title").value("Bad Request"));
     }
 
     // ─── Fallback Demo Secret Hardening Tests ────────────────────────────
@@ -230,7 +243,8 @@ class DemoWebhookControllerTest {
                 TEST_SECRET,
                 merchantId.toString() // Explicit matching merchant ID
         );
-        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController).build();
+        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         fallbackMockMvc.perform(post(DEMO_RECEIVER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -255,7 +269,8 @@ class DemoWebhookControllerTest {
                 TEST_SECRET,
                 merchantId.toString() // Configured for merchantId, NOT otherMerchantId
         );
-        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController).build();
+        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         fallbackMockMvc.perform(post(DEMO_RECEIVER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -263,7 +278,7 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(samplePayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("CONFIG_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -279,7 +294,8 @@ class DemoWebhookControllerTest {
                 TEST_SECRET,
                 "" // Blank merchant ID — global secret forbidden!
         );
-        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController).build();
+        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         fallbackMockMvc.perform(post(DEMO_RECEIVER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -287,7 +303,7 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(samplePayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("CONFIG_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -303,7 +319,8 @@ class DemoWebhookControllerTest {
                 TEST_SECRET,
                 merchantId.toString()
         );
-        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController).build();
+        MockMvc fallbackMockMvc = MockMvcBuilders.standaloneSetup(fallbackController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         fallbackMockMvc.perform(post(DEMO_RECEIVER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -311,7 +328,7 @@ class DemoWebhookControllerTest {
                         .header(HmacSignatureUtil.SIGNATURE_HEADER_NAME, validSignature)
                         .content(samplePayload))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("CONFIG_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     // ─── GET & DELETE Security, Isolation & Fail-Closed Tests ───────────
@@ -345,7 +362,8 @@ class DemoWebhookControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .header("X-Merchant-Id", victimMerchantId.toString())) // Attacker supplies victim's ID
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
     }
 
     @Test
@@ -358,7 +376,8 @@ class DemoWebhookControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .header("X-Merchant-Id", victimMerchantId.toString()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
     }
 
     @Test
@@ -369,13 +388,14 @@ class DemoWebhookControllerTest {
                 (uId -> Optional.empty()), // No mapping available!
                 environment, null, null
         );
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
+        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         failClosedMvc.perform(get(DEMO_EVENTS_URL)
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(503));
     }
 
     @Test
@@ -386,13 +406,14 @@ class DemoWebhookControllerTest {
                 (uId -> Optional.empty()), // No mapping available!
                 environment, null, null
         );
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
+        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         failClosedMvc.perform(delete(DEMO_EVENTS_URL)
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
+                .andExpect(jsonPath("$.status").value(503));
     }
 
     @Test
@@ -400,7 +421,7 @@ class DemoWebhookControllerTest {
     void shouldRejectUnauthenticatedGetEvents() throws Exception {
         mockMvc.perform(get(DEMO_EVENTS_URL))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -408,7 +429,7 @@ class DemoWebhookControllerTest {
     void shouldRejectUnauthenticatedDeleteEvents() throws Exception {
         mockMvc.perform(delete(DEMO_EVENTS_URL))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -418,7 +439,7 @@ class DemoWebhookControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.status").value(403));
     }
 
     @Test
@@ -428,7 +449,7 @@ class DemoWebhookControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.status").value(403));
     }
 
     @Test

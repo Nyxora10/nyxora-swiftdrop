@@ -8,6 +8,7 @@ import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryStatus;
 import com.nyxora.swiftdrop.notification.webhook.exception.ConcurrentRetryException;
 import com.nyxora.swiftdrop.notification.webhook.exception.DeliveryLogNotFoundException;
 import com.nyxora.swiftdrop.notification.webhook.exception.InvalidDeliveryStatusException;
+import com.nyxora.swiftdrop.notification.webhook.exception.GlobalExceptionHandler;
 import com.nyxora.swiftdrop.notification.webhook.service.WebhookLogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.MediaType;
 
 import java.time.Instant;
 import java.util.List;
@@ -61,7 +63,9 @@ class WebhookLogControllerTest {
                 : Optional.empty();
 
         controller = new WebhookLogController(logService, mappingResolver);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     // ─── GET /api/v1/webhooks/logs Tests ─────────────────────────────────
@@ -118,7 +122,11 @@ class WebhookLogControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("page", "-1"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INVALID_PAGINATION"));
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.title").value("Bad Request"))
+                        .andExpect(jsonPath("$.type").exists())
+                        .andExpect(jsonPath("$.detail").exists())
+                        .andExpect(jsonPath("$.instance").exists());
     }
 
     @Test
@@ -129,7 +137,7 @@ class WebhookLogControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("size", "0"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INVALID_PAGINATION"));
+                        .andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
@@ -140,7 +148,7 @@ class WebhookLogControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("status", "UNKNOWN_STATUS"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INVALID_STATUS"));
+                        .andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
@@ -148,7 +156,8 @@ class WebhookLogControllerTest {
     void shouldRejectUnauthenticatedGetLogs() throws Exception {
         mockMvc.perform(get(BASE_URL))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
 
     @Test
@@ -158,7 +167,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
     }
 
     @Test
@@ -171,7 +181,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
+                        .andExpect(jsonPath("$.status").value(503))
+                        .andExpect(jsonPath("$.title").exists());
     }
 
     @Test
@@ -184,7 +195,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .header("X-Merchant-Id", forgedMerchantId.toString()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
     }
 
     // ─── POST /api/v1/webhooks/logs/{id}/retry Tests ─────────────────────
@@ -218,7 +230,9 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error").value("NOT_FOUND"));
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.title").value("Webhook Delivery Log Not Found"))
+                        .andExpect(jsonPath("$.detail").value("The requested webhook delivery log was not found."));
     }
 
     @Test
@@ -233,7 +247,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("INELIGIBLE_STATUS"))
+                        .andExpect(jsonPath("$.status").value(409))
+                        .andExpect(jsonPath("$.title").value("Invalid Delivery Status"))
                 .andExpect(jsonPath("$.currentStatus").value("DELIVERED"));
     }
 
@@ -247,7 +262,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("CONCURRENT_RETRY_CONFLICT"));
+                        .andExpect(jsonPath("$.status").value(409))
+                        .andExpect(jsonPath("$.title").value("Concurrent Retry Conflict"));
     }
 
     @Test
@@ -260,7 +276,8 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.error").value("RETRY_PUBLICATION_FAILED"));
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.title").value("Internal Server Error"));
     }
 
     @Test
@@ -268,7 +285,7 @@ class WebhookLogControllerTest {
     void shouldRejectUnauthenticatedRetry() throws Exception {
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test
@@ -278,7 +295,7 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.status").value(403));
     }
 
     @Test
@@ -291,7 +308,7 @@ class WebhookLogControllerTest {
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .header("X-Merchant-Id", forgedMerchantId.toString()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
+                .andExpect(jsonPath("$.status").value(403));
     }
 
     @Test
@@ -304,7 +321,7 @@ class WebhookLogControllerTest {
                         .header("X-User-Id", userId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
+                        .andExpect(jsonPath("$.status").value(503));
     }
 }
 

@@ -6,6 +6,8 @@ import com.nyxora.swiftdrop.ai_assistant_service.dto.request.ChatRequest;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.request.GenerateRequest;
 import com.nyxora.swiftdrop.ai_assistant_service.dto.response.ChatResponse;
 import com.nyxora.swiftdrop.ai_assistant_service.service.AiChatService;
+import com.nyxora.swiftdrop.ai_assistant_service.exception.GlobalExceptionHandler;
+import com.nyxora.swiftdrop.ai_assistant_service.exception.GeminiServiceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,7 +34,9 @@ class AiAssistantControllerTest {
         geminiClient = mock(GeminiClient.class);
         aiChatService = mock(AiChatService.class);
         AiAssistantController controller = new AiAssistantController(geminiClient, aiChatService);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -81,5 +85,51 @@ class AiAssistantControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reply").value("Your parcel SD-123456 is on the way."))
                 .andExpect(jsonPath("$.conversationId").value("conv-abc-123"));
+    }
+
+    @Test
+    @DisplayName("Should return RFC 7807 400 for invalid chat request")
+    void shouldRejectInvalidChatRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"\",\"conversationId\":\"conv-1\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").exists())
+                .andExpect(jsonPath("$.title").value("Invalid Request"))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").exists())
+                .andExpect(jsonPath("$.instance").value("/api/v1/ai/chat"))
+                .andExpect(jsonPath("$.fieldErrors.message").exists());
+    }
+
+    @Test
+    @DisplayName("Should return RFC 7807 400 for malformed JSON")
+    void shouldRejectMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("https://swiftdrop.lk/errors/malformed-json"))
+                .andExpect(jsonPath("$.title").value("Malformed JSON"))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("The request body contains malformed JSON."));
+    }
+
+    @Test
+    @DisplayName("Should return RFC 7807 503 for Gemini service failure")
+    void shouldReturnGeminiServiceUnavailable() throws Exception {
+        when(geminiClient.generateContent("Hello"))
+                .thenThrow(new GeminiServiceException("apiKey=secret provider response"));
+
+        mockMvc.perform(post("/api/v1/ai/generate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new GenerateRequest("Hello"))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("https://swiftdrop.lk/errors/ai-service-unavailable"))
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.detail").value("The AI assistant is temporarily unavailable. Please try again later."));
     }
 }

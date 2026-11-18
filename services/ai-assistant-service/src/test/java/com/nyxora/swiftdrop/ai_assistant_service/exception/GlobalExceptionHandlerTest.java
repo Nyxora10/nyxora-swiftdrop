@@ -29,7 +29,9 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ProblemDetail> response = exceptionHandler.handleGeminiError(ex);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON);
         assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getType()).isEqualTo(java.net.URI.create("https://swiftdrop.lk/errors/ai-service-unavailable"));
         assertThat(response.getBody().getTitle()).isEqualTo("AI Service Unavailable");
         assertThat(response.getBody().getDetail()).contains("The AI assistant is temporarily unavailable");
     }
@@ -47,9 +49,11 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ProblemDetail> response = exceptionHandler.handleValidationError(ex);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON);
         assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getType()).isEqualTo(java.net.URI.create("https://swiftdrop.lk/errors/validation-error"));
         assertThat(response.getBody().getTitle()).isEqualTo("Invalid Request");
-        assertThat(response.getBody().getDetail()).contains("Please provide a valid prompt");
+        assertThat(response.getBody().getDetail()).isEqualTo("The supplied request is invalid.");
     }
 
     @Test

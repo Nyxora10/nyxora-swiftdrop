@@ -19,6 +19,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import com.nyxora.swiftdrop.notification.webhook.exception.WebhookProblemDetail;
 
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +79,7 @@ public class WebhookLogController {
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getDeliveryLogs(
+            HttpServletRequest httpRequest,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "status", required = false) String statusStr,
@@ -88,28 +91,27 @@ public class WebhookLogController {
         UUID userId = parseAuthenticatedUserId(userIdHeader);
         if (userId == null) {
             log.warn("Rejected unauthenticated request to GET /api/v1/webhooks/logs: missing X-User-Id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED", "message", "Missing trusted caller identity header (X-User-Id)"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "unauthenticated", "Missing trusted caller identity.", httpRequest.getRequestURI());
         }
 
         // 2. Enforce Role-Based Access Control
         if (!isAuthorizedRole(userRoleHeader)) {
             log.warn("Rejected unauthorized role [{}] access to GET /api/v1/webhooks/logs for userId [{}]",
                     userRoleHeader, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN", "message", "Access restricted to merchants and administrators"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forbidden", "Access restricted to merchants and administrators.",
+                    httpRequest.getRequestURI());
         }
 
         // 3. Resolve verified merchant ID via trusted mapping (Fail-Closed)
         Optional<UUID> verifiedMerchantOpt = mappingResolver.resolveMerchantId(userId);
         if (verifiedMerchantOpt.isEmpty()) {
             log.warn("GET /api/v1/webhooks/logs failed closed: no trusted user-to-merchant mapping for userId={}", userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Auth Service mapping (Task 2.1) or Gateway claim enrichment (Task 4.3) is required. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
+            return WebhookProblemDetail.response(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Merchant Identity Mapping Unavailable", "auth-mapping-unavailable",
+                    "Trusted merchant identity mapping is temporarily unavailable.",
+                    httpRequest.getRequestURI());
         }
 
         UUID verifiedMerchantId = verifiedMerchantOpt.get();
@@ -118,19 +120,18 @@ public class WebhookLogController {
         if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
             log.warn("Rejected forged merchant identity on GET /api/v1/webhooks/logs: caller supplied {}, user maps to {}",
                     merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forged-merchant-identity",
+                    "The supplied merchant identity does not match the authenticated merchant.",
+                    httpRequest.getRequestURI());
         }
 
         // 5. Validate pagination parameters
         if (page < 0) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "INVALID_PAGINATION", "message", "Page index must not be negative"));
+            throw new IllegalArgumentException("Page index must not be negative");
         }
         if (size < 1) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "INVALID_PAGINATION", "message", "Page size must be greater than zero"));
+            throw new IllegalArgumentException("Page size must be greater than zero");
         }
         int effectiveSize = Math.min(size, MAX_PAGE_SIZE);
 
@@ -140,10 +141,7 @@ public class WebhookLogController {
             try {
                 statusFilter = WebhookDeliveryStatus.valueOf(statusStr.trim().toUpperCase());
             } catch (IllegalArgumentException ex) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("error", "INVALID_STATUS",
-                                "message", "Invalid delivery status filter: " + statusStr
-                                        + ". Permitted values: PENDING, DELIVERED, RETRYING, DEAD_LETTER"));
+                throw new IllegalArgumentException("Invalid delivery status filter");
             }
         }
 
@@ -165,6 +163,7 @@ public class WebhookLogController {
      */
     @PostMapping(value = "/{id}/retry", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> retryDelivery(
+            HttpServletRequest httpRequest,
             @PathVariable("id") UUID deliveryLogId,
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
@@ -174,16 +173,18 @@ public class WebhookLogController {
         UUID userId = parseAuthenticatedUserId(userIdHeader);
         if (userId == null) {
             log.warn("Rejected unauthenticated request to POST /api/v1/webhooks/logs/{}/retry: missing X-User-Id", deliveryLogId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED", "message", "Missing trusted caller identity header (X-User-Id)"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "unauthenticated", "Missing trusted caller identity.",
+                    httpRequest.getRequestURI());
         }
 
         // 2. Enforce Role-Based Access Control
         if (!isAuthorizedRole(userRoleHeader)) {
             log.warn("Rejected unauthorized role [{}] access to POST /api/v1/webhooks/logs/{}/retry for userId [{}]",
                     userRoleHeader, deliveryLogId, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN", "message", "Access restricted to merchants and administrators"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forbidden", "Access restricted to merchants and administrators.",
+                    httpRequest.getRequestURI());
         }
 
         // 3. Resolve verified merchant ID via trusted mapping (Fail-Closed)
@@ -191,11 +192,10 @@ public class WebhookLogController {
         if (verifiedMerchantOpt.isEmpty()) {
             log.warn("POST /api/v1/webhooks/logs/{}/retry failed closed: no trusted user-to-merchant mapping for userId={}",
                     deliveryLogId, userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
+            return WebhookProblemDetail.response(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Merchant Identity Mapping Unavailable", "auth-mapping-unavailable",
+                    "Trusted merchant identity mapping is temporarily unavailable.",
+                    httpRequest.getRequestURI());
         }
 
         UUID verifiedMerchantId = verifiedMerchantOpt.get();
@@ -204,38 +204,15 @@ public class WebhookLogController {
         if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
             log.warn("Rejected forged merchant identity on retry: caller supplied {}, user maps to {}",
                     merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forged-merchant-identity",
+                    "The supplied merchant identity does not match the authenticated merchant.",
+                    httpRequest.getRequestURI());
         }
 
         // 5. Execute manual retry via service
-        try {
-            ManualRetryResponse response = logService.retryFailedDelivery(deliveryLogId, verifiedMerchantId);
-            return ResponseEntity.ok(response);
-
-        } catch (DeliveryLogNotFoundException ex) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "NOT_FOUND", "message", PiiMaskingUtil.maskText(ex.getMessage())));
-
-        } catch (InvalidDeliveryStatusException ex) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "INELIGIBLE_STATUS",
-                            "currentStatus", ex.getCurrentStatus(),
-                            "message", PiiMaskingUtil.maskText(ex.getMessage())));
-
-        } catch (ConcurrentRetryException ex) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "CONCURRENT_RETRY_CONFLICT",
-                            "message", PiiMaskingUtil.maskText(ex.getMessage())));
-
-        } catch (IllegalStateException ex) {
-            log.error("Internal error executing manual retry for deliveryLogId={}: {}",
-                    deliveryLogId, PiiMaskingUtil.maskText(ex.getMessage()));
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "RETRY_PUBLICATION_FAILED",
-                            "message", "Webhook retry could not be published."));
-        }
+        ManualRetryResponse response = logService.retryFailedDelivery(deliveryLogId, verifiedMerchantId);
+        return ResponseEntity.ok(response);
     }
 
     // ─── Private Helper Methods ──────────────────────────────────────────

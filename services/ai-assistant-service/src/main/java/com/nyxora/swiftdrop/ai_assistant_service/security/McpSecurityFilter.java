@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.ai_assistant_service.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -23,6 +24,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Perimeter security filter enforcing client authentication on MCP endpoints (/mcp/**).
@@ -37,6 +40,7 @@ public class McpSecurityFilter extends OncePerRequestFilter {
             LoggerFactory.getLogger(McpSecurityFilter.class);
 
     private final SecretKey signingKey;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public McpSecurityFilter(@Value("${jwt.secret:defaultSecretKeyForTestingAndLocalDevelopmentOnly1234567890!}") String jwtSecret) {
         byte[] keyBytes;
@@ -66,7 +70,7 @@ public class McpSecurityFilter extends OncePerRequestFilter {
 
             if (identity == null) {
                 log.warn("Unauthorized access attempt to MCP endpoint: {}", request.getRequestURI());
-                sendUnauthorizedError(response, "Unauthorized MCP access. Valid token or trusted identity required.");
+                sendUnauthorizedError(request, response);
                 return;
             }
 
@@ -119,10 +123,19 @@ public class McpSecurityFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private void sendUnauthorizedError(HttpServletResponse response, String message) throws IOException {
+    private void sendUnauthorizedError(HttpServletRequest request,
+                                       HttpServletResponse response) throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{\"error\": \"" + message + "\"}");
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+
+        Map<String, Object> problem = new LinkedHashMap<>();
+        problem.put("type", "https://swiftdrop.lk/errors/mcp-unauthorized");
+        problem.put("title", "Unauthorized");
+        problem.put("status", HttpStatus.UNAUTHORIZED.value());
+        problem.put("detail", "Authentication is required to access MCP endpoints.");
+        problem.put("instance", request.getRequestURI());
+
+        objectMapper.writeValue(response.getWriter(), problem);
     }
 }
 

@@ -57,7 +57,12 @@ class McpSecurityFilterTest {
         securityFilter.doFilter(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(401);
-        assertThat(response.getContentAsString()).contains("Unauthorized MCP access");
+        assertThat(response.getContentType()).isEqualTo("application/problem+json");
+        assertThat(response.getContentAsString()).contains("\"type\":\"https://swiftdrop.lk/errors/mcp-unauthorized\"");
+        assertThat(response.getContentAsString()).contains("\"title\":\"Unauthorized\"");
+        assertThat(response.getContentAsString()).contains("\"status\":401");
+        assertThat(response.getContentAsString()).contains("\"detail\":\"Authentication is required");
+        assertThat(response.getContentAsString()).contains("\"instance\":\"/mcp\"");
     }
 
     @Test
@@ -71,7 +76,8 @@ class McpSecurityFilterTest {
         securityFilter.doFilter(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(401);
-        assertThat(response.getContentAsString()).contains("Unauthorized MCP access");
+        assertThat(response.getContentType()).isEqualTo("application/problem+json");
+        assertThat(response.getContentAsString()).contains("\"status\":401");
     }
 
     @Test

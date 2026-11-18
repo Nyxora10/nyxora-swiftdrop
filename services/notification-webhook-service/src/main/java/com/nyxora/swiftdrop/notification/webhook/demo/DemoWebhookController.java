@@ -18,6 +18,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import com.nyxora.swiftdrop.notification.webhook.exception.WebhookProblemDetail;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -122,6 +124,7 @@ public class DemoWebhookController {
      */
     @PostMapping(value = "/demo-receiver", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> receiveDemoWebhook(
+            HttpServletRequest httpRequest,
             @RequestBody(required = false) byte[] rawPayload,
             @RequestHeader(value = HmacSignatureUtil.SIGNATURE_HEADER_NAME, required = false) String signatureHeader,
             @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
@@ -131,50 +134,51 @@ public class DemoWebhookController {
         // 1. Validate Payload Presence
         if (rawPayload == null || rawPayload.length == 0) {
             log.warn("Demo webhook receiver rejected request: empty payload body");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "BAD_REQUEST", "message", "Request body payload must not be empty"));
+            return WebhookProblemDetail.response(HttpStatus.BAD_REQUEST, "Bad Request",
+                    "bad-request", "Request body payload must not be empty", httpRequest.getRequestURI());
         }
 
         // 2. Validate Signature Header Presence and Format
         if (signatureHeader == null || signatureHeader.isBlank()) {
             log.warn("Demo webhook receiver rejected request: missing signature header {}", HmacSignatureUtil.SIGNATURE_HEADER_NAME);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "MISSING_SIGNATURE",
-                            "message", "Missing required header: " + HmacSignatureUtil.SIGNATURE_HEADER_NAME));
+            return WebhookProblemDetail.response(HttpStatus.BAD_REQUEST, "Missing Signature",
+                    "missing-signature", "The webhook signature header is missing.",
+                    httpRequest.getRequestURI());
         }
 
         if (!signatureHeader.trim().startsWith(HmacSignatureUtil.SIGNATURE_PREFIX)) {
             log.warn("Demo webhook receiver rejected request: malformed signature prefix");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "MALFORMED_SIGNATURE",
-                            "message", "Malformed signature header: missing 'sha256=' prefix"));
+            return WebhookProblemDetail.response(HttpStatus.BAD_REQUEST, "Malformed Signature",
+                    "malformed-signature", "The webhook signature format is invalid.",
+                    httpRequest.getRequestURI());
         }
 
         // 3. Resolve Candidate Target Merchant UUID
         UUID merchantId = resolveCandidateMerchantId(merchantIdHeader, swiftDropMerchantHeader, merchantIdParam);
         if (merchantId == null) {
             log.warn("Demo webhook receiver rejected request: unable to resolve candidate merchant identity");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "MISSING_MERCHANT_ID",
-                            "message", "Merchant identification required via 'X-Merchant-Id' header or 'merchantId' query parameter"));
+            return WebhookProblemDetail.response(HttpStatus.BAD_REQUEST, "Missing Merchant",
+                    "missing-merchant-id", "A merchant identifier is required.",
+                    httpRequest.getRequestURI());
         }
 
         // 4. Resolve Trusted Signing Secret from Server-Side Source
         String signingSecret = resolveSigningSecret(merchantId);
         if (signingSecret == null || signingSecret.isBlank()) {
             log.warn("Demo webhook receiver: no active signing secret found for merchantId={}", merchantId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "CONFIG_UNAVAILABLE",
-                            "message", "Merchant webhook configuration or signing secret could not be resolved from Auth Service"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "webhook-config-unavailable",
+                    "Webhook authentication configuration is unavailable.",
+                    httpRequest.getRequestURI());
         }
 
         // 5. Cryptographically Verify Signature Against Exact Payload Bytes
         boolean isValid = HmacSignatureUtil.verifySignature(rawPayload, signingSecret, signatureHeader);
         if (!isValid) {
             log.warn("Demo webhook receiver: HMAC-SHA256 signature verification failed for merchantId={}", merchantId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "INVALID_SIGNATURE",
-                            "message", "HMAC-SHA256 signature verification failed: signature does not match payload digest"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Invalid Signature",
+                    "invalid-signature", "Webhook signature verification failed.",
+                    httpRequest.getRequestURI());
         }
 
         // 6. Signature Verified — Extract Metadata and Persist into In-Memory Store
@@ -206,6 +210,7 @@ public class DemoWebhookController {
      */
     @GetMapping(value = "/demo-events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getDemoEvents(
+            HttpServletRequest httpRequest,
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader) {
@@ -214,30 +219,28 @@ public class DemoWebhookController {
         UUID userId = parseAuthenticatedUserId(userIdHeader);
         if (userId == null) {
             log.warn("Rejected unauthenticated request to GET /demo-events: missing or invalid X-User-Id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED",
-                            "message", "Missing trusted caller identity header (X-User-Id)"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "unauthenticated", "Missing trusted caller identity.",
+                    httpRequest.getRequestURI());
         }
 
         // 2. Enforce Role-Based Access Control
         if (!isAuthorizedRole(userRoleHeader)) {
             log.warn("Rejected unauthorized role [{}] access to GET /demo-events for userId [{}]",
                     userRoleHeader, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN",
-                            "message", "Access restricted to merchants and administrators"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forbidden", "Access restricted to merchants and administrators.",
+                    httpRequest.getRequestURI());
         }
 
         // 3. Resolve Verified Merchant ID via Trusted Mapping (Fail-Closed)
         Optional<UUID> verifiedMerchantOpt = mappingResolver.resolveMerchantId(userId);
         if (verifiedMerchantOpt.isEmpty()) {
             log.warn("GET /demo-events failed closed: no trusted user-to-merchant mapping available for userId={}", userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Auth Service mapping (Task 2.1) or Gateway claim enrichment (Task 4.3) is required. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
+            return WebhookProblemDetail.response(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Merchant Identity Mapping Unavailable", "auth-mapping-unavailable",
+                    "Trusted merchant identity mapping is temporarily unavailable.",
+                    httpRequest.getRequestURI());
         }
 
         UUID verifiedMerchantId = verifiedMerchantOpt.get();
@@ -246,9 +249,10 @@ public class DemoWebhookController {
         if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
             log.warn("Rejected forged merchant identity on GET /demo-events: caller claims merchantId={}, but user maps to verified {}",
                     merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forged-merchant-identity",
+                    "The supplied merchant identity does not match the authenticated merchant.",
+                    httpRequest.getRequestURI());
         }
 
         // 5. Retrieve Isolated Events
@@ -263,6 +267,7 @@ public class DemoWebhookController {
      */
     @DeleteMapping(value = "/demo-events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> clearDemoEvents(
+            HttpServletRequest httpRequest,
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader) {
@@ -271,29 +276,28 @@ public class DemoWebhookController {
         UUID userId = parseAuthenticatedUserId(userIdHeader);
         if (userId == null) {
             log.warn("Rejected unauthenticated request to DELETE /demo-events: missing or invalid X-User-Id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED",
-                            "message", "Missing trusted caller identity header (X-User-Id)"));
+            return WebhookProblemDetail.response(HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "unauthenticated", "Missing trusted caller identity.",
+                    httpRequest.getRequestURI());
         }
 
         // 2. Enforce Role-Based Access Control (Fixes missing RBAC vulnerability)
         if (!isAuthorizedRole(userRoleHeader)) {
             log.warn("Rejected unauthorized role [{}] access to DELETE /demo-events for userId [{}]",
                     userRoleHeader, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN",
-                            "message", "Access restricted to merchants and administrators"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forbidden", "Access restricted to merchants and administrators.",
+                    httpRequest.getRequestURI());
         }
 
         // 3. Resolve Verified Merchant ID via Trusted Mapping (Fail-Closed)
         Optional<UUID> verifiedMerchantOpt = mappingResolver.resolveMerchantId(userId);
         if (verifiedMerchantOpt.isEmpty()) {
             log.warn("DELETE /demo-events failed closed: no trusted user-to-merchant mapping available for userId={}", userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
+            return WebhookProblemDetail.response(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Merchant Identity Mapping Unavailable", "auth-mapping-unavailable",
+                    "Trusted merchant identity mapping is temporarily unavailable.",
+                    httpRequest.getRequestURI());
         }
 
         UUID verifiedMerchantId = verifiedMerchantOpt.get();
@@ -302,9 +306,10 @@ public class DemoWebhookController {
         if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
             log.warn("Rejected forged merchant identity on DELETE /demo-events: caller claims merchantId={}, but user maps to verified {}",
                     merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
+            return WebhookProblemDetail.response(HttpStatus.FORBIDDEN, "Forbidden",
+                    "forged-merchant-identity",
+                    "The supplied merchant identity does not match the authenticated merchant.",
+                    httpRequest.getRequestURI());
         }
 
         // 5. Clear Stored Events
