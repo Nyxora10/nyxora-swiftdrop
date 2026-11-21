@@ -254,5 +254,46 @@ class CourierExecutionControllerTest {
                 .andExpect(content().contentType(MediaType.IMAGE_JPEG))
                 .andExpect(content().bytes("image-binary-data".getBytes()));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/{id}/proof-presigned-url returns 200 OK when S3 presigned URL is available")
+    void getProofPresignedUrlSuccess() throws Exception {
+        PresignedProofResponseDto presignedDto = PresignedProofResponseDto.builder()
+                .parcelId(parcelId)
+                .filename("proof.png")
+                .uploadUrl("https://swiftdrop-delivery-proofs.s3.ap-southeast-2.amazonaws.com/proof.png?signed=true")
+                .publicFileUrl("https://swiftdrop-delivery-proofs.s3.ap-southeast-2.amazonaws.com/proof.png")
+                .expiresAt(Instant.now().plusSeconds(600))
+                .build();
+
+        when(proofStorageService.generatePresignedUrl(eq(parcelId), eq("proof.png"), eq("image/png")))
+                .thenReturn(presignedDto);
+
+        mockMvc.perform(get("/api/v1/parcels/{id}/proof-presigned-url", parcelId)
+                        .param("filename", "proof.png")
+                        .param("contentType", "image/png")
+                        .header("X-Courier-Id", courierId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.parcelId").value(parcelId.toString()))
+                .andExpect(jsonPath("$.uploadUrl").value(presignedDto.getUploadUrl()))
+                .andExpect(jsonPath("$.publicFileUrl").value(presignedDto.getPublicFileUrl()));
+
+        verify(courierExecutionService).getCourierParcelById(courierId, parcelId);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/parcels/{id}/proof-presigned-url returns 204 No Content when in local mode")
+    void getProofPresignedUrlLocalModeReturnsNoContent() throws Exception {
+        when(proofStorageService.generatePresignedUrl(eq(parcelId), eq("proof.png"), eq("image/png")))
+                .thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/parcels/{id}/proof-presigned-url", parcelId)
+                        .param("filename", "proof.png")
+                        .param("contentType", "image/png")
+                        .header("X-Courier-Id", courierId.toString()))
+                .andExpect(status().isNoContent());
+
+        verify(courierExecutionService).getCourierParcelById(courierId, parcelId);
+    }
 }
 

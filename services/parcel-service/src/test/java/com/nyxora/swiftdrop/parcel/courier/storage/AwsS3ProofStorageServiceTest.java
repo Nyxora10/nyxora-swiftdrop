@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.courier.storage;
 
+import com.nyxora.swiftdrop.parcel.courier.dto.PresignedProofResponseDto;
 import com.nyxora.swiftdrop.parcel.courier.dto.ProofUploadResponseDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -224,6 +225,54 @@ class AwsS3ProofStorageServiceTest {
 
         assertThat(s3ServiceWithCreds.determineContentType("photo.png")).isEqualTo("image/png");
         verify(localFallback).determineContentType("photo.png");
+    }
+
+    @Test
+    @DisplayName("generatePresignedUrl validates parcelId, filename, and extension")
+    void generatePresignedUrlValidation() {
+        UUID parcelId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> s3ServiceWithCreds.generatePresignedUrl(null, "photo.png", "image/png"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Parcel ID cannot be null");
+
+        assertThatThrownBy(() -> s3ServiceWithCreds.generatePresignedUrl(parcelId, "", "image/png"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Filename cannot be empty");
+
+        assertThatThrownBy(() -> s3ServiceWithCreds.generatePresignedUrl(parcelId, "doc.pdf", "application/pdf"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid file format");
+    }
+
+    @Test
+    @DisplayName("generatePresignedUrl returns null in local storage mode")
+    void generatePresignedUrlLocalModeReturnsNull() {
+        UUID parcelId = UUID.randomUUID();
+        PresignedProofResponseDto result = s3ServiceLocalMode.generatePresignedUrl(parcelId, "photo.png", "image/png");
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("generatePresignedUrl returns null when AWS credentials are not configured")
+    void generatePresignedUrlNoCredsReturnsNull() {
+        UUID parcelId = UUID.randomUUID();
+        PresignedProofResponseDto result = s3ServiceNoCreds.generatePresignedUrl(parcelId, "photo.png", "image/png");
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("generatePresignedUrl generates valid S3 PUT URL and public URL with credentials")
+    void generatePresignedUrlWithCredsGeneratesUrl() {
+        UUID parcelId = UUID.randomUUID();
+        PresignedProofResponseDto result = s3ServiceWithCreds.generatePresignedUrl(parcelId, "signature.png", "image/png");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getParcelId()).isEqualTo(parcelId);
+        assertThat(result.getUploadUrl()).contains("swiftdrop-delivery-proofs.s3.ap-southeast-2.amazonaws.com");
+        assertThat(result.getUploadUrl()).contains("X-Amz-Signature");
+        assertThat(result.getPublicFileUrl()).startsWith("https://swiftdrop-delivery-proofs.s3.ap-southeast-2.amazonaws.com/");
+        assertThat(result.getExpiresAt()).isNotNull();
     }
 }
 

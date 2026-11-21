@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.parcel.courier.storage;
 
 import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
+import com.nyxora.swiftdrop.parcel.courier.dto.PresignedProofResponseDto;
 import com.nyxora.swiftdrop.parcel.courier.dto.ProofUploadResponseDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,7 +21,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -113,6 +118,67 @@ public class AwsS3ProofStorageService implements ProofStorageService {
             log.warn("Failed to upload proof to AWS S3. Gracefully falling back to local disk storage: {}",
                     PiiMaskingUtil.maskText(ex.getMessage()));
             return localFallback.storeProof(parcelId, file);
+        }
+    }
+
+    @Override
+    public PresignedProofResponseDto generatePresignedUrl(UUID parcelId, String filename, String contentType) {
+        if (parcelId == null) {
+            throw new IllegalArgumentException("Parcel ID cannot be null.");
+        }
+        if (!StringUtils.hasText(filename)) {
+            throw new IllegalArgumentException("Filename cannot be empty.");
+        }
+
+        // If running in local mode or without AWS credentials, return null so client falls back to multipart
+        if ("local".equalsIgnoreCase(storageType) || !hasValidAwsCredentials()) {
+            log.info("S3 storage unconfigured or set to 'local'. Presigned URLs are not available; client will fall back to multipart upload.");
+            return null;
+        }
+
+        String extension = extractExtension(filename, contentType);
+        if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
+            throw new IllegalArgumentException("Invalid file format. Only PNG, JPEG, and WEBP images are permitted.");
+        }
+
+        String safeFilename = String.format("%s_%s.%s", parcelId, UUID.randomUUID().toString().substring(0, 8), extension);
+        String resolvedContentType = StringUtils.hasText(contentType) ? contentType : "image/" + extension;
+
+        try (S3Presigner presigner = S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)
+                ))
+                .build()) {
+
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(safeFilename)
+                    .contentType(resolvedContentType)
+                    .build();
+
+            PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(10))
+                    .putObjectRequest(putObjectRequest)
+                    .build();
+
+            PresignedPutObjectRequest presignedPutObjectRequest = presigner.presignPutObject(presignRequest);
+            String uploadUrl = presignedPutObjectRequest.url().toString();
+            String publicFileUrl = String.format("https://%s.s3.%s.amazonaws.com/%s", bucketName, region, safeFilename);
+
+            log.info("Generated S3 Pre-signed URL for parcel {} (key: {}, expires in 10 mins)", parcelId, safeFilename);
+
+            return PresignedProofResponseDto.builder()
+                    .parcelId(parcelId)
+                    .filename(safeFilename)
+                    .uploadUrl(uploadUrl)
+                    .publicFileUrl(publicFileUrl)
+                    .expiresAt(presignedPutObjectRequest.expiration())
+                    .build();
+
+        } catch (Exception ex) {
+            log.warn("Failed to generate S3 Pre-signed URL. Client will fall back to server upload: {}", ex.getMessage());
+            return null;
         }
     }
 

@@ -77,6 +77,14 @@ export interface ProofUploadResponse {
   uploadedAt: string;
 }
 
+export interface PresignedProofResponse {
+  parcelId: string;
+  filename: string;
+  uploadUrl: string;
+  publicFileUrl: string;
+  expiresAt: string;
+}
+
 export interface CourierDeliveryHistoryItem {
   parcelId: string;
   trackingNumber: string;
