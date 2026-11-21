@@ -2,11 +2,13 @@ package com.nyxora.swiftdrop.notification.webhook.demo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.nyxora.swiftdrop.notification.webhook.client.AuthInternalClient;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookEvent;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookEventsResponse;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookReceiverResponse;
+import com.nyxora.swiftdrop.notification.webhook.security.GatewaySecurityValidator;
 import com.nyxora.swiftdrop.notification.webhook.util.HmacSignatureUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +36,9 @@ import java.util.UUID;
  * <p><strong>Endpoints:</strong>
  * <ul>
  *   <li>{@code POST /api/v1/webhooks/demo-receiver}: Accepts signed webhook dispatches, cryptographically
- *       verifies the {@code X-SwiftDrop-Signature} header using HMAC-SHA256, and stores verified payloads.</li>
+ *       verifies the {@code X-SwiftDrop-Signature} header using HMAC-SHA256, and stores verified payloads. (Public)</li>
  *   <li>{@code GET /api/v1/webhooks/demo-events}: Returns recent verified events for the authenticated merchant
- *       using verified user-to-merchant mapping.</li>
+ *       using verified Gateway identity and secret.</li>
  *   <li>{@code DELETE /api/v1/webhooks/demo-events}: Clears the in-memory demo history for the authenticated merchant.</li>
  * </ul>
  *
@@ -47,11 +49,11 @@ import java.util.UUID;
  *   <li>Resolves signing secrets exclusively from trusted server-side sources (Auth Service or explicit demo config).</li>
  *   <li>Development demo-secret fallback is disabled in production environments and requires an exact matching merchant ID.</li>
  *   <li>Never logs raw secrets, private keys, or full signature values.</li>
- *   <li>Rejects treating {@code X-User-Id} as {@code merchantId} because users and merchants have separate database identifiers.</li>
- *   <li>Fails closed on GET/DELETE if trusted user-to-merchant mapping is unavailable from Auth Service.</li>
+ *   <li>Validates API Gateway origin via {@code X-Gateway-Secret} before accepting identity headers.</li>
  *   <li>Enforces strict RBAC (ROLE_MERCHANT / ROLE_ADMIN) on both GET and DELETE endpoints.</li>
- *   <li>Rejects caller-supplied {@code X-Merchant-Id} if it contradicts the verified user session (anti-spoofing).</li>
+ *   <li>Rejects caller-supplied {@code X-Merchant-Id} or params if they contradict the verified Gateway identity.</li>
  * </ul>
+ * </p>
  */
 @RestController
 @RequestMapping("/api/v1/webhooks")
@@ -61,9 +63,9 @@ public class DemoWebhookController {
 
     private final DemoWebhookEventStore eventStore;
     private final AuthInternalClient authInternalClient;
+    private final GatewaySecurityValidator securityValidator;
     private final ObjectMapper objectMapper;
     private final Environment environment;
-    private final UserMerchantMappingResolver mappingResolver;
     private final String fallbackDemoSecret;
     private final String fallbackDemoMerchantId;
 
@@ -71,32 +73,32 @@ public class DemoWebhookController {
     public DemoWebhookController(
             DemoWebhookEventStore eventStore,
             AuthInternalClient authInternalClient,
+            GatewaySecurityValidator securityValidator,
             @Autowired(required = false) ObjectMapper objectMapper,
             @Autowired(required = false) Environment environment,
-            @Autowired(required = false) UserMerchantMappingResolver mappingResolver,
             @Value("${app.webhook.demo.secret:}") String fallbackDemoSecret,
             @Value("${app.webhook.demo.merchant-id:}") String fallbackDemoMerchantId) {
         this.eventStore = eventStore;
         this.authInternalClient = authInternalClient;
+        this.securityValidator = securityValidator;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.environment = environment;
-        this.mappingResolver = mappingResolver != null ? mappingResolver : (userId -> Optional.empty());
         this.fallbackDemoSecret = fallbackDemoSecret != null ? fallbackDemoSecret.trim() : "";
         this.fallbackDemoMerchantId = fallbackDemoMerchantId != null ? fallbackDemoMerchantId.trim() : "";
     }
 
     /**
-     * Testing constructor with custom resolver and environment.
+     * Testing constructor with custom security validator and environment.
      */
     public DemoWebhookController(
             DemoWebhookEventStore eventStore,
             AuthInternalClient authInternalClient,
             ObjectMapper objectMapper,
-            UserMerchantMappingResolver mappingResolver,
+            GatewaySecurityValidator securityValidator,
             Environment environment,
             String fallbackDemoSecret,
             String fallbackDemoMerchantId) {
-        this(eventStore, authInternalClient, objectMapper, environment, mappingResolver, fallbackDemoSecret, fallbackDemoMerchantId);
+        this(eventStore, authInternalClient, securityValidator, objectMapper, environment, fallbackDemoSecret, fallbackDemoMerchantId);
     }
 
     /**
@@ -106,11 +108,26 @@ public class DemoWebhookController {
             DemoWebhookEventStore eventStore,
             AuthInternalClient authInternalClient,
             ObjectMapper objectMapper) {
-        this(eventStore, authInternalClient, objectMapper, (Environment) null, (UserMerchantMappingResolver) null, null, null);
+        this(eventStore, authInternalClient, new GatewaySecurityValidator(null, GatewaySecurityValidator.DEFAULT_DEV_SECRET), objectMapper, null, null, null);
     }
 
     /**
-     * Inbound receiver endpoint for signed webhook events.
+     * Deprecated testing constructor for backward compatibility with tests using legacy mapping resolver.
+     */
+    @Deprecated
+    public DemoWebhookController(
+            DemoWebhookEventStore eventStore,
+            AuthInternalClient authInternalClient,
+            ObjectMapper objectMapper,
+            UserMerchantMappingResolver mappingResolver,
+            Environment environment,
+            String fallbackDemoSecret,
+            String fallbackDemoMerchantId) {
+        this(eventStore, authInternalClient, new GatewaySecurityValidator(environment, GatewaySecurityValidator.DEFAULT_DEV_SECRET), objectMapper, environment, fallbackDemoSecret, fallbackDemoMerchantId);
+    }
+
+    /**
+     * Inbound receiver endpoint for signed webhook events (Public, secured by HMAC-SHA256 signature).
      *
      * @param rawPayload              the exact bytes transmitted in the HTTP request body
      * @param signatureHeader         the {@code X-SwiftDrop-Signature} header
@@ -198,59 +215,33 @@ public class DemoWebhookController {
     /**
      * Dashboard polling endpoint returning recent verified events for the authenticated merchant.
      *
-     * @param userIdHeader     {@code X-User-Id} injected by API Gateway perimeter filter (verified user UUID)
-     * @param merchantIdHeader optional candidate {@code X-Merchant-Id} header (anti-spoof checked)
-     * @param userRoleHeader   {@code X-User-Role} injected by API Gateway perimeter filter
+     * @param gatewaySecretHeader    {@code X-Gateway-Secret} injected by API Gateway
+     * @param userIdHeader           {@code X-User-Id} injected by API Gateway perimeter filter (verified user UUID)
+     * @param merchantIdHeader       {@code X-Merchant-Id} injected by API Gateway perimeter filter
+     * @param userRoleHeader         {@code X-User-Role} injected by API Gateway perimeter filter
+     * @param candidateMerchantQuery optional candidate {@code merchantId} query parameter (anti-spoof checked)
      * @return list of recent demo events for the caller
      */
     @GetMapping(value = "/demo-events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getDemoEvents(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
-            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader) {
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_GATEWAY_SECRET, required = false) String gatewaySecretHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_USER_ID, required = false) String userIdHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_MERCHANT_ID, required = false) String merchantIdHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_USER_ROLE, required = false) String userRoleHeader,
+            @RequestParam(value = "merchantId", required = false) String candidateMerchantQuery) {
 
-        // 1. Authenticate Caller Identity from Gateway X-User-Id
-        UUID userId = parseAuthenticatedUserId(userIdHeader);
-        if (userId == null) {
-            log.warn("Rejected unauthenticated request to GET /demo-events: missing or invalid X-User-Id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED",
-                            "message", "Missing trusted caller identity header (X-User-Id)"));
+        // 1. Authenticate Gateway origin and merchant caller identity
+        var authResult = securityValidator.authenticateMerchantRequest(
+                gatewaySecretHeader, userIdHeader, userRoleHeader, merchantIdHeader, candidateMerchantQuery);
+
+        if (authResult instanceof GatewaySecurityValidator.MerchantAuthResult.Failure fail) {
+            return ResponseEntity.status(fail.status())
+                    .body(Map.of("error", fail.error(), "message", fail.message()));
         }
 
-        // 2. Enforce Role-Based Access Control
-        if (!isAuthorizedRole(userRoleHeader)) {
-            log.warn("Rejected unauthorized role [{}] access to GET /demo-events for userId [{}]",
-                    userRoleHeader, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN",
-                            "message", "Access restricted to merchants and administrators"));
-        }
+        UUID verifiedMerchantId = ((GatewaySecurityValidator.MerchantAuthResult.Success) authResult).merchantId();
 
-        // 3. Resolve Verified Merchant ID via Trusted Mapping (Fail-Closed)
-        Optional<UUID> verifiedMerchantOpt = mappingResolver.resolveMerchantId(userId);
-        if (verifiedMerchantOpt.isEmpty()) {
-            log.warn("GET /demo-events failed closed: no trusted user-to-merchant mapping available for userId={}", userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Auth Service mapping (Task 2.1) or Gateway claim enrichment (Task 4.3) is required. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
-        }
-
-        UUID verifiedMerchantId = verifiedMerchantOpt.get();
-
-        // 4. Anti-Spoofing Check: Caller-supplied X-Merchant-Id must not contradict verified mapping
-        if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
-            log.warn("Rejected forged merchant identity on GET /demo-events: caller claims merchantId={}, but user maps to verified {}",
-                    merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
-        }
-
-        // 5. Retrieve Isolated Events
+        // 2. Retrieve Isolated Events
         List<DemoWebhookEvent> events = eventStore.getRecentEvents(verifiedMerchantId);
         log.debug("Retrieved {} demo webhook events for verifiedMerchantId={}", events.size(), verifiedMerchantId);
 
@@ -259,54 +250,34 @@ public class DemoWebhookController {
 
     /**
      * Resets the demo events buffer for the authenticated merchant.
+     *
+     * @param gatewaySecretHeader    {@code X-Gateway-Secret} injected by API Gateway
+     * @param userIdHeader           {@code X-User-Id} injected by API Gateway perimeter filter
+     * @param merchantIdHeader       {@code X-Merchant-Id} injected by API Gateway perimeter filter
+     * @param userRoleHeader         {@code X-User-Role} injected by API Gateway perimeter filter
+     * @param candidateMerchantQuery optional candidate {@code merchantId} query parameter (anti-spoof checked)
+     * @return clearance confirmation
      */
     @DeleteMapping(value = "/demo-events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> clearDemoEvents(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String merchantIdHeader,
-            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader) {
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_GATEWAY_SECRET, required = false) String gatewaySecretHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_USER_ID, required = false) String userIdHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_MERCHANT_ID, required = false) String merchantIdHeader,
+            @RequestHeader(value = GatewaySecurityValidator.HEADER_USER_ROLE, required = false) String userRoleHeader,
+            @RequestParam(value = "merchantId", required = false) String candidateMerchantQuery) {
 
-        // 1. Authenticate Caller Identity from Gateway X-User-Id
-        UUID userId = parseAuthenticatedUserId(userIdHeader);
-        if (userId == null) {
-            log.warn("Rejected unauthenticated request to DELETE /demo-events: missing or invalid X-User-Id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "UNAUTHENTICATED",
-                            "message", "Missing trusted caller identity header (X-User-Id)"));
+        // 1. Authenticate Gateway origin and merchant caller identity
+        var authResult = securityValidator.authenticateMerchantRequest(
+                gatewaySecretHeader, userIdHeader, userRoleHeader, merchantIdHeader, candidateMerchantQuery);
+
+        if (authResult instanceof GatewaySecurityValidator.MerchantAuthResult.Failure fail) {
+            return ResponseEntity.status(fail.status())
+                    .body(Map.of("error", fail.error(), "message", fail.message()));
         }
 
-        // 2. Enforce Role-Based Access Control (Fixes missing RBAC vulnerability)
-        if (!isAuthorizedRole(userRoleHeader)) {
-            log.warn("Rejected unauthorized role [{}] access to DELETE /demo-events for userId [{}]",
-                    userRoleHeader, userId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORBIDDEN",
-                            "message", "Access restricted to merchants and administrators"));
-        }
+        UUID verifiedMerchantId = ((GatewaySecurityValidator.MerchantAuthResult.Success) authResult).merchantId();
 
-        // 3. Resolve Verified Merchant ID via Trusted Mapping (Fail-Closed)
-        Optional<UUID> verifiedMerchantOpt = mappingResolver.resolveMerchantId(userId);
-        if (verifiedMerchantOpt.isEmpty()) {
-            log.warn("DELETE /demo-events failed closed: no trusted user-to-merchant mapping available for userId={}", userId);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "AUTH_MAPPING_UNAVAILABLE",
-                            "message", "Trusted user-to-merchant mapping is unavailable. "
-                                    + "User IDs and Merchant IDs are separate identifiers. "
-                                    + "Failing closed to prevent unauthorized merchant impersonation."));
-        }
-
-        UUID verifiedMerchantId = verifiedMerchantOpt.get();
-
-        // 4. Anti-Spoofing Check: Caller-supplied X-Merchant-Id must not contradict verified mapping
-        if (isForgedMerchantIdentity(merchantIdHeader, verifiedMerchantId)) {
-            log.warn("Rejected forged merchant identity on DELETE /demo-events: caller claims merchantId={}, but user maps to verified {}",
-                    merchantIdHeader, verifiedMerchantId);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "FORGED_MERCHANT_IDENTITY",
-                            "message", "Caller-supplied X-Merchant-Id does not match verified merchant identity for authenticated user"));
-        }
-
-        // 5. Clear Stored Events
+        // 2. Clear Stored Events
         eventStore.clearEvents(verifiedMerchantId);
         log.info("Cleared demo webhook events for verifiedMerchantId={}", verifiedMerchantId);
 
@@ -317,36 +288,6 @@ public class DemoWebhookController {
     }
 
     // ─── Private Helper Methods ──────────────────────────────────────────
-
-    private UUID parseAuthenticatedUserId(String userIdHeader) {
-        if (userIdHeader == null || userIdHeader.isBlank()) {
-            return null;
-        }
-        try {
-            return UUID.fromString(userIdHeader.trim());
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
-    }
-
-    private boolean isAuthorizedRole(String userRoleHeader) {
-        if (userRoleHeader == null || userRoleHeader.isBlank()) {
-            return false;
-        }
-        return userRoleHeader.contains("MERCHANT") || userRoleHeader.contains("ADMIN");
-    }
-
-    private boolean isForgedMerchantIdentity(String candidateHeader, UUID verifiedMerchantId) {
-        if (candidateHeader == null || candidateHeader.isBlank()) {
-            return false; // Header omitted, rely strictly on verified mapping
-        }
-        try {
-            UUID supplied = UUID.fromString(candidateHeader.trim());
-            return !supplied.equals(verifiedMerchantId);
-        } catch (IllegalArgumentException ex) {
-            return true; // Malformed header is rejected as untrusted
-        }
-    }
 
     private UUID resolveCandidateMerchantId(String header1, String header2, String queryParam) {
         String candidate = null;
@@ -381,7 +322,7 @@ public class DemoWebhookController {
             }
         } catch (Exception ex) {
             log.warn("Failed to retrieve merchant webhook secret from Auth Service: merchantId={}, reason={}",
-                    merchantId, ex.getMessage());
+                    merchantId, PiiMaskingUtil.maskText(ex.getMessage()));
         }
 
         // 2. Strict Dev/Demo Fallback: Disabled in production, requires explicit matching merchant ID

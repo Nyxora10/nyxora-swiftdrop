@@ -1,6 +1,5 @@
 package com.nyxora.swiftdrop.notification.webhook.controller;
 
-import com.nyxora.swiftdrop.notification.webhook.demo.UserMerchantMappingResolver;
 import com.nyxora.swiftdrop.notification.webhook.dto.ManualRetryResponse;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookDeliveryLogResponse;
 import com.nyxora.swiftdrop.notification.webhook.dto.WebhookLogsPageResponse;
@@ -8,6 +7,7 @@ import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryStatus;
 import com.nyxora.swiftdrop.notification.webhook.exception.ConcurrentRetryException;
 import com.nyxora.swiftdrop.notification.webhook.exception.DeliveryLogNotFoundException;
 import com.nyxora.swiftdrop.notification.webhook.exception.InvalidDeliveryStatusException;
+import com.nyxora.swiftdrop.notification.webhook.security.GatewaySecurityValidator;
 import com.nyxora.swiftdrop.notification.webhook.service.WebhookLogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,13 +21,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class WebhookLogControllerTest {
 
     private static final String BASE_URL = "/api/v1/webhooks/logs";
+    private static final String TEST_GATEWAY_SECRET = "test-gateway-shared-secret-12345";
 
     @Mock
     private WebhookLogService logService;
@@ -55,19 +56,15 @@ class WebhookLogControllerTest {
         merchantId = UUID.randomUUID();
         logId = UUID.randomUUID();
 
-        // Standard verified mapping resolver for unit testing
-        UserMerchantMappingResolver mappingResolver = uId -> uId.equals(userId)
-                ? Optional.of(merchantId)
-                : Optional.empty();
-
-        controller = new WebhookLogController(logService, mappingResolver);
+        GatewaySecurityValidator securityValidator = new GatewaySecurityValidator(null, TEST_GATEWAY_SECRET);
+        controller = new WebhookLogController(logService, securityValidator);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     // ─── GET /api/v1/webhooks/logs Tests ─────────────────────────────────
 
     @Test
-    @DisplayName("Should return paginated delivery logs for authenticated merchant")
+    @DisplayName("Should return paginated delivery logs for authenticated merchant via verified Gateway identity")
     void shouldReturnPaginatedLogsForMerchant() throws Exception {
         WebhookDeliveryLogResponse item = new WebhookDeliveryLogResponse(
                 logId, UUID.randomUUID(), merchantId, "parcel.status.updated",
@@ -79,7 +76,9 @@ class WebhookLogControllerTest {
                 .thenReturn(pageResponse);
 
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("page", "0")
                         .param("size", "20"))
@@ -103,7 +102,9 @@ class WebhookLogControllerTest {
                 .thenReturn(pageResponse);
 
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("status", "DEAD_LETTER"))
                 .andExpect(status().isOk())
@@ -111,10 +112,46 @@ class WebhookLogControllerTest {
     }
 
     @Test
+    @DisplayName("Should reject GET /logs with 401 when X-Gateway-Secret is missing")
+    void shouldRejectMissingGatewaySecretOnGetLogs() throws Exception {
+        mockMvc.perform(get(BASE_URL)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_GATEWAY_SECRET"));
+    }
+
+    @Test
+    @DisplayName("Should reject GET /logs with 401 when X-Gateway-Secret is incorrect")
+    void shouldRejectIncorrectGatewaySecretOnGetLogs() throws Exception {
+        mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", "wrong-secret")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_GATEWAY_SECRET"));
+    }
+
+    @Test
+    @DisplayName("Should reject GET /logs with 400 when X-Merchant-Id is missing")
+    void shouldRejectMissingMerchantIdOnGetLogs() throws Exception {
+        mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("MISSING_MERCHANT_IDENTITY"));
+    }
+
+    @Test
     @DisplayName("Should reject GET /logs with 400 Bad Request when page number is negative")
     void shouldRejectNegativePageNumber() throws Exception {
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("page", "-1"))
                 .andExpect(status().isBadRequest())
@@ -125,7 +162,9 @@ class WebhookLogControllerTest {
     @DisplayName("Should reject GET /logs with 400 Bad Request when page size is zero or negative")
     void shouldRejectInvalidPageSize() throws Exception {
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("size", "0"))
                 .andExpect(status().isBadRequest())
@@ -136,7 +175,9 @@ class WebhookLogControllerTest {
     @DisplayName("Should reject GET /logs with 400 Bad Request when status filter is invalid")
     void shouldRejectInvalidStatusFilter() throws Exception {
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
                         .param("status", "UNKNOWN_STATUS"))
                 .andExpect(status().isBadRequest())
@@ -146,7 +187,10 @@ class WebhookLogControllerTest {
     @Test
     @DisplayName("Should reject GET /logs with 401 Unauthorized when X-User-Id is missing")
     void shouldRejectUnauthenticatedGetLogs() throws Exception {
-        mockMvc.perform(get(BASE_URL))
+        mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
     }
@@ -155,34 +199,25 @@ class WebhookLogControllerTest {
     @DisplayName("Should reject GET /logs with 403 Forbidden when role is unauthorized (e.g. ROLE_CUSTOMER)")
     void shouldRejectUnauthorizedRoleOnGetLogs() throws Exception {
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORBIDDEN"));
     }
 
     @Test
-    @DisplayName("Should fail closed with 503 Service Unavailable when user-to-merchant mapping is unavailable")
-    void shouldFailClosedWhenMappingUnavailableOnGet() throws Exception {
-        WebhookLogController failClosedController = new WebhookLogController(logService, uId -> Optional.empty());
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
-
-        failClosedMvc.perform(get(BASE_URL)
-                        .header("X-User-Id", userId.toString())
-                        .header("X-User-Role", "ROLE_MERCHANT"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
-    }
-
-    @Test
-    @DisplayName("Should reject GET /logs with 403 Forbidden when caller supplies forged X-Merchant-Id header")
+    @DisplayName("Should reject GET /logs with 403 Forbidden when caller supplies conflicting candidate merchantId")
     void shouldRejectForgedMerchantIdOnGetLogs() throws Exception {
         UUID forgedMerchantId = UUID.randomUUID();
 
         mockMvc.perform(get(BASE_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
-                        .header("X-Merchant-Id", forgedMerchantId.toString()))
+                        .param("merchantId", forgedMerchantId.toString()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
     }
@@ -199,7 +234,9 @@ class WebhookLogControllerTest {
         when(logService.retryFailedDelivery(logId, merchantId)).thenReturn(response);
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACCEPTED"))
@@ -215,7 +252,9 @@ class WebhookLogControllerTest {
                 .thenThrow(new DeliveryLogNotFoundException("Webhook delivery log not found: " + logId));
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("NOT_FOUND"));
@@ -230,7 +269,9 @@ class WebhookLogControllerTest {
                         WebhookDeliveryStatus.DELIVERED));
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("INELIGIBLE_STATUS"))
@@ -244,7 +285,9 @@ class WebhookLogControllerTest {
                 .thenThrow(new ConcurrentRetryException("A concurrent retry request was already processed"));
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("CONCURRENT_RETRY_CONFLICT"));
@@ -257,16 +300,43 @@ class WebhookLogControllerTest {
                 .thenThrow(new IllegalStateException("RabbitMQ publication failed during manual retry"));
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.error").value("RETRY_PUBLICATION_FAILED"));
     }
 
     @Test
+    @DisplayName("Should reject retry with 401 Unauthorized when X-Gateway-Secret is missing")
+    void shouldRejectMissingGatewaySecretOnRetry() throws Exception {
+        mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_GATEWAY_SECRET"));
+    }
+
+    @Test
+    @DisplayName("Should reject retry with 400 Bad Request when X-Merchant-Id is missing")
+    void shouldRejectMissingMerchantIdOnRetry() throws Exception {
+        mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("MISSING_MERCHANT_IDENTITY"));
+    }
+
+    @Test
     @DisplayName("Should reject retry with 401 Unauthorized when X-User-Id is missing")
     void shouldRejectUnauthenticatedRetry() throws Exception {
-        mockMvc.perform(post(BASE_URL + "/{id}/retry", logId))
+        mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
     }
@@ -275,36 +345,26 @@ class WebhookLogControllerTest {
     @DisplayName("Should reject retry with 403 Forbidden when role is unauthorized (e.g. ROLE_CUSTOMER)")
     void shouldRejectUnauthorizedRoleOnRetry() throws Exception {
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORBIDDEN"));
     }
 
     @Test
-    @DisplayName("Should reject retry with 403 Forbidden when caller supplies forged X-Merchant-Id header")
+    @DisplayName("Should reject retry with 403 Forbidden when caller supplies conflicting candidate merchantId")
     void shouldRejectForgedMerchantIdOnRetry() throws Exception {
         UUID forgedMerchantId = UUID.randomUUID();
 
         mockMvc.perform(post(BASE_URL + "/{id}/retry", logId)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
-                        .header("X-Merchant-Id", forgedMerchantId.toString()))
+                        .param("merchantId", forgedMerchantId.toString()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
     }
-
-    @Test
-    @DisplayName("Should fail closed with 503 Service Unavailable on retry when user-to-merchant mapping is missing")
-    void shouldFailClosedWhenMappingUnavailableOnRetry() throws Exception {
-        WebhookLogController failClosedController = new WebhookLogController(logService, uId -> Optional.empty());
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
-
-        failClosedMvc.perform(post(BASE_URL + "/{id}/retry", logId)
-                        .header("X-User-Id", userId.toString())
-                        .header("X-User-Role", "ROLE_MERCHANT"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
-    }
 }
-

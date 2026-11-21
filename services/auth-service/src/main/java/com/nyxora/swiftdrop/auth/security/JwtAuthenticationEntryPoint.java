@@ -1,6 +1,7 @@
 package com.nyxora.swiftdrop.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
         log.warn("[JwtAuthenticationEntryPoint] Unauthorized access attempt to {}: {}",
-                request.getRequestURI(), authException.getMessage());
+                request.getRequestURI(), PiiMaskingUtil.maskText(authException.getMessage()));
 
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -39,9 +40,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         problemDetail.put("type", "https://swiftdrop.lk/errors/unauthorized");
         problemDetail.put("title", "Unauthorized");
         problemDetail.put("status", HttpServletResponse.SC_UNAUTHORIZED);
-        problemDetail.put("detail", authException.getMessage() != null
-                ? authException.getMessage()
-                : "Full authentication is required to access this resource.");
+        problemDetail.put("detail", "Full authentication is required to access this resource.");
         problemDetail.put("instance", request.getRequestURI());
         problemDetail.put("timestamp", Instant.now().toString());
 

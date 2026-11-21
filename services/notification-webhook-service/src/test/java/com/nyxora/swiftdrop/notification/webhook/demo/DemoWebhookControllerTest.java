@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.notification.webhook.client.AuthInternalClient;
 import com.nyxora.swiftdrop.notification.webhook.client.dto.MerchantWebhookConfigResponse;
 import com.nyxora.swiftdrop.notification.webhook.demo.dto.DemoWebhookEvent;
+import com.nyxora.swiftdrop.notification.webhook.security.GatewaySecurityValidator;
 import com.nyxora.swiftdrop.notification.webhook.util.HmacSignatureUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,7 @@ class DemoWebhookControllerTest {
     private static final String DEMO_RECEIVER_URL = "/api/v1/webhooks/demo-receiver";
     private static final String DEMO_EVENTS_URL = "/api/v1/webhooks/demo-events";
     private static final String TEST_SECRET = "whsec_test_secret_key_1234567890abcdef";
+    private static final String TEST_GATEWAY_SECRET = "test-gateway-shared-secret-12345";
 
     @Mock
     private AuthInternalClient authInternalClient;
@@ -58,16 +60,13 @@ class DemoWebhookControllerTest {
         userId = UUID.randomUUID();
         merchantId = UUID.randomUUID();
 
-        // Standard verified resolver mapping authenticated userId to merchantId
-        UserMerchantMappingResolver mappingResolver = uId -> uId.equals(userId)
-                ? Optional.of(merchantId)
-                : Optional.empty();
+        GatewaySecurityValidator securityValidator = new GatewaySecurityValidator(environment, TEST_GATEWAY_SECRET);
 
         controller = new DemoWebhookController(
                 eventStore,
                 authInternalClient,
+                securityValidator,
                 objectMapper,
-                mappingResolver,
                 environment,
                 null,
                 null
@@ -225,7 +224,7 @@ class DemoWebhookControllerTest {
 
         DemoWebhookController fallbackController = new DemoWebhookController(
                 eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.of(merchantId)),
+                new GatewaySecurityValidator(environment, TEST_GATEWAY_SECRET),
                 environment,
                 TEST_SECRET,
                 merchantId.toString() // Explicit matching merchant ID
@@ -250,7 +249,7 @@ class DemoWebhookControllerTest {
 
         DemoWebhookController fallbackController = new DemoWebhookController(
                 eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.of(merchantId)),
+                new GatewaySecurityValidator(environment, TEST_GATEWAY_SECRET),
                 environment,
                 TEST_SECRET,
                 merchantId.toString() // Configured for merchantId, NOT otherMerchantId
@@ -274,7 +273,7 @@ class DemoWebhookControllerTest {
 
         DemoWebhookController fallbackController = new DemoWebhookController(
                 eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.of(merchantId)),
+                new GatewaySecurityValidator(environment, TEST_GATEWAY_SECRET),
                 environment,
                 TEST_SECRET,
                 "" // Blank merchant ID — global secret forbidden!
@@ -298,7 +297,7 @@ class DemoWebhookControllerTest {
 
         DemoWebhookController fallbackController = new DemoWebhookController(
                 eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.of(merchantId)),
+                new GatewaySecurityValidator(environment, TEST_GATEWAY_SECRET),
                 environment,
                 TEST_SECRET,
                 merchantId.toString()
@@ -314,10 +313,10 @@ class DemoWebhookControllerTest {
                 .andExpect(jsonPath("$.error").value("CONFIG_UNAVAILABLE"));
     }
 
-    // ─── GET & DELETE Security, Isolation & Fail-Closed Tests ───────────
+    // ─── GET & DELETE Security, Isolation & Gateway Tests ───────────────
 
     @Test
-    @DisplayName("Should return recent demo events for authenticated merchant via verified mapping")
+    @DisplayName("Should return recent demo events for authenticated merchant via verified Gateway identity")
     void shouldReturnRecentEventsForAuthenticatedMerchant() throws Exception {
         DemoWebhookEvent event1 = DemoWebhookEvent.verified(merchantId, "parcel.created", "{\"order\":\"1\"}");
         DemoWebhookEvent event2 = DemoWebhookEvent.verified(merchantId, "parcel.status.updated", "{\"order\":\"2\"}");
@@ -325,7 +324,9 @@ class DemoWebhookControllerTest {
         eventStore.addEvent(merchantId, event2);
 
         mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.merchantId").value(merchantId.toString()))
@@ -336,69 +337,76 @@ class DemoWebhookControllerTest {
     }
 
     @Test
-    @DisplayName("Should reject GET /demo-events with 403 Forbidden when caller attempts to forge X-Merchant-Id")
+    @DisplayName("Should reject GET /demo-events with 401 when X-Gateway-Secret is missing")
+    void shouldRejectMissingGatewaySecretOnGet() throws Exception {
+        mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_GATEWAY_SECRET"));
+    }
+
+    @Test
+    @DisplayName("Should reject GET /demo-events with 401 when X-Gateway-Secret is incorrect")
+    void shouldRejectIncorrectGatewaySecretOnGet() throws Exception {
+        mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", "wrong-secret")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_GATEWAY_SECRET"));
+    }
+
+    @Test
+    @DisplayName("Should reject GET /demo-events with 400 when X-Merchant-Id is missing")
+    void shouldRejectMissingMerchantIdOnGet() throws Exception {
+        mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("MISSING_MERCHANT_IDENTITY"));
+    }
+
+    @Test
+    @DisplayName("Should reject GET /demo-events with 403 Forbidden when caller attempts to forge merchantId param")
     void shouldRejectForgedMerchantIdentityOnGet() throws Exception {
         UUID victimMerchantId = UUID.randomUUID();
 
         mockMvc.perform(get(DEMO_EVENTS_URL)
-                        .header("X-User-Id", userId.toString()) // Authenticated user maps to merchantId
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
-                        .header("X-Merchant-Id", victimMerchantId.toString())) // Attacker supplies victim's ID
+                        .param("merchantId", victimMerchantId.toString())) // Attacker supplies victim's ID
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
     }
 
     @Test
-    @DisplayName("Should reject DELETE /demo-events with 403 Forbidden when caller attempts to forge X-Merchant-Id")
+    @DisplayName("Should reject DELETE /demo-events with 403 Forbidden when caller attempts to forge merchantId param")
     void shouldRejectForgedMerchantIdentityOnDelete() throws Exception {
         UUID victimMerchantId = UUID.randomUUID();
 
         mockMvc.perform(delete(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT")
-                        .header("X-Merchant-Id", victimMerchantId.toString()))
+                        .param("merchantId", victimMerchantId.toString()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORGED_MERCHANT_IDENTITY"));
-    }
-
-    @Test
-    @DisplayName("Should fail closed with 503 Service Unavailable on GET when trusted mapping is unavailable")
-    void shouldFailClosedOnGetWhenMappingUnavailable() throws Exception {
-        DemoWebhookController failClosedController = new DemoWebhookController(
-                eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.empty()), // No mapping available!
-                environment, null, null
-        );
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
-
-        failClosedMvc.perform(get(DEMO_EVENTS_URL)
-                        .header("X-User-Id", userId.toString())
-                        .header("X-User-Role", "ROLE_MERCHANT"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
-    }
-
-    @Test
-    @DisplayName("Should fail closed with 503 Service Unavailable on DELETE when trusted mapping is unavailable")
-    void shouldFailClosedOnDeleteWhenMappingUnavailable() throws Exception {
-        DemoWebhookController failClosedController = new DemoWebhookController(
-                eventStore, authInternalClient, objectMapper,
-                (uId -> Optional.empty()), // No mapping available!
-                environment, null, null
-        );
-        MockMvc failClosedMvc = MockMvcBuilders.standaloneSetup(failClosedController).build();
-
-        failClosedMvc.perform(delete(DEMO_EVENTS_URL)
-                        .header("X-User-Id", userId.toString())
-                        .header("X-User-Role", "ROLE_MERCHANT"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("AUTH_MAPPING_UNAVAILABLE"));
     }
 
     @Test
     @DisplayName("Should reject GET /demo-events with 401 Unauthorized when X-User-Id is missing")
     void shouldRejectUnauthenticatedGetEvents() throws Exception {
-        mockMvc.perform(get(DEMO_EVENTS_URL))
+        mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
     }
@@ -406,7 +414,10 @@ class DemoWebhookControllerTest {
     @Test
     @DisplayName("Should reject DELETE /demo-events with 401 Unauthorized when X-User-Id is missing")
     void shouldRejectUnauthenticatedDeleteEvents() throws Exception {
-        mockMvc.perform(delete(DEMO_EVENTS_URL))
+        mockMvc.perform(delete(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
+                        .header("X-Merchant-Id", merchantId.toString())
+                        .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("UNAUTHENTICATED"));
     }
@@ -415,7 +426,9 @@ class DemoWebhookControllerTest {
     @DisplayName("Should reject GET /demo-events with 403 Forbidden when role is unauthorized (e.g. ROLE_CUSTOMER)")
     void shouldRejectUnauthorizedGetRole() throws Exception {
         mockMvc.perform(get(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORBIDDEN"));
@@ -425,7 +438,9 @@ class DemoWebhookControllerTest {
     @DisplayName("Should reject DELETE /demo-events with 403 Forbidden when role is unauthorized (e.g. ROLE_CUSTOMER)")
     void shouldRejectUnauthorizedDeleteRole() throws Exception {
         mockMvc.perform(delete(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_CUSTOMER"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("FORBIDDEN"));
@@ -438,7 +453,9 @@ class DemoWebhookControllerTest {
         assertEquals(1, eventStore.getEventCount(merchantId));
 
         mockMvc.perform(delete(DEMO_EVENTS_URL)
+                        .header("X-Gateway-Secret", TEST_GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString())
+                        .header("X-Merchant-Id", merchantId.toString())
                         .header("X-User-Role", "ROLE_MERCHANT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Demo webhook events cleared successfully"))

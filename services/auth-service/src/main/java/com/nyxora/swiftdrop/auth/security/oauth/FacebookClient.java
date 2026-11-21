@@ -2,6 +2,7 @@ package com.nyxora.swiftdrop.auth.security.oauth;
 
 import com.nyxora.swiftdrop.auth.dto.SocialUserProfile;
 import com.nyxora.swiftdrop.auth.entity.enums.AuthProvider;
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -61,7 +62,8 @@ public class FacebookClient {
                     .retrieve()
                     .body(FacebookUserResponse.class);
         } catch (Exception e) {
-            log.warn("[FacebookClient] Failed to verify Facebook token: {}", e.getMessage());
+            log.warn("[FacebookClient] Failed to verify Facebook token: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Facebook access token is invalid or expired.");
         }
 
@@ -102,7 +104,8 @@ public class FacebookClient {
             }
             return hex.toString();
         } catch (Exception e) {
-            log.error("[FacebookClient] Failed to compute appsecret_proof: {}", e.getMessage());
+            log.error("[FacebookClient] Failed to compute appsecret_proof: {}",
+                    PiiMaskingUtil.maskText(e.getMessage()));
             throw new BadCredentialsException("Failed to compute Facebook security proof.");
         }
     }

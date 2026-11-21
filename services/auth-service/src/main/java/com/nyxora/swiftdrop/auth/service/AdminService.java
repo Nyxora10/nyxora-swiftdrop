@@ -4,11 +4,13 @@ import com.nyxora.swiftdrop.auth.dto.request.AdminDecisionRequest;
 import com.nyxora.swiftdrop.auth.dto.response.AdminDecisionResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserDetailResponse;
 import com.nyxora.swiftdrop.auth.dto.response.AdminUserSummaryResponse;
+import com.nyxora.swiftdrop.auth.dto.response.AvailableCourierResponse;
 import com.nyxora.swiftdrop.auth.dto.response.PageResponse;
 import com.nyxora.swiftdrop.auth.entity.enums.RoleName;
 import com.nyxora.swiftdrop.auth.entity.enums.UserStatus;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -25,5 +27,7 @@ public interface AdminService {
     AdminDecisionResponse rejectUser(UUID userId, AdminDecisionRequest request);
 
     AdminDecisionResponse suspendUser(UUID currentAdminId, UUID targetUserId, AdminDecisionRequest request);
+
+    List<AvailableCourierResponse> getAvailableCouriers(Integer zoneId);
 }
 

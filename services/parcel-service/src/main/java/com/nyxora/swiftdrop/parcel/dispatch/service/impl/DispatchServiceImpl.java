@@ -1,5 +1,6 @@
 package com.nyxora.swiftdrop.parcel.dispatch.service.impl;
 
+import com.nyxora.swiftdrop.common.security.util.PiiMaskingUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nyxora.swiftdrop.parcel.dispatch.config.DispatchRabbitMqConfig;
 import com.nyxora.swiftdrop.parcel.dispatch.dto.AssignCourierRequest;
@@ -145,7 +146,7 @@ public class DispatchServiceImpl implements DispatchService {
             eventPayload = objectMapper.writeValueAsString(event);
         } catch (Exception e) {
             log.error("[DispatchService] Failed to serialize ParcelAssignedEvent for parcelId={}: {}",
-                    savedParcel.getId(), e.getMessage());
+                    savedParcel.getId(), PiiMaskingUtil.maskText(e.getMessage()));
             throw new IllegalStateException("Failed to serialize domain event", e);
         }
 
@@ -166,7 +167,8 @@ public class DispatchServiceImpl implements DispatchService {
                     try {
                         outboxPublisher.publishEvent(savedOutboxEvent.getId());
                     } catch (Exception ex) {
-                        log.warn("[DispatchService] Immediate after-commit publish failed; scheduled outbox runner will retry: {}", ex.getMessage());
+                        log.warn("[DispatchService] Immediate after-commit publish failed; scheduled outbox runner will retry: {}",
+                                PiiMaskingUtil.maskText(ex.getMessage()));
                     }
                 }
             });

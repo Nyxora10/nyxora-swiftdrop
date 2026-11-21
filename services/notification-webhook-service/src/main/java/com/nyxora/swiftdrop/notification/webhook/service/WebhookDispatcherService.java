@@ -8,6 +8,7 @@ import com.nyxora.swiftdrop.notification.webhook.dto.WebhookDispatchResult;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryLog;
 import com.nyxora.swiftdrop.notification.webhook.entity.WebhookDeliveryStatus;
 import com.nyxora.swiftdrop.notification.webhook.repository.WebhookDeliveryLogRepository;
+import com.nyxora.swiftdrop.notification.webhook.retry.WebhookRetryPolicy;
 import com.nyxora.swiftdrop.notification.webhook.util.HmacSignatureUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,11 +69,17 @@ public class WebhookDispatcherService {
 
     private static final Duration TIMEOUT_DURATION = Duration.ofSeconds(5);
 
+    @FunctionalInterface
+    public interface DnsResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
+    }
+
     private final AuthInternalClient authInternalClient;
     private final WebhookDeliveryLogRepository logRepository;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
     private final boolean allowLocalhost;
+    private final DnsResolver dnsResolver;
 
     @Autowired
     public WebhookDispatcherService(
@@ -80,24 +87,7 @@ public class WebhookDispatcherService {
             WebhookDeliveryLogRepository logRepository,
             @Autowired(required = false) ObjectMapper objectMapper,
             @Value("${app.webhook.allow-localhost:false}") boolean allowLocalhost) {
-        this.authInternalClient = authInternalClient;
-        this.logRepository = logRepository;
-        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-        this.allowLocalhost = allowLocalhost;
-
-        // Configure standard Java HTTP Client with 5-second connection timeout and
-        // disabled redirects
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(TIMEOUT_DURATION)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
-
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(TIMEOUT_DURATION);
-
-        this.restClient = RestClient.builder()
-                .requestFactory(requestFactory)
-                .build();
+        this(authInternalClient, logRepository, objectMapper, null, allowLocalhost, InetAddress::getAllByName);
     }
 
     /**
@@ -109,11 +99,39 @@ public class WebhookDispatcherService {
             ObjectMapper objectMapper,
             RestClient restClient,
             boolean allowLocalhost) {
+        this(authInternalClient, logRepository, objectMapper, restClient, allowLocalhost, InetAddress::getAllByName);
+    }
+
+    /**
+     * Testing constructor allowing injection of a custom RestClient and DnsResolver.
+     */
+    public WebhookDispatcherService(
+            AuthInternalClient authInternalClient,
+            WebhookDeliveryLogRepository logRepository,
+            ObjectMapper objectMapper,
+            RestClient restClient,
+            boolean allowLocalhost,
+            DnsResolver dnsResolver) {
         this.authInternalClient = authInternalClient;
         this.logRepository = logRepository;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-        this.restClient = restClient;
+        this.restClient = restClient != null ? restClient : buildDefaultRestClient();
         this.allowLocalhost = allowLocalhost;
+        this.dnsResolver = dnsResolver != null ? dnsResolver : InetAddress::getAllByName;
+    }
+
+    private static RestClient buildDefaultRestClient() {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(TIMEOUT_DURATION)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(TIMEOUT_DURATION);
+
+        return RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
     }
 
     /**
@@ -149,8 +167,8 @@ public class WebhookDispatcherService {
             }
             payloadBytes = jsonPayload.getBytes(StandardCharsets.UTF_8);
         } catch (Exception ex) {
-            log.error("Failed to serialize webhook payload to JSON for merchantId={}, parcelId={}", merchantId,
-                    parcelId, ex);
+            log.error("Failed to serialize webhook payload to JSON for merchantId={}, parcelId={}, category={}",
+                    merchantId, parcelId, ex.getClass().getSimpleName());
             return WebhookDispatchResult.permanentFailure(null, "PAYLOAD_SERIALIZATION_ERROR",
                     "Unable to serialize payload", null);
         }
@@ -250,8 +268,10 @@ public class WebhookDispatcherService {
         String secret = config.webhookSecret();
 
         // 2. Validate URL against SSRF and internal address probing
-        if (!isSafeUrl(targetUrl)) {
-            log.warn("Blocked potentially unsafe webhook URL for merchantId={}, parcelId={}", merchantId, parcelId);
+        UrlSecurityCheckResult securityCheck = validateUrlSecurity(targetUrl);
+        if (securityCheck.status() == UrlSecurityStatus.SSRF_BLOCKED) {
+            log.warn("Blocked potentially unsafe webhook URL for merchantId={}, parcelId={}: {}",
+                    merchantId, parcelId, PiiMaskingUtil.maskText(securityCheck.detail()));
             // Marked DEAD_LETTER because malformed/unsafe URLs cannot succeed on retry
             deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.DEAD_LETTER);
             deliveryLog.setNextRetryAt(null);
@@ -261,6 +281,31 @@ public class WebhookDispatcherService {
                     null,
                     "SSRF_BLOCKED",
                     "Webhook destination URL failed SSRF security validation",
+                    deliveryLog);
+        }
+
+        if (securityCheck.status() == UrlSecurityStatus.DNS_FAILURE) {
+            log.warn("DNS resolution failed reaching merchant webhook endpoint for merchantId={}, parcelId={}, retryCount={}: {}",
+                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(securityCheck.detail()));
+
+            int currentRetryCount = deliveryLog.getRetryCount() != null ? deliveryLog.getRetryCount() : 0;
+            boolean canRetry = WebhookRetryPolicy.canRetry(currentRetryCount);
+
+            if (canRetry) {
+                deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);
+            } else {
+                log.warn("All {} retries exhausted for deliveryLogId={}, merchantId={} following DNS resolution failure. Moving to DEAD_LETTER.",
+                        WebhookRetryPolicy.MAX_RETRIES, deliveryLog.getId(), merchantId);
+                deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.DEAD_LETTER);
+                deliveryLog.setNextRetryAt(null);
+            }
+            deliveryLog.setHttpStatusCode(null);
+            deliveryLog = logRepository.save(deliveryLog);
+
+            return WebhookDispatchResult.retryableFailure(
+                    null,
+                    "DNS_RESOLUTION_FAILURE",
+                    "DNS resolution failed for webhook destination host: " + securityCheck.detail(),
                     deliveryLog);
         }
 
@@ -370,7 +415,7 @@ public class WebhookDispatcherService {
 
         } catch (Exception ex) {
             log.error("Unexpected error dispatching webhook for merchantId={}, parcelId={}, retryCount={}: {}",
-                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()), ex);
+                    merchantId, parcelId, deliveryLog.getRetryCount(), PiiMaskingUtil.maskText(ex.getMessage()));
 
             deliveryLog.setHttpStatusCode(null);
             deliveryLog.setDeliveryStatus(WebhookDeliveryStatus.RETRYING);
@@ -385,55 +430,220 @@ public class WebhookDispatcherService {
     }
 
     /**
-     * Validates destination URL against SSRF and private-network destinations.
+     * Internal classification of URL security validation outcome.
      */
-    private boolean isSafeUrl(String urlString) {
-        if (urlString == null || urlString.isBlank()) {
-            return false;
+    enum UrlSecurityStatus {
+        SAFE,
+        SSRF_BLOCKED,
+        DNS_FAILURE
+    }
+
+    record UrlSecurityCheckResult(UrlSecurityStatus status, String detail) {
+        static UrlSecurityCheckResult safe() {
+            return new UrlSecurityCheckResult(UrlSecurityStatus.SAFE, null);
         }
-
-        try {
-            URI uri = URI.create(urlString);
-            String scheme = uri.getScheme();
-            if (scheme == null) {
-                return false;
-            }
-
-            // Local development override allows http://localhost
-            if (allowLocalhost) {
-                return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
-            }
-
-            // Production strictly requires HTTPS
-            if (!"https".equalsIgnoreCase(scheme)) {
-                return false;
-            }
-
-            String host = uri.getHost();
-            if (host == null || host.isBlank()) {
-                return false;
-            }
-
-            // Resolve DNS and verify not internal/loopback/cloud-metadata
-            InetAddress[] addresses = InetAddress.getAllByName(host);
-            for (InetAddress address : addresses) {
-                if (address.isLoopbackAddress()
-                        || address.isSiteLocalAddress()
-                        || address.isLinkLocalAddress()
-                        || address.isAnyLocalAddress()
-                        || isCloudMetadataIp(address.getHostAddress())) {
-                    return false;
-                }
-            }
-
-            return true;
-
-        } catch (UnknownHostException | IllegalArgumentException ex) {
-            return false;
+        static UrlSecurityCheckResult blocked(String reason) {
+            return new UrlSecurityCheckResult(UrlSecurityStatus.SSRF_BLOCKED, reason);
+        }
+        static UrlSecurityCheckResult dnsFailure(String host) {
+            return new UrlSecurityCheckResult(UrlSecurityStatus.DNS_FAILURE, host);
         }
     }
 
+    /**
+     * Validates destination URL against SSRF and private-network destinations,
+     * distinguishing genuine security violations from DNS resolution failures.
+     */
+    private UrlSecurityCheckResult validateUrlSecurity(String urlString) {
+        if (urlString == null || urlString.isBlank()) {
+            return UrlSecurityCheckResult.blocked("Webhook URL is empty or null");
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(urlString.trim());
+        } catch (IllegalArgumentException ex) {
+            return UrlSecurityCheckResult.blocked("Malformed webhook URI syntax");
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null) {
+            return UrlSecurityCheckResult.blocked("Webhook URL is missing scheme");
+        }
+
+        // Local development override allows http://localhost
+        if (allowLocalhost) {
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+                return UrlSecurityCheckResult.blocked("Unsupported scheme: " + scheme);
+            }
+        } else {
+            // Production strictly requires HTTPS
+            if (!"https".equalsIgnoreCase(scheme)) {
+                return UrlSecurityCheckResult.blocked("Insecure scheme: " + scheme + " (HTTPS strictly required)");
+            }
+        }
+
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            return UrlSecurityCheckResult.blocked("Webhook URL is missing host");
+        }
+
+        // In local development mode, explicitly permit loopback / localhost
+        if (allowLocalhost && isLocalhost(host)) {
+            return UrlSecurityCheckResult.safe();
+        }
+
+        // Resolve DNS and verify not internal/loopback/cloud-metadata
+        InetAddress[] addresses;
+        try {
+            addresses = dnsResolver.resolve(host);
+        } catch (UnknownHostException ex) {
+            return UrlSecurityCheckResult.dnsFailure(host);
+        } catch (Exception ex) {
+            log.warn("Unexpected exception during DNS resolution for host [{}]: {}",
+                    PiiMaskingUtil.maskText(host), PiiMaskingUtil.maskText(ex.getMessage()));
+            return UrlSecurityCheckResult.dnsFailure(host);
+        }
+
+        if (addresses == null || addresses.length == 0) {
+            return UrlSecurityCheckResult.dnsFailure(host);
+        }
+
+        for (InetAddress address : addresses) {
+            if (isProhibitedAddress(address)) {
+                return UrlSecurityCheckResult.blocked("Prohibited address: " + address.getHostAddress());
+            }
+        }
+
+        return UrlSecurityCheckResult.safe();
+    }
+
+    private boolean isLocalhost(String host) {
+        return "localhost".equalsIgnoreCase(host)
+                || "127.0.0.1".equals(host)
+                || "::1".equals(host)
+                || "[::1]".equals(host);
+    }
+
+    /**
+     * Evaluates whether an IP address represents a prohibited internal, loopback, private,
+     * link-local, multicast, cloud metadata, or reserved destination.
+     */
+    private boolean isProhibitedAddress(InetAddress address) {
+        if (address == null) {
+            return true;
+        }
+
+        // Standard Java address classification
+        if (address.isLoopbackAddress()        // 127.0.0.0/8, ::1
+                || address.isSiteLocalAddress() // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fec0::/10
+                || address.isLinkLocalAddress() // 169.254.0.0/16, fe80::/10
+                || address.isAnyLocalAddress()  // 0.0.0.0, ::
+                || address.isMulticastAddress() // 224.0.0.0/4, ff00::/8
+        ) {
+            return true;
+        }
+
+        // Check explicit cloud metadata IPs
+        String hostAddress = address.getHostAddress();
+        if (isCloudMetadataIp(hostAddress)) {
+            return true;
+        }
+
+        byte[] rawBytes = address.getAddress();
+        if (rawBytes == null) {
+            return true;
+        }
+
+        // IPv4-specific reserved and special-use address checks
+        if (rawBytes.length == 4) {
+            int b0 = rawBytes[0] & 0xFF;
+            int b1 = rawBytes[1] & 0xFF;
+
+            // 0.0.0.0/8 ("this network")
+            if (b0 == 0) {
+                return true;
+            }
+            // 100.64.0.0/10 (Carrier-Grade NAT / Shared Address Space RFC 6598)
+            if (b0 == 100 && (b1 >= 64 && b1 <= 127)) {
+                return true;
+            }
+            // 127.0.0.0/8 (Loopback fallback)
+            if (b0 == 127) {
+                return true;
+            }
+            // 169.254.0.0/16 (Link Local fallback)
+            if (b0 == 169 && b1 == 254) {
+                return true;
+            }
+            // 192.0.0.0/24 (IETF Protocol Assignments)
+            if (b0 == 192 && b1 == 0 && (rawBytes[2] & 0xFF) == 0) {
+                return true;
+            }
+            // 192.0.2.0/24 (TEST-NET-1)
+            if (b0 == 192 && b1 == 0 && (rawBytes[2] & 0xFF) == 2) {
+                return true;
+            }
+            // 198.51.100.0/24 (TEST-NET-2)
+            if (b0 == 198 && b1 == 51 && (rawBytes[2] & 0xFF) == 100) {
+                return true;
+            }
+            // 203.0.113.0/24 (TEST-NET-3)
+            if (b0 == 203 && b1 == 0 && (rawBytes[2] & 0xFF) == 113) {
+                return true;
+            }
+            // 240.0.0.0/4 (Class E / Reserved for future use)
+            if (b0 >= 240) {
+                return true;
+            }
+            // 255.255.255.255 (Limited Broadcast)
+            if (b0 == 255 && b1 == 255 && (rawBytes[2] & 0xFF) == 255 && (rawBytes[3] & 0xFF) == 255) {
+                return true;
+            }
+        }
+
+        // IPv6-specific reserved address checks
+        if (rawBytes.length == 16) {
+            // Unique Local Address (ULA) fc00::/7 (RFC 4193)
+            if ((rawBytes[0] & 0xFE) == 0xFC) {
+                return true;
+            }
+
+            // IPv4-mapped IPv6 address (::ffff:0:0/96)
+            boolean isIPv4Mapped = true;
+            for (int i = 0; i < 10; i++) {
+                if (rawBytes[i] != 0) {
+                    isIPv4Mapped = false;
+                    break;
+                }
+            }
+            if (isIPv4Mapped && (rawBytes[10] & 0xFF) == 0xFF && (rawBytes[11] & 0xFF) == 0xFF) {
+                try {
+                    byte[] ipv4Bytes = new byte[]{rawBytes[12], rawBytes[13], rawBytes[14], rawBytes[15]};
+                    InetAddress mappedV4 = InetAddress.getByAddress(ipv4Bytes);
+                    return isProhibitedAddress(mappedV4);
+                } catch (UnknownHostException e) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private boolean isCloudMetadataIp(String ip) {
-        return "169.254.169.254".equals(ip);
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+        return "169.254.169.254".equals(ip)
+                || "169.254.170.2".equals(ip)
+                || "fd00:ec2::254".equalsIgnoreCase(ip);
+    }
+
+    /**
+     * Legacy helper method validating whether a destination URL is safe against SSRF.
+     */
+    private boolean isSafeUrl(String urlString) {
+        return validateUrlSecurity(urlString).status() == UrlSecurityStatus.SAFE;
     }
 }
